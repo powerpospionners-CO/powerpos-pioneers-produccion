@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PedidosService } from '../pedidos/pedidos.service';
-import { monto, puntosConfig, texto, tiendaConfig } from './reglas';
+import { monto, puntosConfig, SLUGS_RESERVADOS, texto, tiendaConfig } from './reglas';
 
 @Injectable()
 export class TiendaService {
@@ -109,6 +109,10 @@ export class TiendaService {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))
       throw new BadRequestException(
         'Use letras minúsculas, números y guiones para el enlace',
+      );
+    if (SLUGS_RESERVADOS.has(slug))
+      throw new BadRequestException(
+        'Ese enlace está reservado por el sistema. Elija otro.',
       );
     // Lista explícita: no persistir claves arbitrarias recibidas del navegador.
     const tienda = {

@@ -7,15 +7,18 @@ import { useAuthStore } from "@/store/authStore";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "powerpospioneers.com";
 export default function MiTienda() {
   const { usuario } = useAuthStore();
   const [config, setConfig] = useState<any>(null),
     [sucursales, setSucursales] = useState<any[]>([]),
     [mensaje, setMensaje] = useState(""),
     [busy, setBusy] = useState(false),
-    [origin, setOrigin] = useState("");
+    [origin, setOrigin] = useState(""),
+    [esProduccion, setEsProduccion] = useState(false);
   useEffect(() => {
     setOrigin(window.location.origin);
+    setEsProduccion(window.location.hostname.endsWith(ROOT_DOMAIN));
     if (usuario?.rol !== "ADMIN_EMPRESA") return;
     Promise.all([
       api.get("/tienda-admin/configuracion"),
@@ -95,11 +98,18 @@ export default function MiTienda() {
                     </label>
                     <a
                       className="block break-all text-teal-300 underline"
-                      href={`/tienda/${config.slug}`}
+                      href={
+                        esProduccion
+                          ? `https://${config.slug}.${ROOT_DOMAIN}`
+                          : `/tienda/${config.slug}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {origin}/tienda/{config.slug} ↗
+                      {esProduccion
+                        ? `${config.slug}.${ROOT_DOMAIN}`
+                        : `${origin}/tienda/${config.slug}`}{" "}
+                      ↗
                     </a>
                     <label className="flex items-center gap-3">
                       <input

@@ -1,5 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 
+// Subdominios que el propio sistema usa (panel, API, marca, etc.) — ninguna
+// empresa puede tomarlos como su enlace de tienda pública.
+export const SLUGS_RESERVADOS = new Set([
+  'app', 'api', 'www', 'admin', 'mail', 'ftp', 'blog', 'ayuda', 'soporte',
+  'tienda', 'powerpos', 'powerpospioneers',
+]);
+
 export const tiendaDefaults = {
   publicada: true,
   pedidosHabilitados: false,
