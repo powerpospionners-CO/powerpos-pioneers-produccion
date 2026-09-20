@@ -39,6 +39,7 @@ model Empresa {
   direccion     String?
   logo          String?
   activo        Boolean   @default(true)
+  impresionAgenteToken String? @unique
   tipoNegocio   TipoNegocio @default(RESTAURANTE)
   plan          PlanEmpresa @default(BASICO)
   permisos      Json      @default("{}")

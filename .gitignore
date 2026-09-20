@@ -1,21 +1,11 @@
 node_modules/
 .env
-.env.local
-.env.*.local
 .next/
 dist/
-build/
-coverage/
-*.tsbuildinfo
+!landing/dist/
+!landing/dist/**
+backups/landing-git-*/
+powerpos-data/
 *.log
-
-# Contenido subido en tiempo de ejecución (logos, etc.) — no va en git,
-# se vuelve a subir desde la app una vez desplegado.
-api/uploads/*
-!api/uploads/logos/
-api/uploads/logos/*
-!api/uploads/logos/.gitkeep
-
-# Volcados de base de datos: nunca deben terminar en el repositorio.
-*.sql
-*.dump
+backups/*.dump
+api/agente-impresion/config.json

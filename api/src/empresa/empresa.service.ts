@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -6,9 +7,23 @@ export class EmpresaService {
   constructor(private prisma: PrismaService) {}
 
   async obtener(empresaId: number) {
-    return this.prisma.empresa.findUnique({
+    const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
     });
+    if (!empresa) return empresa;
+    // El token del agente de impresión es un secreto: no viaja en la
+    // respuesta general, solo se entrega al generarlo/regenerarlo.
+    const { impresionAgenteToken, ...resto } = empresa;
+    return { ...resto, agenteImpresionConfigurado: !!impresionAgenteToken };
+  }
+
+  async generarTokenAgenteImpresion(empresaId: number) {
+    const token = randomBytes(32).toString('hex');
+    await this.prisma.empresa.update({
+      where: { id: empresaId },
+      data: { impresionAgenteToken: token },
+    });
+    return { token };
   }
 
   async actualizar(empresaId: number, datos: any) {

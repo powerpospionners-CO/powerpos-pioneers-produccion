@@ -1,0 +1,6 @@
+{
+  "apiUrl": "https://api.powerpospioneers.com",
+  "token": "PEGA_AQUI_EL_TOKEN_QUE_GENERASTE_DESDE_CONFIGURACION",
+  "impresoraHost": "192.168.0.118",
+  "impresoraPuerto": 9100
+}

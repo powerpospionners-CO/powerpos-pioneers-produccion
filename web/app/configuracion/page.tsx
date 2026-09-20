@@ -35,6 +35,8 @@ export default function ConfiguracionPage() {
   const [loadingLogo, setLoadingLogo] = useState(false);
   const [mensajeEmpresa, setMensajeEmpresa] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const [generandoToken, setGenerandoToken] = useState(false);
+  const [tokenAgente, setTokenAgente] = useState('');
 
   // ---- Mi perfil ----
   const [perfil, setPerfil] = useState<any>(null);
@@ -104,6 +106,19 @@ export default function ConfiguracionPage() {
       setMensajeEmpresa('❌ Error al subir el logo');
     } finally {
       setLoadingLogo(false);
+    }
+  };
+
+  const generarTokenAgente = async () => {
+    setGenerandoToken(true);
+    try {
+      const { data } = await api.post('/empresa/agente-impresion/token');
+      setTokenAgente(data.token);
+      setEmpresa({ ...empresa, agenteImpresionConfigurado: true });
+    } catch {
+      setMensajeEmpresa('❌ No se pudo generar el token del agente');
+    } finally {
+      setGenerandoToken(false);
     }
   };
 
@@ -331,6 +346,33 @@ export default function ConfiguracionPage() {
                     </div>
                   </div>
                 </div>
+
+                {usuario?.rol === 'ADMIN_EMPRESA' && (
+                  <div className="border-t border-gray-800 pt-6">
+                    <h3 className="text-white font-semibold mb-1">Impresora en red (agente de impresión)</h3>
+                    <p className="text-gray-500 text-xs mb-4">
+                      Conecta el agente que corre en el computador del local para imprimir tickets y comandas directo en tu impresora térmica, sin ventana de impresión. Ver instrucciones en <code className="text-gray-400">api/agente-impresion/README.md</code>.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs px-2 py-1 rounded-full ${empresa?.agenteImpresionConfigurado ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-gray-800 text-gray-400 border border-gray-700'}`}>
+                        {empresa?.agenteImpresionConfigurado ? 'Token generado' : 'Sin configurar'}
+                      </span>
+                      <button
+                        onClick={generarTokenAgente}
+                        disabled={generandoToken}
+                        className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                      >
+                        {generandoToken ? 'Generando...' : empresa?.agenteImpresionConfigurado ? 'Regenerar token' : 'Generar token'}
+                      </button>
+                    </div>
+                    {tokenAgente && (
+                      <div className="mt-3 rounded-lg border border-orange-500/30 bg-orange-500/10 p-3">
+                        <p className="text-orange-300 text-xs mb-1">Cópialo ahora — no se vuelve a mostrar. Pégalo en <code>config.json</code> del agente.</p>
+                        <code className="block break-all text-white text-xs bg-gray-950 rounded p-2">{tokenAgente}</code>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

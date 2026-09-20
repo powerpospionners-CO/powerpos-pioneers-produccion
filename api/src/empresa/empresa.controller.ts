@@ -48,4 +48,10 @@ export class EmpresaController {
     await this.empresaService.actualizarLogo(req.user.empresaId, logoUrl);
     return { logoUrl };
   }
+
+  @Post('agente-impresion/token')
+  @Roles('ADMIN_EMPRESA')
+  generarTokenAgenteImpresion(@Request() req: any) {
+    return this.empresaService.generarTokenAgenteImpresion(req.user.empresaId);
+  }
 }

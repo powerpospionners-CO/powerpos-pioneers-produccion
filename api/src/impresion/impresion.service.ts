@@ -2,16 +2,46 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Socket } from 'node:net';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
+import { ImpresionEventosService } from './impresion-eventos.service';
 
 const INICIO = Buffer.from([0x1b, 0x40]);
 const CORTE = Buffer.from([0x1d, 0x56, 0x41, 0x03]);
+const CAJON = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
 const TIMEOUT_MS = 3000;
 
 @Injectable()
 export class ImpresionService {
   private readonly logger = new Logger(ImpresionService.name);
 
-  constructor(private readonly prisma?: PrismaService) {}
+  constructor(
+    private readonly prisma?: PrismaService,
+    private readonly eventos?: ImpresionEventosService,
+  ) {}
+
+  private modoAgente() {
+    return (process.env.IMPRESION_MODO || 'tcp').toLowerCase() === 'agente';
+  }
+
+  // Cuando el backend corre en la nube (Railway) no puede alcanzar una
+  // impresora en la red local del negocio. En ese caso, en vez de intentar
+  // una conexión TCP que siempre va a fallar, el trabajo se le pasa al
+  // agente local (ver api/agente-impresion/) que sí tiene acceso a la
+  // impresora, y se espera su confirmación.
+  private async enviarAgenteOTcp(
+    empresaId: number,
+    tipo: 'TICKET' | 'COMANDA' | 'CAJON',
+    datos: Buffer,
+    host?: string,
+    port?: number,
+  ): Promise<string | null> {
+    if (this.modoAgente()) {
+      if (!this.eventos) return 'Agente de impresión no disponible en este servidor';
+      const resultado = await this.eventos.enviarYEsperar(empresaId, tipo, datos);
+      return resultado.ok ? null : resultado.motivo || 'El agente de impresión no confirmó la impresión';
+    }
+    if (!host) return 'Falta ESC_POS_HOST';
+    return this.enviarTcp(host, port || 9100, datos);
+  }
 
   // Envía un buffer a la impresora ESC/POS por TCP. Nunca lanza: devuelve
   // el mensaje de error para que el llamador pueda degradar a impresión por navegador.
@@ -49,39 +79,24 @@ export class ImpresionService {
     }
 
     const contenido = await this.formatearComanda(pedido, empresaId);
-    const tipo = (process.env.ESC_POS_TYPE || 'tcp').toLowerCase();
-
-    if (tipo !== 'tcp') {
-      return {
-        impreso: false,
-        modo: tipo,
-        motivo: 'El modo configurado no está soportado por el servidor',
-      };
-    }
-
+    const modo = this.modoAgente() ? 'agente' : 'tcp';
     const host = process.env.ESC_POS_HOST;
     const port = Number(process.env.ESC_POS_PORT || 9100);
-    if (!host) {
-      return {
-        impreso: false,
-        modo: 'tcp',
-        fallbackBrowser: true,
-        motivo: 'Falta ESC_POS_HOST',
-      };
-    }
 
-    const error = await this.enviarTcp(
+    const error = await this.enviarAgenteOTcp(
+      empresaId,
+      'COMANDA',
+      Buffer.concat([INICIO, contenido, CORTE]),
       host,
       port,
-      Buffer.concat([INICIO, contenido, CORTE]),
     );
 
     if (error) {
-      this.logger.warn(`No se pudo imprimir la comanda en ${host}:${port}: ${error}`);
-      return { impreso: false, modo: 'tcp', fallbackBrowser: true, motivo: error };
+      this.logger.warn(`No se pudo imprimir la comanda (${modo}): ${error}`);
+      return { impreso: false, modo, fallbackBrowser: true, motivo: error };
     }
 
-    return { impreso: true, modo: 'tcp' };
+    return { impreso: true, modo };
   }
 
   async imprimirRecibo(pedido: any, empresaId: number) {
@@ -96,58 +111,38 @@ export class ImpresionService {
     }
 
     const contenido = await this.formatearRecibo(pedido, empresaId);
-    const tipo = (process.env.ESC_POS_TYPE || 'tcp').toLowerCase();
-
-    if (tipo !== 'tcp') {
-      return {
-        impreso: false,
-        modo: tipo,
-        motivo: 'El modo configurado no está soportado por el servidor',
-      };
-    }
-
+    const modo = this.modoAgente() ? 'agente' : 'tcp';
     const host = process.env.ESC_POS_HOST;
     const port = Number(process.env.ESC_POS_PORT || 9100);
-    if (!host) {
-      return {
-        impreso: false,
-        modo: 'tcp',
-        fallbackBrowser: true,
-        motivo: 'Falta ESC_POS_HOST',
-      };
-    }
 
-    const error = await this.enviarTcp(
+    const error = await this.enviarAgenteOTcp(
+      empresaId,
+      'TICKET',
+      Buffer.concat([INICIO, contenido, CORTE]),
       host,
       port,
-      Buffer.concat([INICIO, contenido, CORTE]),
     );
 
     if (error) {
-      this.logger.warn(`No se pudo imprimir el recibo en ${host}:${port}: ${error}`);
-      return { impreso: false, modo: 'tcp', fallbackBrowser: true, motivo: error };
+      this.logger.warn(`No se pudo imprimir el recibo (${modo}): ${error}`);
+      return { impreso: false, modo, fallbackBrowser: true, motivo: error };
     }
 
-    return { impreso: true, modo: 'tcp' };
+    return { impreso: true, modo };
   }
 
-  async abrirCajon() {
+  async abrirCajon(empresaId: number) {
     if (String(process.env.ESC_POS_ENABLED).toLowerCase() !== 'true') {
       return { abierto: false, motivo: 'ESC_POS_ENABLED no está activo' };
     }
 
     const host = process.env.ESC_POS_HOST;
     const port = Number(process.env.ESC_POS_PORT || 9100);
-    if (!host) return { abierto: false, motivo: 'Falta ESC_POS_HOST' };
 
-    const error = await this.enviarTcp(
-      host,
-      port,
-      Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]),
-    );
+    const error = await this.enviarAgenteOTcp(empresaId, 'CAJON', CAJON, host, port);
 
     if (error) {
-      this.logger.warn(`No se pudo abrir el cajón en ${host}:${port}: ${error}`);
+      this.logger.warn(`No se pudo abrir el cajón: ${error}`);
       return { abierto: false, motivo: error };
     }
 
