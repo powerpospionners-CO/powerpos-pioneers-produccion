@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+:root {
+  --background: #090e16;
+  --foreground: #f5f7fb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: Consolas, monospace;
+}
+
+
+:root[data-theme="claro"] {
+  --background: #f3f6fa;
+  --foreground: #172338;
+  color-scheme: light;
+}
+
+:root[data-theme="oscuro"] { color-scheme: dark; }
+
+/* Las pantallas existentes usan utilidades oscuras. Esta capa conserva su
+   estructura y cambia las superficies y el texto al seleccionar tema claro. */
+:root[data-theme="claro"] [class~="bg-gray-950"],
+:root[data-theme="claro"] [class~="bg-slate-950"],
+:root[data-theme="claro"] [class~="bg-[#0b1017]"] { background-color: #f3f6fa !important; }
+:root[data-theme="claro"] [class~="bg-gray-900"],
+:root[data-theme="claro"] [class~="bg-slate-900"] { background-color: #fff !important; }
+:root[data-theme="claro"] [class~="bg-gray-800"],
+:root[data-theme="claro"] [class~="bg-slate-800"] { background-color: #e9eef4 !important; }
+:root[data-theme="claro"] [class~="bg-gray-700"],
+:root[data-theme="claro"] [class~="bg-slate-700"] { background-color: #dde6ef !important; }
+:root[data-theme="claro"] [class~="border-gray-800"],
+:root[data-theme="claro"] [class~="border-slate-800"],
+:root[data-theme="claro"] [class~="border-gray-700"],
+:root[data-theme="claro"] [class~="border-slate-700"] { border-color: #cbd5e1 !important; }
+:root[data-theme="claro"] [class~="text-white"],
+:root[data-theme="claro"] [class~="text-gray-200"],
+:root[data-theme="claro"] [class~="text-slate-200"] { color: #172338 !important; }
+:root[data-theme="claro"] [class~="text-gray-300"],
+:root[data-theme="claro"] [class~="text-slate-300"],
+:root[data-theme="claro"] [class~="text-gray-400"],
+:root[data-theme="claro"] [class~="text-slate-400"] { color: #475569 !important; }
+:root[data-theme="claro"] [class~="text-gray-500"],
+:root[data-theme="claro"] [class~="text-slate-500"],
+:root[data-theme="claro"] [class~="text-gray-600"] { color: #64748b !important; }
+:root[data-theme="claro"] .bg-orange-500.text-white,
+:root[data-theme="claro"] .bg-red-500.text-white,
+:root[data-theme="claro"] .bg-green-500.text-white,
+:root[data-theme="claro"] .bg-teal-900.text-white,
+:root[data-theme="claro"] .from-orange-400.text-white { color: #fff !important; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+div.fixed.inset-0.z-50 {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+div.fixed.inset-0.z-50 > div {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}

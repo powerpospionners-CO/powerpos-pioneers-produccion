@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next *)",
+      "Bash(npx eslint *)",
+      "Bash(npm run *)",
+      "Bash(powershell.exe -NoProfile -Command \"taskkill /PID 16696 /T /F\")",
+      "Bash(git stash *)",
+      "Bash(git checkout *)",
+      "Bash(git --no-pager diff HEAD -- api/src/impresion/impresion.service.ts api/src/app.module.ts)",
+      "Bash(git --no-pager diff HEAD -- web/app/pos/page.tsx)"
+    ]
+  }
+}
