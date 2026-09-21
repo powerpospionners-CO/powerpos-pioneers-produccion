@@ -7,6 +7,20 @@ import { Keyboard, Moon, Sun } from 'lucide-react';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import { useTema } from '@/components/ThemeProvider';
 
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com';
+
+function rutaPorRol(rol: string) {
+  switch (rol) {
+    case 'SUPERADMIN': return '/superadmin';
+    case 'ADMIN_EMPRESA':
+    case 'GERENTE': return '/dashboard';
+    case 'CAJERO': return '/pos';
+    case 'COCINERO': return '/cocina';
+    case 'DOMICILIARIO': return '/domicilios';
+    default: return '/pos';
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
@@ -24,27 +38,25 @@ export default function LoginPage() {
     setError('');
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      setAuth(data.access_token, data.usuario);
-      switch (data.usuario.rol) {
-        case 'SUPERADMIN':
-          router.push('/superadmin');
-          break;
-        case 'ADMIN_EMPRESA':
-        case 'GERENTE':
-          router.push('/dashboard');
-          break;
-        case 'CAJERO':
-          router.push('/pos');
-          break;
-        case 'COCINERO':
-          router.push('/cocina');
-          break;
-        case 'DOMICILIARIO':
-          router.push('/domicilios');
-          break;
-        default:
-          router.push('/pos');
+      const usuario = data.usuario;
+      const destino = rutaPorRol(usuario.rol);
+
+      // El login es genérico (una sola puerta para todas las empresas), pero
+      // si el usuario pertenece a una empresa con su propio subdominio de
+      // marca, lo mandamos allá para que trabaje bajo esa dirección — la
+      // sesión se guarda por separado en cada dominio, por eso el traspaso.
+      const hostActual = window.location.hostname;
+      const enDominioReal = hostActual === ROOT_DOMAIN || hostActual.endsWith(`.${ROOT_DOMAIN}`);
+      const hostDestino = usuario.tiendaSlug ? `${usuario.tiendaSlug}.${ROOT_DOMAIN}` : null;
+
+      if (enDominioReal && hostDestino && hostActual !== hostDestino) {
+        const datosUsuario = encodeURIComponent(btoa(JSON.stringify(usuario)));
+        window.location.href = `https://${hostDestino}/auth/callback?token=${encodeURIComponent(data.access_token)}&u=${datosUsuario}&next=${encodeURIComponent(destino)}`;
+        return;
       }
+
+      setAuth(data.access_token, usuario);
+      router.push(destino);
     } catch {
       setError('Credenciales inválidas. Verifica tu email y contraseña.');
     } finally {
