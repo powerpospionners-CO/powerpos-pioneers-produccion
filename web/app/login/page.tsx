@@ -133,9 +133,7 @@ export default function LoginPage() {
 
           <div className={`rounded-2xl p-8 border shadow-xl ${claro ? 'bg-white border-gray-200 shadow-orange-100' : 'bg-gray-900 border-gray-800 shadow-black/40'}`}>
             <div className="flex justify-center mb-5">
-              <div className="w-20 h-20 rounded-full bg-white p-3 shadow-lg ring-4 ring-orange-500/25">
-                <img src="/marca/logo-powerpos.png" alt="PowerPOS" className="w-full h-full object-contain" />
-              </div>
+              <img src="/marca/logo-powerpos.png" alt="PowerPOS" className="w-20 h-20 object-contain drop-shadow-lg" />
             </div>
             <div className="flex items-center justify-between mb-1">
               <h2 className={`text-2xl font-bold ${claro ? 'text-gray-900' : 'text-white'}`}>Bienvenido</h2>
