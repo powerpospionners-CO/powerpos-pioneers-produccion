@@ -7,6 +7,7 @@ import { ShoppingBag, DollarSign, TrendingUp, Clock } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import RetailDashboard from './RetailDashboard';
+import { useTema } from '@/components/ThemeProvider';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -29,6 +30,18 @@ const COLORES = ['#FF6B35', '#f7931e', '#3b82f6', '#10b981', '#a855f7', '#ec4899
 function RestauranteDashboard() {
   const router = useRouter();
   const { usuario } = useAuthStore();
+  const { tema } = useTema();
+  const claro = tema === 'claro';
+  const grafico = {
+    grid: claro ? '#e2e8f0' : '#27272a',
+    eje: claro ? '#64748b' : '#71717a',
+    leyenda: claro ? '#475569' : '#a1a1aa',
+    tooltip: {
+      contentStyle: { backgroundColor: claro ? '#ffffff' : '#18181b', border: `1px solid ${claro ? '#e2e8f0' : '#27272a'}`, borderRadius: 8, color: claro ? '#0f172a' : '#fff' },
+      labelStyle: { color: claro ? '#0f172a' : '#fff' },
+      itemStyle: { color: claro ? '#0f172a' : '#fff' },
+    },
+  };
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertas, setAlertas] = useState<any[]>([]);
@@ -260,12 +273,11 @@ function RestauranteDashboard() {
               </h3>
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={estadisticas.ventasPorDia}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="dia" stroke="#71717a" fontSize={12} />
-                  <YAxis stroke="#71717a" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={grafico.grid} />
+                  <XAxis dataKey="dia" stroke={grafico.eje} fontSize={12} />
+                  <YAxis stroke={grafico.eje} fontSize={12} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
-                    labelStyle={{ color: '#fff' }}
+                    {...grafico.tooltip}
                     formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Ventas']}
                   />
                   <Line type="monotone" dataKey="total" stroke="#FF6B35" strokeWidth={3} dot={{ fill: '#FF6B35', r: 4 }} />
@@ -280,12 +292,11 @@ function RestauranteDashboard() {
               </h3>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={estadisticas.ventasPorMes}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="mes" stroke="#71717a" fontSize={12} />
-                  <YAxis stroke="#71717a" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={grafico.grid} />
+                  <XAxis dataKey="mes" stroke={grafico.eje} fontSize={12} />
+                  <YAxis stroke={grafico.eje} fontSize={12} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
-                    labelStyle={{ color: '#fff' }}
+                    {...grafico.tooltip}
                     formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Ventas']}
                   />
                   <Bar dataKey="total" fill="#10b981" radius={[6, 6, 0, 0]} />
@@ -300,13 +311,10 @@ function RestauranteDashboard() {
               </h3>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={estadisticas.productosMasVendidos} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                  <XAxis type="number" stroke="#71717a" fontSize={12} />
-                  <YAxis dataKey="nombre" type="category" stroke="#71717a" fontSize={12} width={110} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
-                    labelStyle={{ color: '#fff' }}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke={grafico.grid} horizontal={false} />
+                  <XAxis type="number" stroke={grafico.eje} fontSize={12} />
+                  <YAxis dataKey="nombre" type="category" stroke={grafico.eje} fontSize={12} width={110} />
+                  <Tooltip {...grafico.tooltip} />
                   <Bar dataKey="cantidad" fill="#f7931e" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -334,7 +342,7 @@ function RestauranteDashboard() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
+                    {...grafico.tooltip}
                     formatter={(value: any) => `$${Number(value).toLocaleString()}`}
                   />
                 </PieChart>
@@ -364,10 +372,10 @@ function RestauranteDashboard() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
+                    {...grafico.tooltip}
                     formatter={(value: any) => `$${Number(value).toLocaleString()}`}
                   />
-                  <Legend wrapperStyle={{ fontSize: 12, color: '#a1a1aa' }} />
+                  <Legend wrapperStyle={{ fontSize: 12, color: grafico.leyenda }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -379,11 +387,11 @@ function RestauranteDashboard() {
               </h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={datosIngresosEgresos}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="nombre" stroke="#71717a" fontSize={12} />
-                  <YAxis stroke="#71717a" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={grafico.grid} />
+                  <XAxis dataKey="nombre" stroke={grafico.eje} fontSize={12} />
+                  <YAxis stroke={grafico.eje} fontSize={12} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
+                    {...grafico.tooltip}
                     formatter={(value: any) => `$${Number(value).toLocaleString()}`}
                   />
                   <Bar dataKey="valor" radius={[6, 6, 0, 0]}>

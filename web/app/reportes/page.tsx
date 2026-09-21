@@ -4,11 +4,23 @@ import api from '@/lib/api';
 import { Trophy, Users, TrendingUp, TrendingDown, Percent } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import { useTema } from '@/components/ThemeProvider';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 
 export default function ReportesPage() {
+  const { tema } = useTema();
+  const claro = tema === 'claro';
+  const grafico = {
+    grid: claro ? '#e2e8f0' : '#27272a',
+    eje: claro ? '#64748b' : '#71717a',
+    tooltip: {
+      contentStyle: { backgroundColor: claro ? '#ffffff' : '#18181b', border: `1px solid ${claro ? '#e2e8f0' : '#27272a'}`, borderRadius: 8, color: claro ? '#0f172a' : '#fff' },
+      labelStyle: { color: claro ? '#0f172a' : '#fff' },
+      itemStyle: { color: claro ? '#0f172a' : '#fff' },
+    },
+  };
   const [empleados, setEmpleados] = useState<any[]>([]);
   const [mejoresClientes, setMejoresClientes] = useState<any[]>([]);
   const [periodos, setPeriodos] = useState<any>(null);
@@ -182,12 +194,11 @@ export default function ReportesPage() {
               <>
                 <ResponsiveContainer width="100%" height={Math.max(200, rentabilidad.length * 40)}>
                   <BarChart data={rentabilidad} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
-                    <XAxis type="number" stroke="#71717a" fontSize={12} unit="%" />
-                    <YAxis dataKey="nombre" type="category" stroke="#71717a" fontSize={12} width={130} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={grafico.grid} horizontal={false} />
+                    <XAxis type="number" stroke={grafico.eje} fontSize={12} unit="%" />
+                    <YAxis dataKey="nombre" type="category" stroke={grafico.eje} fontSize={12} width={130} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: 8 }}
-                      labelStyle={{ color: '#fff' }}
+                      {...grafico.tooltip}
                       formatter={(value: any) => [`${value}%`, 'Margen']}
                     />
                     <Bar dataKey="margenPorcentual" radius={[0, 6, 6, 0]}>

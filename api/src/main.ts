@@ -18,6 +18,7 @@ async function bootstrap() {
   // multer no crea el directorio de destino por sí solo: en un servidor nuevo
   // (sin subidas previas) la primera carga de logo fallaría sin esto.
   fs.mkdirSync(path.join(uploadsPath, 'logos'), { recursive: true });
+  fs.mkdirSync(path.join(uploadsPath, 'anuncios'), { recursive: true });
   console.log('Sirviendo archivos estáticos desde:', uploadsPath);
 
   app.useStaticAssets(uploadsPath, {

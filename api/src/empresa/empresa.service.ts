@@ -39,4 +39,20 @@ export class EmpresaService {
       data: { logo: logoUrl },
     });
   }
+
+  async actualizarAnuncios(empresaId: number, anuncios: any[]) {
+    const lista = (Array.isArray(anuncios) ? anuncios : [])
+      .slice(0, 8)
+      .filter((a) => a && typeof a.imagen === 'string' && a.imagen.trim())
+      .map((a) => ({
+        imagen: String(a.imagen).slice(0, 500),
+        titulo: typeof a.titulo === 'string' ? a.titulo.slice(0, 80) : '',
+        texto: typeof a.texto === 'string' ? a.texto.slice(0, 200) : '',
+      }));
+    await this.prisma.empresa.update({
+      where: { id: empresaId },
+      data: { anunciosPantalla: lista },
+    });
+    return lista;
+  }
 }

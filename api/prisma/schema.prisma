@@ -49,6 +49,7 @@ model Empresa {
   tiendaSlug String @unique @default(uuid())
   tiendaConfig Json @default("{}")
   fidelizacionConfig Json @default("{}")
+  anunciosPantalla Json @default("[]")
   pedidosWeb PedidoWeb[]
   creadoEn      DateTime  @default(now())
   actualizadoEn DateTime  @updatedAt

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import AnunciosCarrusel, { type Anuncio } from '@/components/AnunciosCarrusel';
 
 interface EstadoLlamado {
   empresa: string;
@@ -22,6 +24,18 @@ const estadoInicial: EstadoLlamado = {
 
 export default function PantallaLlamadoPage() {
   const [estado, setEstado] = useState<EstadoLlamado>(estadoInicial);
+  const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+
+  useEffect(() => {
+    const cargarAnuncios = () => {
+      api.get('/empresa').then(({ data }) => {
+        if (Array.isArray(data.anunciosPantalla)) setAnuncios(data.anunciosPantalla);
+      }).catch(() => {});
+    };
+    cargarAnuncios();
+    const timer = setInterval(cargarAnuncios, 5 * 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const aplicarPayload = (payload: Partial<EstadoLlamado> = {}) => {
     setEstado((prev) => ({
@@ -122,7 +136,7 @@ export default function PantallaLlamadoPage() {
           </div>
         </div>
 
-        <div className="rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-orange-950/30 p-10 md:p-16 min-h-[420px] flex items-center justify-center">
+        <div className={`rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-orange-950/30 min-h-[420px] flex items-center justify-center overflow-hidden ${estado.estado === null && anuncios.length > 0 ? '' : 'p-10 md:p-16'}`}>
           {estado.estado === 'LISTO' && estado.clienteNombre && estado.pedido ? (
             <>
               <div className="text-center">
@@ -143,6 +157,10 @@ export default function PantallaLlamadoPage() {
           ) : estado.estado === 'ENTREGADO' ? (
             <div className="h-40 w-40 rounded-full border border-white/10 bg-white/5 flex items-center justify-center opacity-60">
               <div className="text-5xl">✓</div>
+            </div>
+          ) : anuncios.length > 0 ? (
+            <div className="w-full h-full min-h-[420px]">
+              <AnunciosCarrusel anuncios={anuncios} />
             </div>
           ) : (
             <div className="text-center">

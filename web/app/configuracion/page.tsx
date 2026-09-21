@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
-import { Upload, Settings, User, Users, Plus, X, Shield, MapPin } from 'lucide-react';
+import { Upload, Settings, User, Users, Plus, X, Shield, MapPin, Image as ImageIcon, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 
@@ -37,6 +37,10 @@ export default function ConfiguracionPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [generandoToken, setGenerandoToken] = useState(false);
   const [tokenAgente, setTokenAgente] = useState('');
+  const [anuncios, setAnuncios] = useState<{ imagen: string; titulo: string; texto: string }[]>([]);
+  const [subiendoAnuncio, setSubiendoAnuncio] = useState<number | null>(null);
+  const [guardandoAnuncios, setGuardandoAnuncios] = useState(false);
+  const [mensajeAnuncios, setMensajeAnuncios] = useState('');
 
   // ---- Mi perfil ----
   const [perfil, setPerfil] = useState<any>(null);
@@ -71,6 +75,7 @@ export default function ConfiguracionPage() {
   const cargarEmpresa = async () => {
     const { data } = await api.get('/empresa');
     setEmpresa(data);
+    setAnuncios(Array.isArray(data.anunciosPantalla) ? data.anunciosPantalla : []);
   };
 
   const cargarPerfil = async () => {
@@ -119,6 +124,52 @@ export default function ConfiguracionPage() {
       setMensajeEmpresa('❌ No se pudo generar el token del agente');
     } finally {
       setGenerandoToken(false);
+    }
+  };
+
+  const agregarAnuncio = () => {
+    if (anuncios.length >= 8) return;
+    setAnuncios([...anuncios, { imagen: '', titulo: '', texto: '' }]);
+  };
+
+  const eliminarAnuncio = (index: number) => {
+    setAnuncios(anuncios.filter((_, i) => i !== index));
+  };
+
+  const actualizarCampoAnuncio = (index: number, campo: 'titulo' | 'texto', valor: string) => {
+    setAnuncios(anuncios.map((a, i) => (i === index ? { ...a, [campo]: valor } : a)));
+  };
+
+  const subirImagenAnuncio = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendoAnuncio(index);
+    try {
+      const formData = new FormData();
+      formData.append('imagen', file);
+      const { data } = await api.post('/empresa/anuncios/imagen', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAnuncios((prev) => prev.map((a, i) => (i === index ? { ...a, imagen: data.imagen } : a)));
+    } catch {
+      setMensajeAnuncios('❌ Error al subir la imagen');
+    } finally {
+      setSubiendoAnuncio(null);
+    }
+  };
+
+  const guardarAnuncios = async () => {
+    setGuardandoAnuncios(true);
+    try {
+      const validos = anuncios.filter((a) => a.imagen);
+      const { data } = await api.patch('/empresa/anuncios', { anuncios: validos });
+      setAnuncios(data);
+      setMensajeAnuncios('✅ Anuncios guardados correctamente');
+      setTimeout(() => setMensajeAnuncios(''), 3000);
+    } catch {
+      setMensajeAnuncios('❌ Error al guardar los anuncios');
+    } finally {
+      setGuardandoAnuncios(false);
     }
   };
 
@@ -374,6 +425,90 @@ export default function ConfiguracionPage() {
                   </div>
                 )}
               </div>
+
+              {usuario?.rol === 'ADMIN_EMPRESA' && (
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mt-4">
+                  <h3 className="text-white font-semibold mb-1">Anuncios para pantallas de cliente</h3>
+                  <p className="text-gray-500 text-xs mb-4">
+                    Estas imágenes se muestran de forma rotativa en la pantalla del cliente y en la pantalla de llamado mientras no haya un pedido activo. Úsalas para promocionar productos, promociones o novedades.
+                  </p>
+                  {mensajeAnuncios && (
+                    <div className={`rounded-lg p-3 mb-4 text-sm ${mensajeAnuncios.includes('✅') ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                      {mensajeAnuncios}
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {anuncios.map((anuncio, index) => (
+                      <div key={index} className="flex gap-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
+                        <div className="w-28 h-28 rounded-lg overflow-hidden bg-gray-900 border border-gray-700 flex items-center justify-center flex-shrink-0">
+                          {anuncio.imagen ? (
+                            <img src={anuncio.imagen} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon size={22} className="text-gray-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-2 min-w-0">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            id={`anuncio-file-${index}`}
+                            className="hidden"
+                            onChange={(e) => subirImagenAnuncio(index, e)}
+                          />
+                          <button
+                            onClick={() => document.getElementById(`anuncio-file-${index}`)?.click()}
+                            disabled={subiendoAnuncio === index}
+                            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+                          >
+                            <Upload size={13} />
+                            {subiendoAnuncio === index ? 'Subiendo...' : anuncio.imagen ? 'Cambiar imagen' : 'Subir imagen'}
+                          </button>
+                          <input
+                            type="text"
+                            value={anuncio.titulo}
+                            onChange={(e) => actualizarCampoAnuncio(index, 'titulo', e.target.value)}
+                            placeholder="Título (opcional)"
+                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500"
+                          />
+                          <input
+                            type="text"
+                            value={anuncio.texto}
+                            onChange={(e) => actualizarCampoAnuncio(index, 'texto', e.target.value)}
+                            placeholder="Texto o descripción (opcional)"
+                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500"
+                          />
+                        </div>
+                        <button
+                          onClick={() => eliminarAnuncio(index)}
+                          title="Eliminar anuncio"
+                          className="text-gray-500 hover:text-red-400 transition-colors flex-shrink-0 self-start"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    ))}
+                    {anuncios.length === 0 && (
+                      <p className="text-gray-600 text-sm py-2">Aún no has agregado anuncios.</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-4">
+                    <button
+                      onClick={agregarAnuncio}
+                      disabled={anuncios.length >= 8}
+                      className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                    >
+                      <Plus size={15} /> Agregar anuncio
+                    </button>
+                    <button
+                      onClick={guardarAnuncios}
+                      disabled={guardandoAnuncios}
+                      className="bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white text-sm font-bold rounded-lg px-4 py-2 transition-colors"
+                    >
+                      {guardandoAnuncios ? 'Guardando...' : 'Guardar anuncios'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

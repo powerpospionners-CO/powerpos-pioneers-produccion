@@ -54,4 +54,34 @@ export class EmpresaController {
   generarTokenAgenteImpresion(@Request() req: any) {
     return this.empresaService.generarTokenAgenteImpresion(req.user.empresaId);
   }
+
+  @Post('anuncios/imagen')
+  @Roles('ADMIN_EMPRESA')
+  @UseInterceptors(FileInterceptor('imagen', {
+    storage: diskStorage({
+      destination: './uploads/anuncios',
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, `anuncio-${uniqueSuffix}${extname(file.originalname)}`);
+      },
+    }),
+    fileFilter: (req, file, cb) => {
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+        cb(new Error('Solo se permiten imágenes'), false);
+      } else {
+        cb(null, true);
+      }
+    },
+    limits: { fileSize: 4 * 1024 * 1024 },
+  }))
+  subirImagenAnuncio(@UploadedFile() file: Express.Multer.File) {
+    const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    return { imagen: `${baseUrl}/uploads/anuncios/${file.filename}` };
+  }
+
+  @Patch('anuncios')
+  @Roles('ADMIN_EMPRESA')
+  actualizarAnuncios(@Body() body: any, @Request() req: any) {
+    return this.empresaService.actualizarAnuncios(req.user.empresaId, body.anuncios);
+  }
 }

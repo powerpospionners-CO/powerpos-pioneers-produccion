@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import AnunciosCarrusel, { type Anuncio } from '@/components/AnunciosCarrusel';
 
 interface ItemPantalla {
   nombre: string;
@@ -31,11 +33,23 @@ const estadoInicial: EstadoPantalla = {
 
 export default function PantallaClientePage() {
   const [estado, setEstado] = useState<EstadoPantalla>(estadoInicial);
+  const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
 
   useEffect(() => {
     const canal = new BroadcastChannel('powerpos-pantalla-cliente');
     canal.onmessage = (evento) => setEstado({ ...estadoInicial, ...evento.data });
     return () => canal.close();
+  }, []);
+
+  useEffect(() => {
+    const cargarAnuncios = () => {
+      api.get('/empresa').then(({ data }) => {
+        if (Array.isArray(data.anunciosPantalla)) setAnuncios(data.anunciosPantalla);
+      }).catch(() => {});
+    };
+    cargarAnuncios();
+    const timer = setInterval(cargarAnuncios, 5 * 60000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -88,9 +102,15 @@ export default function PantallaClientePage() {
             </div>
           )}
           {estado.items.length === 0 ? (
-            <div className="h-full min-h-72 flex items-center justify-center text-slate-500 text-2xl">
-              Aquí verá su pedido
-            </div>
+            anuncios.length > 0 ? (
+              <div className="h-full min-h-72 rounded-2xl overflow-hidden">
+                <AnunciosCarrusel anuncios={anuncios} />
+              </div>
+            ) : (
+              <div className="h-full min-h-72 flex items-center justify-center text-slate-500 text-2xl">
+                Aquí verá su pedido
+              </div>
+            )
           ) : (
             <div className="space-y-4">
               {estado.items.map((item, index) => (
