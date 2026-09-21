@@ -10,6 +10,16 @@
   font-family: "Plus Jakarta Sans", Arial, sans-serif;
   font-size: 16px;
   line-height: 1.55;
+  scroll-behavior: smooth;
+}
+.store #inicio,
+.store #catalogo,
+.store #carrito {
+  scroll-margin-top: 92px;
+}
+@keyframes storeFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .store * {
   box-sizing: border-box;
@@ -117,6 +127,12 @@
   grid-template-columns: 1.1fr 1fr;
   align-items: center;
 }
+.store-hero > div {
+  animation: storeFadeUp 0.7s ease both;
+}
+.store-hero > img {
+  animation: storeFadeUp 0.7s ease both 0.15s;
+}
 .store-hero h1 {
   font-size: clamp(36px, 5vw, 64px);
   line-height: 1.08;
@@ -169,6 +185,48 @@
 .store-meta svg {
   color: var(--store-brand);
   flex-shrink: 0;
+}
+
+/* Beneficios */
+.store-benefits {
+  max-width: 1440px;
+  margin: auto;
+  padding: 34px 5%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px;
+}
+.store-benefit {
+  background: white;
+  border: 1px solid #eaeff1;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  box-shadow: 0 16px 34px -26px rgba(16, 31, 38, 0.35);
+}
+.store-benefit-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--store-brand-soft);
+  color: var(--store-brand-dark);
+}
+.store-benefit strong {
+  display: block;
+  font-size: 14.5px;
+  color: #101f26;
+  margin-bottom: 4px;
+}
+.store-benefit p {
+  font-size: 13px;
+  color: #66787f;
+  margin: 0;
+  line-height: 1.45;
 }
 
 /* Layout */
@@ -282,6 +340,7 @@
   border-radius: 18px;
   overflow: hidden;
   transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+  animation: storeFadeUp 0.5s ease both;
 }
 .store-product:hover {
   transform: translateY(-4px);
@@ -293,6 +352,12 @@
   height: 190px;
   width: 100%;
   object-fit: cover;
+}
+.store-product > img {
+  transition: transform 0.4s ease;
+}
+.store-product:hover > img {
+  transform: scale(1.06);
 }
 .store-product-placeholder {
   background: linear-gradient(160deg, var(--store-brand-soft), #eef3f4);
@@ -535,32 +600,80 @@
 
 /* Footer */
 .store-footer {
-  padding: 40px 5%;
+  padding: 44px 5% 100px;
   background: #101f26;
   color: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   flex-wrap: wrap;
   font-size: 14px;
+  border-top: 3px solid var(--store-brand);
 }
-.store-footer strong {
-  font-size: 17px;
+.store-footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.store-footer a {
+.store-footer-brand strong {
+  font-size: 18px;
+}
+.store-footer-brand small {
+  color: #8199a1;
+}
+.store-footer-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  color: #b9c6cb;
+}
+.store-footer-info span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.store-footer-whatsapp {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-weight: 600;
-  color: #9fd6b8;
-  transition: color 0.15s;
+  font-weight: 700;
+  color: #101f26 !important;
+  background: #35d07f;
+  padding: 11px 18px;
+  border-radius: 10px;
+  transition: transform 0.15s, background 0.15s;
 }
-.store-footer a:hover {
-  color: #c3ecd4;
+.store-footer-whatsapp:hover {
+  background: #4fe094;
+  transform: translateY(-1px);
 }
-.store-footer small {
-  color: #8199a1;
+
+/* Barra flotante del carrito en móvil */
+.store-mobile-cart {
+  display: none;
+}
+
+/* Botón flotante volver arriba */
+.store-scroll-top {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: white;
+  color: var(--store-brand-dark);
+  border: 1px solid #e0e7e9;
+  box-shadow: 0 12px 28px -12px rgba(16, 31, 38, 0.45);
+  z-index: 25;
+  animation: storeFadeUp 0.3s ease both;
+}
+.store-scroll-top:hover {
+  color: white;
+  background: var(--store-brand);
 }
 
 /* Estado de carga / error de tienda */
@@ -665,8 +778,49 @@
   .store-footer {
     flex-direction: column;
     align-items: flex-start;
+    padding-bottom: 110px;
   }
   .store-product p {
     font-size: 13px;
+  }
+  .store-benefits {
+    grid-template-columns: 1fr 1fr;
+    padding: 24px 5%;
+    gap: 12px;
+  }
+  .store-benefit {
+    padding: 14px;
+  }
+  .store-benefit p {
+    display: none;
+  }
+  .store-mobile-cart {
+    display: flex;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 24;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, var(--store-brand), var(--store-brand-dark));
+    color: white;
+    padding: 14px 18px;
+    border-radius: 14px;
+    box-shadow: 0 16px 36px -14px rgba(16, 31, 38, 0.55);
+    animation: storeFadeUp 0.3s ease both;
+  }
+  .store-mobile-cart span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 13.5px;
+  }
+  .store-mobile-cart strong {
+    font-size: 15px;
+  }
+  .store-scroll-top {
+    bottom: 82px;
   }
 }

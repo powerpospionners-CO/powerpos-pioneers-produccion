@@ -12,8 +12,19 @@ import {
   CheckCircle2,
   AlertCircle,
   PackageSearch,
+  Zap,
+  Wallet,
+  Radar,
+  ArrowUp,
 } from "lucide-react";
 import "./tienda.css";
+
+const BENEFICIOS = [
+  { icon: Zap, titulo: "Pedidos en minutos", texto: "Arma tu pedido y envíalo directo a la empresa, sin filas ni llamadas." },
+  { icon: Wallet, titulo: "Paga como prefieras", texto: "Efectivo, transferencia o pago digital al confirmar tu pedido." },
+  { icon: Radar, titulo: "Sigue tu pedido", texto: "Consulta el estado de tu pedido en tiempo real desde esta misma página." },
+  { icon: MessageCircle, titulo: "Contacto directo", texto: "¿Dudas? Escríbenos por WhatsApp y te respondemos al instante." },
+];
 
 type Producto = {
   id: number;
@@ -89,7 +100,13 @@ export default function TiendaPage() {
       motivo?: string;
     } | null>(null);
   const clave = useRef("");
+  const [mostrarSubir, setMostrarSubir] = useState(false);
   useEffect(() => { if (tienda) document.title = `${tienda.nombre} · Tienda en línea`; }, [tienda]);
+  useEffect(() => {
+    const onScroll = () => setMostrarSubir(window.scrollY > 500);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const enviandoRef = useRef(false);
   const cargar = () =>
     request(`/tiendas/${encodeURIComponent(slug)}`)
@@ -246,6 +263,19 @@ export default function TiendaPage() {
           </div>
         </div>
         {t.portada && <img src={t.portada} alt={`Conoce ${tienda.nombre}`} />}
+      </section>
+      <section className="store-benefits">
+        {BENEFICIOS.map(({ icon: Icon, titulo, texto }) => (
+          <div key={titulo} className="store-benefit">
+            <span className="store-benefit-icon">
+              <Icon size={20} />
+            </span>
+            <div>
+              <strong>{titulo}</strong>
+              <p>{texto}</p>
+            </div>
+          </div>
+        ))}
       </section>
       <div className="store-layout">
         <section id="catalogo">
@@ -513,10 +543,18 @@ export default function TiendaPage() {
         </aside>
       </div>
       <footer className="store-footer">
-        <strong>{tienda.nombre}</strong>
-        <span>{tienda.telefono}</span>
+        <div className="store-footer-brand">
+          <strong>{tienda.nombre}</strong>
+          <small>Tienda conectada con PowerPOS</small>
+        </div>
+        <div className="store-footer-info">
+          {tienda.telefono && <span>{tienda.telefono}</span>}
+          {tienda.direccion && <span><MapPin size={14} />{tienda.direccion}</span>}
+          {t.horario && <span><Clock size={14} />{t.horario}</span>}
+        </div>
         {t.whatsapp && (
           <a
+            className="store-footer-whatsapp"
             href={`https://wa.me/${t.whatsapp}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -524,8 +562,28 @@ export default function TiendaPage() {
             <MessageCircle size={16} /> Contáctanos por WhatsApp
           </a>
         )}
-        <small>Tienda conectada con PowerPOS</small>
       </footer>
+
+      {items.length > 0 && (
+        <a href="#carrito" className="store-mobile-cart">
+          <span>
+            <ShoppingBag size={17} />
+            {Object.values(carrito).reduce((s, n) => s + n, 0)} producto(s)
+          </span>
+          <strong>{dinero(subtotal)}</strong>
+        </a>
+      )}
+
+      {mostrarSubir && (
+        <button
+          type="button"
+          className="store-scroll-top"
+          aria-label="Volver arriba"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
+          <ArrowUp size={18} />
+        </button>
+      )}
     </main>
   );
 }

@@ -75,15 +75,15 @@ export default function LoginPage() {
     <div className={`min-h-screen flex ${claro ? 'bg-orange-50' : 'bg-gray-950'}`}>
       {/* Panel de marca — visible en pantallas medianas en adelante */}
       <div className="hidden lg:flex lg:w-[46%] relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-amber-500 text-white flex-col justify-between p-12 xl:p-16">
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full bg-black/10 blur-3xl" />
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/10 blur-3xl animate-pulse" style={{ animationDuration: '6s' }} />
+        <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full bg-black/10 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="relative">
           <h1 className="text-3xl xl:text-4xl font-bold">
             Power<span className="text-gray-900/80">POS</span>
           </h1>
           <p className="mt-1 text-orange-100 font-medium">Pioneers</p>
         </div>
-        <div className="relative space-y-8">
+        <div className="relative space-y-8 fade-in-up">
           <h2 className="text-3xl xl:text-4xl font-extrabold leading-tight">
             El sistema que hace crecer tu negocio, de principio a fin.
           </h2>
@@ -105,7 +105,7 @@ export default function LoginPage() {
 
       {/* Panel de acceso */}
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8 relative">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md fade-in-up">
           <div className="text-center mb-8 lg:hidden">
             <h1 className={`text-4xl font-bold mb-2 ${claro ? 'text-gray-900' : 'text-white'}`}>
               Power<span className="text-orange-500">POS</span>
