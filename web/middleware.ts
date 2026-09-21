@@ -5,8 +5,19 @@ import { NextRequest, NextResponse } from 'next/server';
 const ROOT_DOMAIN = (process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com').toLowerCase();
 
 // Subdominios reservados: nunca se tratan como el slug de una tienda.
-// "app" es donde vive el panel administrativo (login, POS, dashboard, etc.).
+// "app" es donde vive el panel administrativo por defecto (login, POS, dashboard, etc.).
 const SUBDOMINIOS_RESERVADOS = new Set(['app', 'www', 'api']);
+
+// Rutas del panel administrativo: si una empresa entra por su propio
+// subdominio (ej. trailer-del-sabor.powerpospioneers.com/dashboard), estas
+// rutas se sirven tal cual (con su marca en la URL) en vez de reescribirse
+// hacia la tienda pública. La raíz "/" del subdominio sigue mostrando la
+// tienda pública — es el enlace que se comparte con clientes.
+const RUTAS_PANEL = [
+  '/login', '/dashboard', '/pos', '/cocina', '/domicilios', '/productos',
+  '/inventario', '/clientes', '/financiero', '/reportes', '/configuracion',
+  '/mi-tienda', '/fidelizacion', '/consumo-empleados', '/cliente', '/llamado',
+];
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl;
@@ -24,7 +35,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Cualquier otro subdominio se trata como el slug de la tienda pública de una empresa.
+  // Rutas del panel: se sirven normales, solo con el subdominio de marca en la URL.
+  if (RUTAS_PANEL.some((ruta) => url.pathname === ruta || url.pathname.startsWith(`${ruta}/`))) {
+    return NextResponse.next();
+  }
+
+  // Cualquier otra ruta bajo el subdominio de una empresa se trata como su tienda pública.
   const nuevaUrl = url.clone();
   nuevaUrl.pathname = `/tienda/${subdominio}${url.pathname === '/' ? '' : url.pathname}`;
   return NextResponse.rewrite(nuevaUrl);
