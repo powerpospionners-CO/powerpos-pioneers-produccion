@@ -1,15 +1,47 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+
+type Periodo = 'hoy' | 'mes' | 'anio' | 'personalizado';
+
+const ETIQUETAS_METODO: Record<string, string> = {
+  EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', NEQUI: 'Nequi', DAVIPLATA: 'Daviplata',
+};
+const ICONOS_METODO: Record<string, any> = {
+  EFECTIVO: Wallet, TARJETA: CreditCard, TRANSFERENCIA: Smartphone, NEQUI: Smartphone, DAVIPLATA: Smartphone,
+};
+
+function calcularRango(periodo: Periodo, desdePersonalizado: string, hastaPersonalizado: string): { desde?: string; hasta?: string } {
+  const ahora = new Date();
+  if (periodo === 'hoy') {
+    const inicio = new Date(ahora);
+    inicio.setHours(0, 0, 0, 0);
+    return { desde: inicio.toISOString(), hasta: ahora.toISOString() };
+  }
+  if (periodo === 'mes') {
+    return { desde: new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString(), hasta: ahora.toISOString() };
+  }
+  if (periodo === 'anio') {
+    return { desde: new Date(ahora.getFullYear(), 0, 1).toISOString(), hasta: ahora.toISOString() };
+  }
+  return {
+    desde: desdePersonalizado ? new Date(`${desdePersonalizado}T00:00:00`).toISOString() : undefined,
+    hasta: hastaPersonalizado ? new Date(`${hastaPersonalizado}T23:59:59`).toISOString() : undefined,
+  };
+}
 
 export default function FinancieroPage() {
   const [resumen, setResumen] = useState<any>(null);
   const [movimientos, setMovimientos] = useState<any[]>([]);
   const [modal, setModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+  const [periodo, setPeriodo] = useState<Periodo>('mes');
+  const [desdePersonalizado, setDesdePersonalizado] = useState('');
+  const [hastaPersonalizado, setHastaPersonalizado] = useState('');
   const [form, setForm] = useState({
     tipo: 'EGRESO',
     categoria: 'OTROS',
@@ -17,19 +49,46 @@ export default function FinancieroPage() {
     monto: '',
   });
 
+  const rango = calcularRango(periodo, desdePersonalizado, hastaPersonalizado);
+
   useEffect(() => {
     cargarDatos();
     const intervalo = setInterval(cargarDatos, 10000);
     return () => clearInterval(intervalo);
-  }, []);
+  }, [periodo, desdePersonalizado, hastaPersonalizado]);
 
   const cargarDatos = async () => {
+    const params: any = {};
+    if (rango.desde) params.fechaDesde = rango.desde;
+    if (rango.hasta) params.fechaHasta = rango.hasta;
     const [res, movs] = await Promise.all([
-      api.get('/financiero/resumen'),
-      api.get('/financiero/movimientos'),
+      api.get('/financiero/resumen', { params }),
+      api.get('/financiero/movimientos', { params }),
     ]);
     setResumen(res.data);
     setMovimientos(movs.data);
+  };
+
+  const descargarExcel = async () => {
+    setDescargando(true);
+    try {
+      const params: any = {};
+      if (rango.desde) params.fechaDesde = rango.desde;
+      if (rango.hasta) params.fechaHasta = rango.hasta;
+      const respuesta = await api.get('/financiero/exportar', { params, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = `reporte-financiero-${periodo}.xlsx`;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDescargando(false);
+    }
   };
 
   const registrar = async () => {
@@ -58,9 +117,67 @@ export default function FinancieroPage() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gray-950 flex flex-col">
-        <Navbar />
+        <div className="no-imprimir">
+          <Navbar />
+        </div>
 
         <div className="flex-1 p-6 space-y-6">
+          {/* Filtro de periodo + descargar/imprimir */}
+          <div className="no-imprimir flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                ['hoy', 'Hoy'],
+                ['mes', 'Este mes'],
+                ['anio', 'Este año'],
+                ['personalizado', 'Personalizado'],
+              ] as [Periodo, string][]).map(([valor, etiqueta]) => (
+                <button
+                  key={valor}
+                  onClick={() => setPeriodo(valor)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    periodo === valor ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+              {periodo === 'personalizado' && (
+                <div className="flex items-center gap-2 ml-1">
+                  <input
+                    type="date"
+                    value={desdePersonalizado}
+                    onChange={(e) => setDesdePersonalizado(e.target.value)}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500"
+                  />
+                  <span className="text-gray-500 text-sm">a</span>
+                  <input
+                    type="date"
+                    value={hastaPersonalizado}
+                    onChange={(e) => setHastaPersonalizado(e.target.value)}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+              >
+                <Printer size={16} />
+                Imprimir
+              </button>
+              <button
+                onClick={descargarExcel}
+                disabled={descargando}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+              >
+                <Download size={16} />
+                {descargando ? 'Descargando...' : 'Descargar Excel'}
+              </button>
+            </div>
+          </div>
+
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -107,13 +224,41 @@ export default function FinancieroPage() {
             </div>
           </div>
 
+          {/* Ventas por forma de pago */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white font-semibold">Ventas por forma de pago</h2>
+              <span className="text-gray-500 text-sm">Total del periodo: ${(resumen?.totalVentasRango || 0).toLocaleString()} · {resumen?.cantidadPedidosRango || 0} pedidos</span>
+            </div>
+            {!resumen?.ventasPorMetodoPago?.length ? (
+              <p className="text-gray-500 text-sm text-center py-6">Sin ventas registradas en este periodo</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {resumen.ventasPorMetodoPago.map((v: any) => {
+                  const Icono = ICONOS_METODO[v.metodo] || Wallet;
+                  const porcentaje = resumen.totalVentasRango > 0 ? Math.round((v.total / resumen.totalVentasRango) * 100) : 0;
+                  return (
+                    <div key={v.metodo} className="bg-gray-800 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icono size={15} className="text-orange-400" />
+                        <span className="text-gray-400 text-xs">{ETIQUETAS_METODO[v.metodo] || v.metodo}</span>
+                      </div>
+                      <div className="text-white font-bold text-sm">${Number(v.total).toLocaleString()}</div>
+                      <div className="text-gray-500 text-xs mt-0.5">{porcentaje}%</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Movimientos */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl">
             <div className="p-4 border-b border-gray-800 flex items-center justify-between">
               <h2 className="text-white font-semibold">Movimientos financieros</h2>
               <button
                 onClick={() => setModal(true)}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                className="no-imprimir flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
               >
                 <Plus size={16} />
                 Registrar movimiento
@@ -147,7 +292,7 @@ export default function FinancieroPage() {
 
         {/* Modal */}
         {modal && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="no-imprimir fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
             <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
               <h3 className="text-white font-bold text-lg mb-4">Registrar movimiento</h3>
               <div className="space-y-4">

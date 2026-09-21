@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -49,8 +50,27 @@ export class FinancieroService {
         pedido: { select: { numero: true } },
       },
       orderBy: { fecha: 'desc' },
-      take: 100,
+      take: filtros?.completo ? undefined : 100,
     });
+  }
+
+  private async ventasPorMetodoPagoEnRango(empresaId: number, fechaDesde?: string, fechaHasta?: string) {
+    const where: any = { sucursal: { empresaId }, estado: { not: 'ANULADO' } };
+    if (fechaDesde || fechaHasta) {
+      where.creadoEn = {};
+      if (fechaDesde) where.creadoEn.gte = new Date(fechaDesde);
+      if (fechaHasta) where.creadoEn.lte = new Date(fechaHasta);
+    }
+    const pedidos = await this.prisma.pedido.findMany({ where, select: { total: true, metodoPago: true } });
+    const mapa = new Map<string, number>();
+    for (const p of pedidos) {
+      mapa.set(p.metodoPago, (mapa.get(p.metodoPago) || 0) + Number(p.total));
+    }
+    return {
+      ventasPorMetodoPago: Array.from(mapa.entries()).map(([metodo, total]) => ({ metodo, total })),
+      totalVentasRango: pedidos.reduce((acc, p) => acc + Number(p.total), 0),
+      cantidadPedidosRango: pedidos.length,
+    };
   }
 
   async resumenFinanciero(empresaId: number, fechaDesde?: string, fechaHasta?: string) {
@@ -93,6 +113,8 @@ export class FinancieroService {
     });
     const totalVentasHoy = ventasHoy.reduce((acc, p) => acc + Number(p.total), 0);
 
+    const { ventasPorMetodoPago, totalVentasRango, cantidadPedidosRango } = await this.ventasPorMetodoPagoEnRango(empresaId, fechaDesde, fechaHasta);
+
     return {
       totalIngresos,
       totalEgresos,
@@ -100,6 +122,55 @@ export class FinancieroService {
       porCategoria,
       totalVentasHoy,
       cantidadPedidosHoy: ventasHoy.length,
+      ventasPorMetodoPago,
+      totalVentasRango,
+      cantidadPedidosRango,
     };
+  }
+
+  async exportarExcel(empresaId: number, fechaDesde?: string, fechaHasta?: string): Promise<Buffer> {
+    const resumen = await this.resumenFinanciero(empresaId, fechaDesde, fechaHasta);
+    const movimientos = await this.listarMovimientos(empresaId, { fechaDesde, fechaHasta, completo: true });
+
+    const ETIQUETAS_METODO: Record<string, string> = {
+      EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', NEQUI: 'Nequi', DAVIPLATA: 'Daviplata',
+    };
+
+    const filasResumen: any[] = [
+      ['Reporte financiero'],
+      ['Periodo', `${fechaDesde ? new Date(fechaDesde).toLocaleDateString('es-CO') : 'Inicio'} a ${fechaHasta ? new Date(fechaHasta).toLocaleDateString('es-CO') : 'Hoy'}`],
+      [],
+      ['Total ingresos', resumen.totalIngresos],
+      ['Total egresos', resumen.totalEgresos],
+      ['Utilidad neta', resumen.utilidad],
+      [],
+      ['Ventas por forma de pago'],
+      ['Forma de pago', 'Total'],
+      ...resumen.ventasPorMetodoPago.map((v: any) => [ETIQUETAS_METODO[v.metodo] || v.metodo, v.total]),
+      ['Total ventas del periodo', resumen.totalVentasRango],
+      [],
+      ['Movimientos por categoría', '', 'Ingreso', 'Egreso'],
+      ...Object.entries(resumen.porCategoria as Record<string, { ingreso: number; egreso: number }>).map(([categoria, v]) => [categoria, '', v.ingreso, v.egreso]),
+    ];
+    const hojaResumen = XLSX.utils.aoa_to_sheet(filasResumen);
+    hojaResumen['!cols'] = [{ wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
+
+    const hojaMovimientos = XLSX.utils.json_to_sheet(
+      movimientos.map((m: any) => ({
+        Fecha: new Date(m.fecha).toLocaleString('es-CO'),
+        Tipo: m.tipo,
+        Categoría: m.categoria,
+        Descripción: m.descripcion,
+        Monto: Number(m.monto),
+        Usuario: m.usuario?.nombre || '',
+      })),
+    );
+    hojaMovimientos['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 12 }, { wch: 18 }];
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
+    XLSX.utils.book_append_sheet(libro, hojaMovimientos, 'Movimientos');
+
+    return XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 }
