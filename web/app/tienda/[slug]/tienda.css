@@ -487,6 +487,15 @@
   background: var(--store-brand-soft);
   color: var(--store-brand-dark);
 }
+.store-quantity-input {
+  width: 44px;
+  padding: 5px 2px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1.5px solid #dbe4e6 !important;
+  border-radius: 8px !important;
+}
 .store-total {
   display: flex;
   justify-content: space-between;

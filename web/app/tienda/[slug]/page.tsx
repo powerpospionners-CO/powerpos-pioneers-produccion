@@ -172,8 +172,15 @@ export default function TiendaPage() {
     if (enviandoRef.current) return;
     setCarrito((c) => ({
       ...c,
-      [id]: Math.min(99, Math.max(0, (c[id] || 0) + delta)),
+      [id]: Math.min(9999, Math.max(0, (c[id] || 0) + delta)),
     }));
+    clave.current = "";
+  };
+  const escribirCantidad = (id: number, valor: string) => {
+    if (enviandoRef.current) return;
+    const numero = Math.floor(Number(valor.replace(/[^0-9]/g, "")));
+    const limitado = Number.isFinite(numero) && numero > 0 ? Math.min(9999, numero) : 1;
+    setCarrito((c) => ({ ...c, [id]: limitado }));
     clave.current = "";
   };
   if (cargando)
@@ -410,7 +417,20 @@ export default function TiendaPage() {
                       >
                         <Minus size={13} />
                       </button>
-                      <span>{carrito[p.id]}</span>
+                      <input
+                        key={carrito[p.id]}
+                        type="text"
+                        inputMode="numeric"
+                        className="store-quantity-input"
+                        defaultValue={carrito[p.id]}
+                        disabled={enviando}
+                        aria-label={`Cantidad de ${p.nombre}`}
+                        onFocus={(e) => e.target.select()}
+                        onBlur={(e) => escribirCantidad(p.id, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                      />
                       <button
                         disabled={enviando}
                         aria-label={`Agregar uno de ${p.nombre}`}
