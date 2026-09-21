@@ -676,6 +676,28 @@
   background: var(--store-brand);
 }
 
+/* Botón flotante de WhatsApp */
+.store-whatsapp-float {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #25d366;
+  color: white;
+  box-shadow: 0 14px 30px -10px rgba(37, 211, 102, 0.65);
+  z-index: 25;
+  animation: storeFadeUp 0.3s ease both;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.store-whatsapp-float:hover {
+  transform: scale(1.08);
+  box-shadow: 0 16px 34px -8px rgba(37, 211, 102, 0.75);
+}
+
 /* Estado de carga / error de tienda */
 .store-status {
   max-width: 600px;
@@ -822,5 +844,11 @@
   }
   .store-scroll-top {
     bottom: 82px;
+  }
+  .store-whatsapp-float {
+    bottom: 82px;
+    left: 14px;
+    width: 50px;
+    height: 50px;
   }
 }

@@ -564,6 +564,19 @@ export default function TiendaPage() {
         )}
       </footer>
 
+      {t.whatsapp && (
+        <a
+          className="store-whatsapp-float"
+          href={`https://wa.me/${t.whatsapp}?text=${encodeURIComponent(`Hola ${tienda.nombre}, quiero más información.`)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Escríbenos por WhatsApp a ${tienda.nombre}`}
+          title="Escríbenos por WhatsApp"
+        >
+          <MessageCircle size={26} />
+        </a>
+      )}
+
       {items.length > 0 && (
         <a href="#carrito" className="store-mobile-cart">
           <span>
