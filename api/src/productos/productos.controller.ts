@@ -59,7 +59,7 @@ export class ProductosController {
         cb(null, true);
       }
     },
-    limits: { fileSize: 3 * 1024 * 1024 },
+    limits: { fileSize: 8 * 1024 * 1024 },
   }))
   async subirImagen(@Param('id') id: string, @UploadedFile() file: Express.Multer.File, @Request() req: any) {
     if (!file) throw new BadRequestException('No se recibió ninguna imagen');

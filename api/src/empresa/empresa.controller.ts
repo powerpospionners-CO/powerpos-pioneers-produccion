@@ -40,7 +40,7 @@ export class EmpresaController {
         cb(null, true);
       }
     },
-    limits: { fileSize: 2 * 1024 * 1024 },
+    limits: { fileSize: 8 * 1024 * 1024 },
   }))
   async subirLogo(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
     const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -72,7 +72,7 @@ export class EmpresaController {
         cb(null, true);
       }
     },
-    limits: { fileSize: 4 * 1024 * 1024 },
+    limits: { fileSize: 8 * 1024 * 1024 },
   }))
   subirImagenAnuncio(@UploadedFile() file: Express.Multer.File) {
     const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');

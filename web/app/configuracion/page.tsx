@@ -367,7 +367,7 @@ export default function ConfiguracionPage() {
                         <Upload size={16} />
                         {loadingLogo ? 'Subiendo...' : 'Subir logo'}
                       </button>
-                      <p className="text-gray-600 text-xs mt-2">PNG, JPG o WebP — máximo 2MB</p>
+                      <p className="text-gray-600 text-xs mt-2">PNG, JPG o WebP — máximo 8MB</p>
                     </div>
                   </div>
                 </div>
