@@ -1,6 +1,18 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useParams } from "next/navigation";
+import {
+  ShoppingBag,
+  Search,
+  MapPin,
+  Clock,
+  MessageCircle,
+  Minus,
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  PackageSearch,
+} from "lucide-react";
 import "./tienda.css";
 
 type Producto = {
@@ -208,6 +220,7 @@ export default function TiendaPage() {
         </a>
         <a href="#catalogo">Nuestro catálogo</a>
         <a className="store-button" href="#carrito">
+          <ShoppingBag size={17} />
           Tu pedido · {Object.values(carrito).reduce((s, n) => s + n, 0)}
         </a>
       </header>
@@ -228,8 +241,8 @@ export default function TiendaPage() {
             Explorar productos ↘
           </a>
           <div className="store-meta">
-            {t.horario && <span>{t.horario}</span>}
-            {tienda.direccion && <span>{tienda.direccion}</span>}
+            {t.horario && <span><Clock size={15} />{t.horario}</span>}
+            {tienda.direccion && <span><MapPin size={15} />{tienda.direccion}</span>}
           </div>
         </div>
         {t.portada && <img src={t.portada} alt={`Conoce ${tienda.nombre}`} />}
@@ -241,13 +254,16 @@ export default function TiendaPage() {
               <p className="store-eyebrow">ELIGE A TU GUSTO</p>
               <h2>Nuestro catálogo</h2>
             </div>
-            <label>
+            <label className="store-search">
               Buscar
-              <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="¿Qué estás buscando?"
-              />
+              <div className="store-search-box">
+                <Search size={16} />
+                <input
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="¿Qué estás buscando?"
+                />
+              </div>
             </label>
           </div>
           <div className="store-categories">
@@ -263,6 +279,7 @@ export default function TiendaPage() {
           </div>
           {!tienda.productos.length && (
             <p className="store-empty">
+              <PackageSearch size={22} />
               Estamos preparando nuestro catálogo. Vuelve pronto o contáctanos.
             </p>
           )}
@@ -294,7 +311,7 @@ export default function TiendaPage() {
                         onClick={() => cambiar(p.id, 1)}
                         aria-label={`Agregar ${p.nombre}`}
                       >
-                        {p.disponible ? "Agregar +" : "Agotado"}
+                        {p.disponible ? (<><Plus size={14} />Agregar</>) : "Agotado"}
                       </button>
                     </footer>
                   </div>
@@ -307,7 +324,7 @@ export default function TiendaPage() {
           <h2>Tu pedido</h2>
           {pedido && (
             <div role="status" className="store-success">
-              <strong>Solicitud recibida</strong>
+              <strong><CheckCircle2 size={17} />Solicitud recibida</strong>
               <p>Referencia: {pedido.id.slice(0, 8)}</p>
               <p>Estado: {pedido.estado.replaceAll("_", " ")}</p>
               <p>{dinero(Number(pedido.total))}</p>
@@ -319,7 +336,7 @@ export default function TiendaPage() {
             </div>
           )}
           {!items.length ? (
-            <p className="store-empty">Agrega productos para comenzar.</p>
+            <p className="store-empty"><ShoppingBag size={22} />Agrega productos para comenzar.</p>
           ) : (
             <>
               <ul className="store-cart-items">
@@ -335,7 +352,7 @@ export default function TiendaPage() {
                         aria-label={`Quitar uno de ${p.nombre}`}
                         onClick={() => cambiar(p.id, -1)}
                       >
-                        −
+                        <Minus size={13} />
                       </button>
                       <span>{carrito[p.id]}</span>
                       <button
@@ -343,7 +360,7 @@ export default function TiendaPage() {
                         aria-label={`Agregar uno de ${p.nombre}`}
                         onClick={() => cambiar(p.id, 1)}
                       >
-                        +
+                        <Plus size={13} />
                       </button>
                     </div>
                   </li>
@@ -470,7 +487,7 @@ export default function TiendaPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Prefiero pedir por WhatsApp ↗
+                  <MessageCircle size={16} /> Prefiero pedir por WhatsApp
                 </a>
               )}
               <small>
@@ -481,7 +498,7 @@ export default function TiendaPage() {
           )}
           {error && (
             <div role="alert" className="store-error">
-              <p>{error}</p>
+              <p><AlertCircle size={16} />{error}</p>
               <button
                 onClick={() => {
                   clave.current = "";
@@ -504,7 +521,7 @@ export default function TiendaPage() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Contáctanos por WhatsApp ↗
+            <MessageCircle size={16} /> Contáctanos por WhatsApp
           </a>
         )}
         <small>Tienda conectada con PowerPOS</small>
