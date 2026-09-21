@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterceptors, UploadedFile, Request, Query, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { memoryStorage, diskStorage } from 'multer';
+import { extname } from 'path';
 import { ProductosService } from './productos.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -39,6 +40,33 @@ export class ProductosController {
   @Get()
   listar(@Request() req: any, @Query('categoriaId') categoriaId?: string) {
     return this.productosService.listar(req.user.empresaId, categoriaId ? +categoriaId : undefined);
+  }
+
+  @Post(':id/imagen')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  @UseInterceptors(FileInterceptor('imagen', {
+    storage: diskStorage({
+      destination: './uploads/productos',
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, `producto-${uniqueSuffix}${extname(file.originalname)}`);
+      },
+    }),
+    fileFilter: (req, file, cb) => {
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+        cb(new Error('Solo se permiten imágenes'), false);
+      } else {
+        cb(null, true);
+      }
+    },
+    limits: { fileSize: 3 * 1024 * 1024 },
+  }))
+  async subirImagen(@Param('id') id: string, @UploadedFile() file: Express.Multer.File, @Request() req: any) {
+    if (!file) throw new BadRequestException('No se recibió ninguna imagen');
+    const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const imagen = `${baseUrl}/uploads/productos/${file.filename}`;
+    await this.productosService.actualizarImagen(+id, req.user.empresaId, imagen);
+    return { imagen };
   }
 
   @Get('alertas-stock')

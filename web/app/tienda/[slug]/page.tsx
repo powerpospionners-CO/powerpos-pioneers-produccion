@@ -15,6 +15,7 @@ import {
   Wallet,
   Radar,
   ArrowUp,
+  Trash2,
 } from "lucide-react";
 import "./tienda.css";
 
@@ -181,6 +182,20 @@ export default function TiendaPage() {
     const numero = Math.floor(Number(valor.replace(/[^0-9]/g, "")));
     const limitado = Number.isFinite(numero) && numero > 0 ? Math.min(9999, numero) : 1;
     setCarrito((c) => ({ ...c, [id]: limitado }));
+    clave.current = "";
+  };
+  const quitarDelCarrito = (id: number) => {
+    if (enviandoRef.current) return;
+    setCarrito((c) => {
+      const nuevo = { ...c };
+      delete nuevo[id];
+      return nuevo;
+    });
+    clave.current = "";
+  };
+  const vaciarCarrito = () => {
+    if (enviandoRef.current) return;
+    setCarrito({});
     clave.current = "";
   };
   if (cargando)
@@ -383,8 +398,17 @@ export default function TiendaPage() {
           </div>
         </section>
         <aside id="carrito" className="store-cart">
-          <p className="store-eyebrow">HECHO A TU MEDIDA</p>
-          <h2>Tu pedido</h2>
+          <div className="store-cart-heading">
+            <div>
+              <p className="store-eyebrow">HECHO A TU MEDIDA</p>
+              <h2>Tu pedido</h2>
+            </div>
+            {items.length > 0 && !enviando && (
+              <button type="button" className="store-cart-clear" onClick={vaciarCarrito}>
+                <Trash2 size={14} /> Vaciar
+              </button>
+            )}
+          </div>
           {pedido && (
             <div role="status" className="store-success">
               <strong><CheckCircle2 size={17} />Solicitud recibida</strong>
@@ -439,6 +463,16 @@ export default function TiendaPage() {
                         <Plus size={13} />
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      className="store-cart-remove"
+                      disabled={enviando}
+                      aria-label={`Eliminar ${p.nombre} del pedido`}
+                      title="Eliminar"
+                      onClick={() => quitarDelCarrito(p.id)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </li>
                 ))}
               </ul>

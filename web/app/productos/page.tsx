@@ -40,6 +40,7 @@ interface Producto {
   descripcion: string;
   precio: string;
   costo?: string | null;
+  imagen?: string | null;
   disponible: boolean;
   aceptaAdicionales: boolean;
   activo: boolean;
@@ -104,6 +105,8 @@ export default function ProductosPage() {
     stockActual: '0',
     stockMinimo: '0',
   });
+  const [archivoImagenProducto, setArchivoImagenProducto] = useState<File | null>(null);
+  const [previewImagenProducto, setPreviewImagenProducto] = useState('');
   const [recetaTemp, setRecetaTemp] = useState<IngredienteReceta[]>([]);
   const [adicionalIdsTemp, setAdicionalIdsTemp] = useState<number[]>([]);
   const [formCategoria, setFormCategoria] = useState({ nombre: '', icono: iconoCategoriaDefecto, color: '#FF6B35', parentId: '' });
@@ -163,13 +166,23 @@ export default function ProductosPage() {
         }))
       );
       setAdicionalIdsTemp((producto.adicionales || []).map((pa) => pa.adicional.id));
+      setPreviewImagenProducto(producto.imagen || '');
     } else {
       setEditando(null);
       setForm({ nombre: '', descripcion: '', precio: '', costo: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0' });
       setRecetaTemp([]);
       setAdicionalIdsTemp([]);
+      setPreviewImagenProducto('');
     }
+    setArchivoImagenProducto(null);
     setModal(true);
+  };
+
+  const seleccionarImagenProducto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setArchivoImagenProducto(file);
+    setPreviewImagenProducto(URL.createObjectURL(file));
   };
 
   const toggleAdicionalProducto = (id: number) => {
@@ -305,11 +318,18 @@ export default function ProductosPage() {
         payload.ingredientes = ingredientesPayload;
       }
 
-      if (editando) {
-        await api.patch(`/productos/${editando.id}`, payload);
-      } else {
-        await api.post('/productos', payload);
+      const { data: productoGuardado } = editando
+        ? await api.patch(`/productos/${editando.id}`, payload)
+        : await api.post('/productos', payload);
+
+      if (archivoImagenProducto) {
+        const formDataImagen = new FormData();
+        formDataImagen.append('imagen', archivoImagenProducto);
+        await api.post(`/productos/${productoGuardado.id}/imagen`, formDataImagen, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
       }
+
       setModal(false);
       cargarDatos();
     } catch (e) {
@@ -621,6 +641,28 @@ export default function ProductosPage() {
             </h3>
 
             <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-800 border border-gray-700 flex items-center justify-center flex-shrink-0">
+                  {previewImagenProducto ? (
+                    <img src={previewImagenProducto} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-3xl">📦</span>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">Imagen del producto</label>
+                  <input type="file" id="imagen-producto" accept="image/*" onChange={seleccionarImagenProducto} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('imagen-producto')?.click()}
+                    className="bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    {previewImagenProducto ? 'Cambiar imagen' : 'Subir imagen'}
+                  </button>
+                  <p className="text-gray-600 text-xs mt-1.5">Se muestra en el catálogo de tu tienda en línea</p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Nombre</label>
                 <input

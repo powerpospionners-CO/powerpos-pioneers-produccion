@@ -379,6 +379,11 @@ export class ProductosService {
     });
   }
 
+  async actualizarImagen(id: number, empresaId: number, imagen: string) {
+    await this.obtener(id, empresaId);
+    return this.prisma.producto.update({ where: { id }, data: { imagen } });
+  }
+
   async eliminar(id: number, empresaId: number) {
     await this.obtener(id, empresaId);
     return this.prisma.producto.update({
