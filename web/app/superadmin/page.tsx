@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useTema } from '@/components/ThemeProvider';
+import { irALoginGenerico } from '@/lib/navegacion';
 
 const MODULOS = [
   { id: 'pos', label: 'POS y caja' },
@@ -133,7 +134,7 @@ export default function SuperadminPage() {
 
   useEffect(() => {
     if (!usuario) {
-      router.replace('/login');
+      irALoginGenerico(router);
       return;
     }
     if (usuario.rol !== 'SUPERADMIN') {
@@ -284,7 +285,7 @@ export default function SuperadminPage() {
           <div className="h-11 w-11 rounded-xl bg-orange-500 flex items-center justify-center text-slate-950"><Building2 size={23} /></div>
           <div><p className="text-orange-400 text-xs uppercase tracking-[0.2em] font-bold">PowerPOS Control</p><h1 className="text-2xl font-black">Administracion de empresas</h1></div>
         </div>
-        <div className="flex items-center gap-5"><button type="button" onClick={cambiarTema} aria-label={`Cambiar a tema ${tema === 'oscuro' ? 'claro' : 'oscuro'}`} className="text-slate-400 hover:text-orange-400">{tema === 'oscuro' ? <Sun size={19} /> : <Moon size={19} />}</button><span className="text-slate-400 text-sm">{usuario.nombre}</span><button onClick={() => { logout(); router.replace('/login'); }} title="Cerrar sesion" className="text-slate-400 hover:text-white"><LogOut size={19} /></button></div>
+        <div className="flex items-center gap-5"><button type="button" onClick={cambiarTema} aria-label={`Cambiar a tema ${tema === 'oscuro' ? 'claro' : 'oscuro'}`} className="text-slate-400 hover:text-orange-400">{tema === 'oscuro' ? <Sun size={19} /> : <Moon size={19} />}</button><span className="text-slate-400 text-sm">{usuario.nombre}</span><button onClick={() => { logout(); irALoginGenerico(router); }} title="Cerrar sesion" className="text-slate-400 hover:text-white"><LogOut size={19} /></button></div>
       </header>
 
       <section className="p-8 max-w-7xl mx-auto space-y-8">

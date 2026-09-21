@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { irALoginGenerico } from '@/lib/navegacion';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,11 +12,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     if (inicioSesion && new Date(inicioSesion).toDateString() !== new Date().toDateString()) {
       logout();
-      router.push('/login');
+      irALoginGenerico(router);
       return;
     }
     if (!token || !usuario) {
-      router.push('/login');
+      irALoginGenerico(router);
     }
   }, [hydrated, token, usuario, inicioSesion, logout, router]);
 

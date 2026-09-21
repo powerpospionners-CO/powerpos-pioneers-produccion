@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
+import { irALoginGenerico } from '@/lib/navegacion';
 
 const ITEMS = [
   { href: '/pos', label: 'POS', icon: ShoppingCart },
@@ -53,7 +54,7 @@ export default function Navbar() {
     itemsVisibles.push({ href: '/consumo-empleados', label: 'Consumo staff', icon: UtensilsCrossed });
   }
 
-  const handleLogout = () => { logout(); router.push('/login'); };
+  const handleLogout = () => { logout(); irALoginGenerico(router); };
 
   return (
     <header className="bg-gray-900 border-b border-gray-800">
