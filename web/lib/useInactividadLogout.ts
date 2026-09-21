@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { irALoginGenerico } from '@/lib/navegacion';
 
-const MINUTOS_INACTIVIDAD = 1.5; // TEMPORAL para pruebas — volver a 20 después
+const MINUTOS_INACTIVIDAD = 20;
 const EVENTOS_ACTIVIDAD = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'wheel', 'scroll'] as const;
 
 // Si nadie toca el sistema (mouse, teclado, pantalla táctil) durante
