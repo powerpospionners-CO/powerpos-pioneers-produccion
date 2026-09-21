@@ -10,10 +10,12 @@
 // para que arranque con Windows (ver README.md de esta carpeta).
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const http = require('http');
 const https = require('https');
 const net = require('net');
+const { exec } = require('child_process');
 
 const RUTA_CONFIG = path.join(__dirname, 'config.json');
 
@@ -24,11 +26,21 @@ function cargarConfig() {
     process.exit(1);
   }
   const config = JSON.parse(fs.readFileSync(RUTA_CONFIG, 'utf8'));
-  for (const campo of ['apiUrl', 'token', 'impresoraHost']) {
+  for (const campo of ['apiUrl', 'token']) {
     if (!config[campo]) {
       console.error(`Falta el campo "${campo}" en config.json`);
       process.exit(1);
     }
+  }
+  config.modoImpresora = config.modoImpresora === 'usb' ? 'usb' : 'red';
+  if (config.modoImpresora === 'usb') {
+    if (!config.impresoraCompartida) {
+      console.error('Falta el campo "impresoraCompartida" en config.json (modoImpresora: "usb")');
+      process.exit(1);
+    }
+  } else if (!config.impresoraHost) {
+    console.error('Falta el campo "impresoraHost" en config.json (modoImpresora: "red")');
+    process.exit(1);
   }
   config.impresoraPuerto = config.impresoraPuerto || 9100;
   config.apiUrl = String(config.apiUrl).replace(/\/$/, '');
@@ -39,7 +51,8 @@ function clienteHttp(url) {
   return url.startsWith('https://') ? https : http;
 }
 
-function imprimir(config, datosBase64) {
+// Impresora en red (misma IP de siempre, funciona igual que hasta ahora).
+function imprimirRed(config, datosBase64) {
   return new Promise((resolve) => {
     const datos = Buffer.from(datosBase64, 'base64');
     const socket = new net.Socket();
@@ -60,6 +73,36 @@ function imprimir(config, datosBase64) {
       });
     });
   });
+}
+
+// Impresora conectada por cable USB al computador, instalada y compartida en
+// Windows (ver README: "Imprimir por USB"). Se manda tal cual (RAW) al
+// nombre compartido usando "copy /b", la forma clásica de Windows para
+// pasar bytes crudos a una impresora sin que el driver los reinterprete.
+function imprimirUsb(config, datosBase64) {
+  return new Promise((resolve) => {
+    const datos = Buffer.from(datosBase64, 'base64');
+    const archivoTemporal = path.join(os.tmpdir(), `powerpos-ticket-${Date.now()}-${Math.round(Math.random() * 1e9)}.bin`);
+    fs.writeFile(archivoTemporal, datos, (errorEscritura) => {
+      if (errorEscritura) {
+        resolve(`No se pudo preparar el archivo a imprimir: ${errorEscritura.message}`);
+        return;
+      }
+      const destino = `\\\\localhost\\${config.impresoraCompartida}`;
+      exec(`copy /b "${archivoTemporal}" "${destino}"`, (error, _stdout, stderr) => {
+        fs.unlink(archivoTemporal, () => {});
+        if (error) {
+          resolve(`No se pudo imprimir en "${config.impresoraCompartida}": ${(stderr || error.message || '').trim()}`);
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  });
+}
+
+function imprimir(config, datosBase64) {
+  return config.modoImpresora === 'usb' ? imprimirUsb(config, datosBase64) : imprimirRed(config, datosBase64);
 }
 
 function confirmar(config, id, ok, motivo) {
