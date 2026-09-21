@@ -27,10 +27,12 @@ export default function Navbar() {
   const { usuario, logout, setTipoNegocio } = useAuthStore();
   const { tema, cambiarTema } = useTema();
   const [pendientesWeb, setPendientesWeb] = useState(0);
+  const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
   useEffect(() => {
     if (!usuario?.empresaId) return;
     api.get('/empresa').then((respuesta) => {
       if (respuesta.data?.tipoNegocio && respuesta.data.tipoNegocio !== usuario.tipoNegocio) setTipoNegocio(respuesta.data.tipoNegocio);
+      setLogoEmpresa(respuesta.data?.logo || null);
     }).catch(() => undefined);
   }, [usuario?.empresaId, usuario?.tipoNegocio, setTipoNegocio]);
   useEffect(() => {
@@ -60,8 +62,12 @@ export default function Navbar() {
     <header className="bg-gray-900 border-b border-gray-800">
       <div className="flex items-center justify-between gap-3 min-w-0 px-3 md:px-6 py-3">
         <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink">
-          <h1 className="text-lg md:text-xl font-bold text-white whitespace-nowrap">Power<span className="text-orange-500">POS</span></h1>
+          <img src="/marca/logo-powerpos.png" alt="PowerPOS" className="w-7 h-7 md:w-8 md:h-8 object-contain flex-shrink-0" />
+          <h1 className="text-lg md:text-xl font-bold text-white whitespace-nowrap hidden sm:block">Power<span className="text-orange-500">POS</span></h1>
           <span className="text-gray-600 hidden sm:inline">|</span>
+          {logoEmpresa && (
+            <img src={logoEmpresa} alt={usuario?.empresa || 'Empresa'} className="w-7 h-7 md:w-8 md:h-8 rounded-lg object-cover flex-shrink-0 bg-white/5 border border-gray-800" />
+          )}
           <span className="text-gray-400 text-xs md:text-sm max-w-[160px] md:max-w-[240px] truncate block min-w-0">
             {usuario?.empresa || 'Empresa'}
           </span>
