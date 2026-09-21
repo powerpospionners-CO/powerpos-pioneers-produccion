@@ -3,10 +3,12 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { irALoginGenerico } from '@/lib/navegacion';
+import { useVersionCheck } from '@/lib/useVersionCheck';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { token, usuario, hydrated, inicioSesion, logout } = useAuthStore();
+  useVersionCheck();
 
   useEffect(() => {
     if (!hydrated) return;
