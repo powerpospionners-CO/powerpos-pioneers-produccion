@@ -4,11 +4,13 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { irALoginGenerico } from '@/lib/navegacion';
 import { useVersionCheck } from '@/lib/useVersionCheck';
+import { useInactividadLogout } from '@/lib/useInactividadLogout';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { token, usuario, hydrated, inicioSesion, logout } = useAuthStore();
   useVersionCheck();
+  useInactividadLogout();
 
   useEffect(() => {
     if (!hydrated) return;

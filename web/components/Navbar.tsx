@@ -91,7 +91,7 @@ export default function Navbar() {
           return (
             <button
               key={item.href}
-              onClick={() => router.push(item.href)}
+              onClick={() => router.replace(item.href)}
               className={`flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap transition-colors ${
                 activo
                   ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30'
@@ -107,9 +107,9 @@ export default function Navbar() {
 
       {pendientesWeb > 0 && (
         <div role="status" className="px-3 md:px-6 pb-3">
-          <a href="/domicilios" className="block rounded-lg bg-teal-900 px-4 py-2 text-sm text-white hover:bg-teal-800 transition-colors">
+          <button onClick={() => router.replace('/domicilios')} className="block w-full text-left rounded-lg bg-teal-900 px-4 py-2 text-sm text-white hover:bg-teal-800 transition-colors">
             {pendientesWeb} pedido(s) web por revisar · Abrir Domicilios →
-          </a>
+          </button>
         </div>
       )}
     </header>
