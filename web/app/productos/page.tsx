@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, Edit, Trash2, X, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
@@ -81,6 +81,11 @@ export default function ProductosPage() {
   const [adicionalesCatalogo, setAdicionalesCatalogo] = useState<Adicional[]>([]);
   const [modal, setModal] = useState(false);
   const [modalCategoria, setModalCategoria] = useState(false);
+  const [modalImportar, setModalImportar] = useState(false);
+  const [archivoImportar, setArchivoImportar] = useState<File | null>(null);
+  const [importando, setImportando] = useState(false);
+  const [resultadoImportar, setResultadoImportar] = useState<{ creados: number; totalFilas: number; errores: { fila: number; motivo: string }[] } | null>(null);
+  const [errorImportar, setErrorImportar] = useState('');
   const [modalAdicionales, setModalAdicionales] = useState(false);
   const [editando, setEditando] = useState<Producto | null>(null);
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null);
@@ -203,6 +208,34 @@ export default function ProductosPage() {
       ingredienteId: adicional.ingredienteId ? String(adicional.ingredienteId) : '',
       cantidad: adicional.cantidad ? String(adicional.cantidad) : '',
     });
+  };
+
+  const abrirModalImportar = () => {
+    setArchivoImportar(null);
+    setResultadoImportar(null);
+    setErrorImportar('');
+    setModalImportar(true);
+  };
+
+  const importarExcel = async () => {
+    if (!archivoImportar) return;
+    setImportando(true);
+    setErrorImportar('');
+    setResultadoImportar(null);
+    try {
+      const formData = new FormData();
+      formData.append('archivo', archivoImportar);
+      const { data } = await api.post('/productos/importar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setResultadoImportar(data);
+      setArchivoImportar(null);
+      if (data.creados > 0) cargarDatos();
+    } catch (e: any) {
+      setErrorImportar(e?.response?.data?.message || 'No se pudo importar el archivo');
+    } finally {
+      setImportando(false);
+    }
   };
 
   const abrirConfirmacion = (title: string, message: string, onConfirm: () => void | Promise<void>, confirmText = 'Confirmar') => {
@@ -384,6 +417,13 @@ export default function ProductosPage() {
             >
               <Plus size={16} />
               Adicionales
+            </button>}
+            {!esRestaurante && <button
+              onClick={abrirModalImportar}
+              className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+            >
+              <FileSpreadsheet size={16} />
+              Importar Excel
             </button>}
             <button
               onClick={() => abrirModal()}
@@ -835,6 +875,86 @@ export default function ProductosPage() {
                 className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white font-bold rounded-lg py-3 transition-colors"
               >
                 {loading ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal importar desde Excel */}
+      {modalImportar && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                <FileSpreadsheet size={20} className="text-orange-500" />
+                Importar productos desde Excel
+              </h3>
+              <button onClick={() => setModalImportar(false)} className="text-gray-500 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-gray-500 text-sm mb-4">
+              Sube un archivo .xlsx con tus productos en vez de crearlos uno por uno. Cada fila debe tener al menos nombre y precio.
+            </p>
+
+            <a
+              href="/plantillas/plantilla-productos.xlsx"
+              download
+              className="flex items-center gap-2 text-orange-400 hover:text-orange-300 text-sm font-medium mb-5"
+            >
+              <Download size={15} />
+              Descargar plantilla de ejemplo
+            </a>
+
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-1">Archivo Excel (.xlsx)</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => { setArchivoImportar(e.target.files?.[0] || null); setResultadoImportar(null); setErrorImportar(''); }}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-gray-700 file:text-white file:text-sm"
+              />
+            </div>
+
+            {errorImportar && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-3 mb-4 text-sm">
+                {errorImportar}
+              </div>
+            )}
+
+            {resultadoImportar && (
+              <div className="mb-4 space-y-2">
+                <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg p-3 text-sm">
+                  ✅ {resultadoImportar.creados} de {resultadoImportar.totalFilas} producto(s) importado(s) correctamente.
+                </div>
+                {resultadoImportar.errores.length > 0 && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                    <p className="font-medium mb-1">{resultadoImportar.errores.length} fila(s) con problemas:</p>
+                    <ul className="space-y-0.5">
+                      {resultadoImportar.errores.map((err, i) => (
+                        <li key={i}>Fila {err.fila}: {err.motivo}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-2">
+              <button
+                onClick={() => setModalImportar(false)}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={importarExcel}
+                disabled={!archivoImportar || importando}
+                className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white font-bold rounded-lg py-3 transition-colors"
+              >
+                <Upload size={16} />
+                {importando ? 'Importando...' : 'Importar'}
               </button>
             </div>
           </div>

@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterceptors, UploadedFile, Request, Query, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ProductosService } from './productos.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -13,6 +15,25 @@ export class ProductosController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   crear(@Body() body: any, @Request() req: any) {
     return this.productosService.crear(body, req.user.empresaId);
+  }
+
+  @Post('importar')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  @UseInterceptors(FileInterceptor('archivo', {
+    storage: memoryStorage(),
+    fileFilter: (req, file, cb) => {
+      const nombreValido = /\.(xlsx|xls)$/i.test(file.originalname);
+      if (!nombreValido) {
+        cb(new Error('Solo se permiten archivos Excel (.xlsx o .xls)'), false);
+      } else {
+        cb(null, true);
+      }
+    },
+    limits: { fileSize: 5 * 1024 * 1024 },
+  }))
+  importar(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
+    if (!file) throw new BadRequestException('No se recibió ningún archivo');
+    return this.productosService.importarExcel(file.buffer, req.user.empresaId);
   }
 
   @Get()

@@ -1,6 +1,21 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+
+const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || '').toLowerCase().trim());
+
+const SINONIMOS_COLUMNAS: Record<string, string[]> = {
+  nombre: ['nombre', 'producto', 'nombre del producto', 'articulo'],
+  categoria: ['categoria', 'categoria del producto'],
+  precio: ['precio', 'precio de venta', 'precio venta'],
+  costo: ['costo', 'precio de costo', 'costo unitario'],
+  stock: ['stock', 'cantidad', 'existencias', 'stock actual'],
+  stockMinimo: ['stock minimo', 'minimo', 'stock de seguridad'],
+  codigoBarras: ['codigo de barras', 'codigo barras', 'sku', 'codigo'],
+  descripcion: ['descripcion', 'detalle'],
+};
 
 @Injectable()
 export class ProductosService {
@@ -110,6 +125,134 @@ export class ProductosService {
         preparaciones: { include: { preparacion: true } },
       },
     });
+  }
+
+  async importarExcel(buffer: Buffer, empresaId: number) {
+    let libro: XLSX.WorkBook;
+    try {
+      libro = XLSX.read(buffer, { type: 'buffer' });
+    } catch {
+      throw new BadRequestException('No se pudo leer el archivo. Verifica que sea un Excel (.xlsx) válido.');
+    }
+    const hoja = libro.Sheets[libro.SheetNames[0]];
+    if (!hoja) throw new BadRequestException('El archivo no tiene hojas con datos');
+    const filas: Record<string, any>[] = XLSX.utils.sheet_to_json(hoja, { defval: '' });
+    if (filas.length === 0) throw new BadRequestException('El archivo no tiene filas con datos');
+    if (filas.length > 1000) throw new BadRequestException('El archivo tiene demasiadas filas (máximo 1000 por importación)');
+
+    // Mapea cada encabezado real de la hoja a nuestro nombre de campo interno,
+    // aceptando variaciones razonables de nombre/tildes/mayúsculas.
+    const encabezadosReales = Object.keys(filas[0]);
+    const mapaCampos: Record<string, string> = {};
+    for (const encabezado of encabezadosReales) {
+      const normalizado = NORMALIZAR_ENCABEZADO(encabezado);
+      const campo = Object.entries(SINONIMOS_COLUMNAS).find(([, sinonimos]) =>
+        sinonimos.some((s) => NORMALIZAR_ENCABEZADO(s) === normalizado),
+      )?.[0];
+      if (campo) mapaCampos[campo] = encabezado;
+    }
+    if (!mapaCampos.nombre || !mapaCampos.precio) {
+      throw new BadRequestException('El archivo debe tener al menos las columnas "nombre" y "precio"');
+    }
+
+    const categoriasExistentes = await this.prisma.categoria.findMany({ where: { empresaId, activo: true } });
+    const mapaCategorias = new Map<string, number>(
+      categoriasExistentes.map((c) => [NORMALIZAR_ENCABEZADO(c.nombre), c.id]),
+    );
+    const codigosBarrasExistentes = new Set(
+      (await this.prisma.producto.findMany({ where: { empresaId, codigoBarras: { not: null } }, select: { codigoBarras: true } }))
+        .map((p) => p.codigoBarras as string),
+    );
+
+    let creados = 0;
+    const errores: { fila: number; motivo: string }[] = [];
+
+    for (let i = 0; i < filas.length; i++) {
+      const fila = filas[i];
+      const numeroFila = i + 2; // +1 por índice base 0, +1 por la fila de encabezados
+      try {
+        const nombre = String(fila[mapaCampos.nombre] ?? '').trim();
+        if (!nombre) { errores.push({ fila: numeroFila, motivo: 'Falta el nombre del producto' }); continue; }
+
+        const precio = Number(fila[mapaCampos.precio]);
+        if (!Number.isFinite(precio) || precio <= 0) {
+          errores.push({ fila: numeroFila, motivo: 'El precio debe ser un número mayor a 0' });
+          continue;
+        }
+
+        const nombreCategoria = mapaCampos.categoria ? String(fila[mapaCampos.categoria] ?? '').trim() : '';
+        let categoriaId: number | undefined;
+        if (nombreCategoria) {
+          const clave = NORMALIZAR_ENCABEZADO(nombreCategoria);
+          categoriaId = mapaCategorias.get(clave);
+          if (!categoriaId) {
+            const nuevaCategoria = await this.prisma.categoria.create({
+              data: { empresaId, nombre: nombreCategoria, icono: '📦' },
+            });
+            categoriaId = nuevaCategoria.id;
+            mapaCategorias.set(clave, categoriaId);
+          }
+        } else {
+          errores.push({ fila: numeroFila, motivo: 'Falta la categoría del producto' });
+          continue;
+        }
+
+        let costo: number | null = null;
+        if (mapaCampos.costo && fila[mapaCampos.costo] !== '') {
+          const valor = Number(fila[mapaCampos.costo]);
+          if (!Number.isFinite(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: 'El costo debe ser un número no negativo' }); continue; }
+          costo = valor;
+        }
+
+        let stockActual = 0;
+        if (mapaCampos.stock && fila[mapaCampos.stock] !== '') {
+          const valor = Number(fila[mapaCampos.stock]);
+          if (!Number.isInteger(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: 'El stock debe ser un entero no negativo' }); continue; }
+          stockActual = valor;
+        }
+
+        let stockMinimo = 0;
+        if (mapaCampos.stockMinimo && fila[mapaCampos.stockMinimo] !== '') {
+          const valor = Number(fila[mapaCampos.stockMinimo]);
+          if (!Number.isInteger(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: 'El stock mínimo debe ser un entero no negativo' }); continue; }
+          stockMinimo = valor;
+        }
+
+        let codigoBarras: string | null = null;
+        if (mapaCampos.codigoBarras && String(fila[mapaCampos.codigoBarras] ?? '').trim()) {
+          codigoBarras = String(fila[mapaCampos.codigoBarras]).trim();
+          if (codigosBarrasExistentes.has(codigoBarras)) {
+            errores.push({ fila: numeroFila, motivo: `El código de barras "${codigoBarras}" ya está en uso` });
+            continue;
+          }
+          codigosBarrasExistentes.add(codigoBarras);
+        }
+
+        const descripcion = mapaCampos.descripcion ? String(fila[mapaCampos.descripcion] ?? '').trim() : '';
+
+        await this.prisma.producto.create({
+          data: {
+            empresaId,
+            categoriaId,
+            nombre,
+            descripcion: descripcion || null,
+            precio,
+            costo,
+            codigoBarras,
+            controlaStock: true,
+            stockActual,
+            stockMinimo,
+            disponible: true,
+            aceptaAdicionales: false,
+          },
+        });
+        creados++;
+      } catch (e) {
+        errores.push({ fila: numeroFila, motivo: e instanceof Error ? e.message : 'Error al crear el producto' });
+      }
+    }
+
+    return { creados, totalFilas: filas.length, errores };
   }
 
   async listar(empresaId: number, categoriaId?: number) {
