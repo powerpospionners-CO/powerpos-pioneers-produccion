@@ -35,6 +35,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // El superadmin es de PowerPOS, no de una empresa: nunca vive bajo un
+  // subdominio de marca. Si alguien llega aquí (bookmark, enlace viejo),
+  // se manda al dominio genérico en vez de romperse contra la tienda pública.
+  if (url.pathname === '/superadmin' || url.pathname.startsWith('/superadmin/')) {
+    const destino = url.clone();
+    destino.host = `app.${ROOT_DOMAIN}`;
+    return NextResponse.redirect(destino);
+  }
+
   // Rutas del panel: se sirven normales, solo con el subdominio de marca en la URL.
   if (RUTAS_PANEL.some((ruta) => url.pathname === ruta || url.pathname.startsWith(`${ruta}/`))) {
     return NextResponse.next();
