@@ -113,6 +113,11 @@ export default function TiendaPage() {
       .then(setTienda)
       .catch((e) => setError(e.message))
       .finally(() => setCargando(false));
+  const actualizarSilencioso = () => {
+    request(`/tiendas/${encodeURIComponent(slug)}`)
+      .then(setTienda)
+      .catch(() => {});
+  };
   useEffect(() => {
     setTienda(null);
     setCarrito({});
@@ -121,6 +126,20 @@ export default function TiendaPage() {
     setCargando(true);
     clave.current = "";
     void cargar();
+  }, [slug]);
+  useEffect(() => {
+    const onFocus = () => actualizarSilencioso();
+    const onVisibilidad = () => {
+      if (document.visibilityState === "visible") actualizarSilencioso();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilidad);
+    const timer = setInterval(actualizarSilencioso, 30000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilidad);
+      clearInterval(timer);
+    };
   }, [slug]);
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("pedido");
