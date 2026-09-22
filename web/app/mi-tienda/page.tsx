@@ -139,6 +139,7 @@ export default function MiTienda() {
                     {[
                       ["titulo", "Título principal"],
                       ["descripcion", "Descripción del negocio"],
+                      ["sobreNosotros", "Sobre nosotros (historia, qué los hace diferentes, etc.)"],
                       ["horario", "Horario de atención"],
                       ["portada", "URL HTTPS de la imagen de portada"],
                       [
@@ -148,11 +149,11 @@ export default function MiTienda() {
                     ].map(([k, label]) => (
                       <label key={k} className="block">
                         {label}
-                        {k === "descripcion" ? (
+                        {k === "descripcion" || k === "sobreNosotros" ? (
                           <textarea
                             maxLength={2000}
                             className={input}
-                            rows={4}
+                            rows={k === "sobreNosotros" ? 6 : 4}
                             value={config.tienda[k]}
                             onChange={(e) => cambiar(k, e.target.value)}
                           />
@@ -175,6 +176,29 @@ export default function MiTienda() {
                         onChange={(e) => cambiar("color", e.target.value)}
                       />
                     </label>
+                  </section>
+                  <section className={card}>
+                    <h2 className="text-xl font-bold">Redes sociales</h2>
+                    <p className="text-gray-400">
+                      Pega el usuario o el enlace completo de cada red — se muestran como iconos en tu tienda.
+                    </p>
+                    {[
+                      ["facebook", "Facebook (usuario o enlace)"],
+                      ["instagram", "Instagram (usuario o enlace)"],
+                      ["tiktok", "TikTok (usuario o enlace)"],
+                    ].map(([k, label]) => (
+                      <label key={k} className="block">
+                        {label}
+                        <input
+                          maxLength={500}
+                          className={input}
+                          type="text"
+                          placeholder="ej. mi.negocio"
+                          value={config.tienda[k]}
+                          onChange={(e) => cambiar(k, e.target.value)}
+                        />
+                      </label>
+                    ))}
                   </section>
                   <section className={card}>
                     <h2 className="text-xl font-bold">Productos y precios</h2>

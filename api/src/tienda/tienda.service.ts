@@ -44,12 +44,20 @@ export class TiendaService {
     for (const campo of [
       'titulo',
       'descripcion',
+      'sobreNosotros',
       'horario',
       'whatsapp',
       'portada',
       'color',
+      'facebook',
+      'instagram',
+      'tiktok',
     ])
-      t[campo] = texto(t[campo], campo, campo === 'descripcion' ? 2000 : 500);
+      t[campo] = texto(
+        t[campo],
+        campo,
+        campo === 'descripcion' || campo === 'sobreNosotros' ? 2000 : 500,
+      );
     if (!/^#[0-9a-f]{6}$/i.test(t.color))
       throw new BadRequestException('Color inválido');
     if (t.portada && !/^https:\/\//i.test(t.portada))
@@ -120,10 +128,14 @@ export class TiendaService {
       pedidosHabilitados: t.pedidosHabilitados,
       titulo: t.titulo,
       descripcion: t.descripcion,
+      sobreNosotros: t.sobreNosotros,
       color: t.color,
       portada: t.portada,
       whatsapp: t.whatsapp,
       horario: t.horario,
+      facebook: t.facebook,
+      instagram: t.instagram,
+      tiktok: t.tiktok,
       sucursalId: t.sucursalId,
       minimo: t.minimo,
       zonas: t.zonas,
