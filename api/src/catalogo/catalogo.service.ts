@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
-import PDFDocument from 'pdfkit';
+import PDFDocument = require('pdfkit');
+const sharp: typeof import('sharp').default = require('sharp');
 import { PrismaService } from '../prisma/prisma.service';
 
 const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -206,7 +207,9 @@ export class CatalogoService {
       const respuesta = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (!respuesta.ok) return null;
       const arrayBuffer = await respuesta.arrayBuffer();
-      return Buffer.from(arrayBuffer);
+      return await sharp(Buffer.from(arrayBuffer))
+        .rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true })
+        .flatten({ background: '#ffffff' }).jpeg({ quality: 78 }).toBuffer();
     } catch {
       return null;
     }
@@ -321,7 +324,7 @@ export class CatalogoService {
           `Página ${i + 1} de ${rango.count} · Catálogo generado con PowerPOS`,
           margenX,
           altoPagina - 30,
-          { width: anchoPagina - margenX * 2, align: 'center' },
+          { width: anchoPagina - margenX * 2, align: 'center', lineBreak: false },
         );
       }
 

@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { PedidosEventosService } from './pedidos-eventos.service';
+import { bloquearCajaSucursal } from '../caja/caja-lock';
 
 @Injectable()
 export class PedidosService {
@@ -52,6 +53,7 @@ export class PedidosService {
     if (!empresa) throw new NotFoundException('Empresa no disponible');
     const esRestaurante = empresa.tipoNegocio === 'RESTAURANTE';
     const reglas = puntosConfig(empresa.fidelizacionConfig);
+    await bloquearCajaSucursal(db, sucursalId);
     const cajaAbierta = await db.caja.findFirst({
       where: { sucursalId, sucursal: { empresaId }, estado: 'ABIERTA' },
       include: { usuario: { select: { id: true, nombre: true } } },
@@ -90,7 +92,7 @@ export class PedidosService {
     }
     if (cajaId) {
       const caja = await db.caja.findFirst({
-        where: { id: cajaId, sucursalId, usuarioId },
+        where: { id: Number(cajaId), sucursalId, ...(esSupervisor ? {} : { usuarioId }) },
       });
       if (!caja)
         throw new NotFoundException('Caja no encontrada para este usuario');
@@ -410,21 +412,37 @@ export class PedidosService {
     return pedido;
   }
 
-  async actualizarEstado(id: number, estado: string, empresaId: number) {
+  async actualizarEstado(id: number, estado: string, empresaId: number, usuarioId?: number) {
     if (!['PENDIENTE','EN_COCINA','LISTO','ENTREGADO','ANULADO'].includes(estado)) throw new BadRequestException('Estado no válido');
-    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { tipoNegocio: true } });
+    const referencia = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } }, select: { sucursalId: true } });
+    if (!referencia) throw new NotFoundException('Pedido no encontrado');
+    const actualizado = await this.prisma.$transaction(async tx => {
+    await bloquearCajaSucursal(tx, referencia.sucursalId);
+    const empresa = await tx.empresa.findUnique({ where: { id: empresaId }, select: { tipoNegocio: true } });
     if (empresa?.tipoNegocio !== 'RESTAURANTE') throw new BadRequestException('Las ventas comerciales requieren un flujo de devoluciones y conciliación para modificarse');
-    const pedido = await this.prisma.pedido.findFirst({
+    const pedido = await tx.pedido.findFirst({
       where: { id, sucursal: { empresaId } },
     });
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
     if (pedido.estado === 'ANULADO') throw new BadRequestException('Un pedido anulado no puede reabrirse');
-    const web = await this.prisma.pedidoWeb.findUnique({ where: { pedidoId: id } });
+    const web = await tx.pedidoWeb.findUnique({ where: { pedidoId: id } });
     if (web && (['ENTREGADO','ANULADO'].includes(estado) || ['EN_CAMINO','ENTREGADO'].includes(web.estado))) throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de cancelar.');
     if (estado === 'ANULADO' && (pedido.puntosGanados || pedido.puntosCanjeados)) throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');
-    const actualizado = await this.prisma.pedido.update({
+    if (estado === 'ANULADO') {
+      const caja = pedido.cajaId ? await tx.caja.findUnique({ where: { id: pedido.cajaId } }) : null;
+      if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja está cerrada. Esta venta requiere conciliación antes de anular.');
+      const ingreso = await tx.movimientoFinanciero.findFirst({ where: { pedidoId: id, empresaId, tipo: 'INGRESO', categoria: 'VENTA' } });
+      if (!ingreso) throw new BadRequestException('No se encontró el ingreso de la venta. Requiere conciliación.');
+      await tx.movimientoFinanciero.create({ data: {
+        empresaId, sucursalId: pedido.sucursalId, usuarioId: usuarioId ?? pedido.usuarioId,
+        pedidoId: id, tipo: 'EGRESO', categoria: 'VENTA', monto: ingreso.monto,
+        descripcion: `Anulación de venta ${pedido.numero}`,
+      } });
+    }
+    return tx.pedido.update({
       where: { id },
       data: { estado: estado as any },
+    });
     });
     this.eventos.emitir(empresaId, {
       tipo: 'ACTUALIZADO',
