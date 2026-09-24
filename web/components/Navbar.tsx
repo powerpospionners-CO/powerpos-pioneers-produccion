@@ -46,7 +46,8 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
-    if (['/mi-tienda','/fidelizacion','/catalogo'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
+    if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;
+    if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
     if (usuario?.rol === 'DOMICILIARIO') return item.href === '/domicilios';
     if (usuario?.rol === 'CAJERO') return item.href === '/pos';

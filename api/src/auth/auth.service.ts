@@ -50,6 +50,7 @@ export class AuthService {
         modoPreparacion: usuario.empresa?.modoPreparacion,
         facturacionElectronicaHabilitada: usuario.empresa?.facturacionElectronicaHabilitada,
         consumoEmpleadosHabilitado: usuario.empresa?.consumoEmpleadosHabilitado,
+        catalogoHabilitado: usuario.empresa?.catalogoHabilitado,
         tiendaSlug: usuario.empresa?.tiendaSlug,
       },
     };

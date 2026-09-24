@@ -46,6 +46,7 @@ model Empresa {
   modoPreparacion ModoPreparacion @default(KDS)
   facturacionElectronicaHabilitada Boolean @default(false)
   consumoEmpleadosHabilitado Boolean @default(false)
+  catalogoHabilitado Boolean @default(false)
   tiendaSlug String @unique @default(uuid())
   tiendaConfig Json @default("{}")
   fidelizacionConfig Json @default("{}")
@@ -80,6 +81,7 @@ model CatalogoProducto {
   id            Int      @id @default(autoincrement())
   empresaId     Int
   nombre        String
+  presentacion  String?
   descripcion   String?
   precio        Decimal? @db.Decimal(10, 2)
   categoria     String?

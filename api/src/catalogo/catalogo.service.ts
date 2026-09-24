@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,9 +8,10 @@ const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || 
 
 const SINONIMOS_COLUMNAS: Record<string, string[]> = {
   nombre: ['nombre', 'producto', 'nombre del producto', 'articulo'],
-  categoria: ['categoria', 'linea', 'familia'],
-  precio: ['precio', 'precio de venta', 'precio venta', 'precio sugerido'],
-  descripcion: ['descripcion', 'detalle', 'presentacion'],
+  categoria: ['categoria', 'linea', 'familia', '#producto'],
+  presentacion: ['presentacion', 'tamano', 'gramaje', 'peso', 'contenido'],
+  precio: ['precio', 'precio de venta', 'precio venta', 'precio sugerido', 'p. publico', 'p publico'],
+  descripcion: ['descripcion', 'detalle'],
 };
 
 function textoOpcional(valor: unknown, campo: string, max: number, requerido = false): string | null {
@@ -27,7 +28,13 @@ function textoOpcional(valor: unknown, campo: string, max: number, requerido = f
 export class CatalogoService {
   constructor(private prisma: PrismaService) {}
 
+  private async verificarHabilitado(empresaId: number) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { catalogoHabilitado: true } });
+    if (!empresa?.catalogoHabilitado) throw new ForbiddenException('El catálogo no está habilitado para esta empresa');
+  }
+
   async listar(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
     return this.prisma.catalogoProducto.findMany({
       where: { empresaId },
       orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
@@ -35,12 +42,14 @@ export class CatalogoService {
   }
 
   async crear(datos: any, empresaId: number) {
+    await this.verificarHabilitado(empresaId);
     const nombre = textoOpcional(datos.nombre, 'El nombre', 150, true) as string;
     const categoria = textoOpcional(datos.categoria, 'La categoría', 80);
+    const presentacion = textoOpcional(datos.presentacion, 'La presentación', 60);
     const descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     const precio = this.validarPrecio(datos.precio);
     return this.prisma.catalogoProducto.create({
-      data: { empresaId, nombre, categoria, descripcion, precio },
+      data: { empresaId, nombre, categoria, presentacion, descripcion, precio },
     });
   }
 
@@ -58,10 +67,12 @@ export class CatalogoService {
   }
 
   async actualizar(id: number, datos: any, empresaId: number) {
+    await this.verificarHabilitado(empresaId);
     await this.obtener(id, empresaId);
     const data: any = {};
     if (datos.nombre !== undefined) data.nombre = textoOpcional(datos.nombre, 'El nombre', 150, true);
     if (datos.categoria !== undefined) data.categoria = textoOpcional(datos.categoria, 'La categoría', 80);
+    if (datos.presentacion !== undefined) data.presentacion = textoOpcional(datos.presentacion, 'La presentación', 60);
     if (datos.descripcion !== undefined) data.descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     if (datos.precio !== undefined) data.precio = this.validarPrecio(datos.precio);
     if (datos.activo !== undefined) data.activo = !!datos.activo;
@@ -70,17 +81,20 @@ export class CatalogoService {
   }
 
   async eliminar(id: number, empresaId: number) {
+    await this.verificarHabilitado(empresaId);
     await this.obtener(id, empresaId);
     await this.prisma.catalogoProducto.delete({ where: { id } });
     return { ok: true };
   }
 
   async actualizarImagen(id: number, empresaId: number, imagen: string) {
+    await this.verificarHabilitado(empresaId);
     await this.obtener(id, empresaId);
     return this.prisma.catalogoProducto.update({ where: { id }, data: { imagen } });
   }
 
   async importarExcel(buffer: Buffer, empresaId: number) {
+    await this.verificarHabilitado(empresaId);
     let libro: XLSX.WorkBook;
     try {
       libro = XLSX.read(buffer, { type: 'buffer' });
@@ -119,16 +133,17 @@ export class CatalogoService {
 
         let precio: number | null = null;
         if (mapaCampos.precio && fila[mapaCampos.precio] !== '') {
-          const valor = Number(fila[mapaCampos.precio]);
+          const valor = Number(String(fila[mapaCampos.precio]).replace(/[^0-9.,-]/g, '').replace(',', '.'));
           if (!Number.isFinite(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: 'El precio debe ser un número no negativo' }); continue; }
           precio = valor;
         }
 
         const categoria = mapaCampos.categoria ? String(fila[mapaCampos.categoria] ?? '').trim() || null : null;
+        const presentacion = mapaCampos.presentacion ? String(fila[mapaCampos.presentacion] ?? '').trim() || null : null;
         const descripcion = mapaCampos.descripcion ? String(fila[mapaCampos.descripcion] ?? '').trim() || null : null;
 
         await this.prisma.catalogoProducto.create({
-          data: { empresaId, nombre, precio, categoria, descripcion, orden: existentes + creados },
+          data: { empresaId, nombre, precio, categoria, presentacion, descripcion, orden: existentes + creados },
         });
         creados++;
       } catch (e) {
@@ -142,9 +157,9 @@ export class CatalogoService {
   private async empresaPorSlug(slug: string) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { tiendaSlug: slug },
-      select: { id: true, nombre: true, logo: true, telefono: true, activo: true, tiendaConfig: true },
+      select: { id: true, nombre: true, logo: true, telefono: true, activo: true, tiendaConfig: true, catalogoHabilitado: true },
     });
-    if (!empresa || !empresa.activo) throw new NotFoundException('Catálogo no disponible');
+    if (!empresa || !empresa.activo || !empresa.catalogoHabilitado) throw new NotFoundException('Catálogo no disponible');
     return empresa;
   }
 
@@ -165,6 +180,7 @@ export class CatalogoService {
   }
 
   async generarPDF(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
     const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { nombre: true, logo: true, telefono: true, tiendaConfig: true } });
     if (!empresa) throw new NotFoundException('Empresa no encontrada');
     const items = await this.prisma.catalogoProducto.findMany({
@@ -198,8 +214,11 @@ export class CatalogoService {
 
   private async construirPDF(nombreEmpresa: string, color: string, items: any[]): Promise<Buffer> {
     const imagenesPorItem = new Map<number, Buffer | null>();
+    const urlVistas = new Map<string, Buffer | null>();
     for (const item of items) {
-      if (item.imagen) imagenesPorItem.set(item.id, await this.descargarImagen(item.imagen));
+      if (!item.imagen) continue;
+      if (!urlVistas.has(item.imagen)) urlVistas.set(item.imagen, await this.descargarImagen(item.imagen));
+      imagenesPorItem.set(item.id, urlVistas.get(item.imagen) ?? null);
     }
 
     return new Promise((resolve, reject) => {
@@ -257,7 +276,8 @@ export class CatalogoService {
         }
 
         let cursorY = y + altoImagen + 16;
-        doc.fillColor('#101f26').font('Helvetica-Bold').fontSize(10.5).text(item.nombre, x + 8, cursorY, { width: anchoTarjeta - 16, height: 28 });
+        const tituloCompleto = item.presentacion ? `${item.nombre} — ${item.presentacion}` : item.nombre;
+        doc.fillColor('#101f26').font('Helvetica-Bold').fontSize(10).text(tituloCompleto, x + 8, cursorY, { width: anchoTarjeta - 16, height: 28 });
         cursorY += 26;
         if (item.categoria) {
           doc.fillColor('#8a8a8a').font('Helvetica').fontSize(7.5).text(String(item.categoria).toUpperCase(), x + 8, cursorY, { width: anchoTarjeta - 16 });

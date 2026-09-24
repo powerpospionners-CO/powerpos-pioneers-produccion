@@ -15,6 +15,7 @@ interface Usuario {
   modoPreparacion?: 'KDS' | 'COMANDAS';
   facturacionElectronicaHabilitada?: boolean;
   consumoEmpleadosHabilitado?: boolean;
+  catalogoHabilitado?: boolean;
   tiendaSlug?: string;
 }
 

@@ -7,6 +7,7 @@ import "./catalogo.css";
 type Producto = {
   id: number;
   nombre: string;
+  presentacion: string | null;
   descripcion: string | null;
   precio: string | null;
   categoria: string | null;
@@ -119,6 +120,7 @@ export default function CatalogoPublicoPage() {
               <div>
                 {p.categoria && <small>{p.categoria}</small>}
                 <h3>{p.nombre}</h3>
+                {p.presentacion && <span className="catalogo-presentacion">{p.presentacion}</span>}
                 {p.descripcion && <p>{p.descripcion}</p>}
                 {p.precio && <strong className="catalogo-precio">{dinero(Number(p.precio))}</strong>}
               </div>

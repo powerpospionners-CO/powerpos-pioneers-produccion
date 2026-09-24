@@ -218,6 +218,7 @@ export class SuperadminService {
       modoPreparacion?: 'KDS' | 'COMANDAS';
       facturacionElectronicaHabilitada?: boolean;
       consumoEmpleadosHabilitado?: boolean;
+      catalogoHabilitado?: boolean;
       tipoNegocio?: TipoNegocio;
     },
     usuarioId?: number,
@@ -235,8 +236,9 @@ export class SuperadminService {
         ...(datos.modoPreparacion ? { modoPreparacion: datos.modoPreparacion } : {}),
         ...(datos.facturacionElectronicaHabilitada !== undefined ? { facturacionElectronicaHabilitada: datos.facturacionElectronicaHabilitada } : {}),
         ...(datos.consumoEmpleadosHabilitado !== undefined ? { consumoEmpleadosHabilitado: datos.consumoEmpleadosHabilitado } : {}),
+        ...(datos.catalogoHabilitado !== undefined ? { catalogoHabilitado: datos.catalogoHabilitado } : {}),
       },
-      select: { id: true, nombre: true, plan: true, tipoNegocio: true, permisos: true, modoPreparacion: true, facturacionElectronicaHabilitada: true, consumoEmpleadosHabilitado: true, activo: true },
+      select: { id: true, nombre: true, plan: true, tipoNegocio: true, permisos: true, modoPreparacion: true, facturacionElectronicaHabilitada: true, consumoEmpleadosHabilitado: true, catalogoHabilitado: true, activo: true },
     });
     await this.auditoria.registrar({ accion: 'CONFIGURAR', entidad: 'EMPRESA', entidadId: id, usuarioId, detalle: datos });
     return actualizada;

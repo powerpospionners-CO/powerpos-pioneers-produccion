@@ -12,6 +12,7 @@ const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com
 interface ItemCatalogo {
   id: number;
   nombre: string;
+  presentacion: string | null;
   descripcion: string | null;
   precio: string | null;
   categoria: string | null;
@@ -24,7 +25,7 @@ export default function CatalogoPage() {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState<ItemCatalogo | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ nombre: '', categoria: '', precio: '', descripcion: '' });
+  const [form, setForm] = useState({ nombre: '', categoria: '', presentacion: '', precio: '', descripcion: '' });
   const [archivoImagen, setArchivoImagen] = useState<File | null>(null);
   const [previewImagen, setPreviewImagen] = useState('');
 
@@ -52,13 +53,14 @@ export default function CatalogoPage() {
       setForm({
         nombre: item.nombre,
         categoria: item.categoria || '',
+        presentacion: item.presentacion || '',
         precio: item.precio ? String(item.precio) : '',
         descripcion: item.descripcion || '',
       });
       setPreviewImagen(item.imagen || '');
     } else {
       setEditando(null);
-      setForm({ nombre: '', categoria: '', precio: '', descripcion: '' });
+      setForm({ nombre: '', categoria: '', presentacion: '', precio: '', descripcion: '' });
       setPreviewImagen('');
     }
     setArchivoImagen(null);
@@ -79,6 +81,7 @@ export default function CatalogoPage() {
       const payload = {
         nombre: form.nombre,
         categoria: form.categoria || null,
+        presentacion: form.presentacion || null,
         precio: form.precio ? Number(form.precio) : null,
         descripcion: form.descripcion || null,
       };
@@ -228,6 +231,7 @@ export default function CatalogoPage() {
                   <div className="p-3">
                     {item.categoria && <div className="text-orange-500 text-[11px] font-bold uppercase tracking-wide mb-0.5">{item.categoria}</div>}
                     <div className="text-white font-medium text-sm">{item.nombre}</div>
+                    {item.presentacion && <div className="text-gray-500 text-xs mt-0.5">{item.presentacion}</div>}
                     {item.precio && <div className="text-gray-300 font-bold text-sm mt-1">${Number(item.precio).toLocaleString()}</div>}
                     <div className="flex items-center gap-2 mt-3">
                       <button
@@ -297,6 +301,16 @@ export default function CatalogoPage() {
                       onChange={(e) => setForm({ ...form, categoria: e.target.value })}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
                       placeholder="Ej: Lácteos"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Presentación (opcional)</label>
+                    <input
+                      type="text"
+                      value={form.presentacion}
+                      onChange={(e) => setForm({ ...form, presentacion: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
+                      placeholder="Ej: 500 G"
                     />
                   </div>
                   <div>

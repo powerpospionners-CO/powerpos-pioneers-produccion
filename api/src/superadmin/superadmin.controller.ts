@@ -54,6 +54,7 @@ export class SuperadminController {
       modoPreparacion?: 'KDS' | 'COMANDAS';
       facturacionElectronicaHabilitada?: boolean;
       consumoEmpleadosHabilitado?: boolean;
+      catalogoHabilitado?: boolean;
       tipoNegocio?: 'RESTAURANTE' | 'SUPERMERCADO' | 'TIENDA' | 'COMERCIO';
     },
     @Request() req: any,

@@ -43,6 +43,7 @@ interface Empresa {
   modoPreparacion: 'KDS' | 'COMANDAS';
   facturacionElectronicaHabilitada: boolean;
   consumoEmpleadosHabilitado: boolean;
+  catalogoHabilitado: boolean;
   _count: { usuarios: number; sucursales: number };
 }
 
@@ -81,6 +82,7 @@ export default function SuperadminPage() {
   const [modoPreparacion, setModoPreparacion] = useState<'KDS' | 'COMANDAS'>('KDS');
   const [facturacionHabilitada, setFacturacionHabilitada] = useState(false);
   const [consumoEmpleadosHabilitado, setConsumoEmpleadosHabilitado] = useState(false);
+  const [catalogoHabilitado, setCatalogoHabilitado] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -106,6 +108,7 @@ export default function SuperadminPage() {
     setModoPreparacion(empresa.modoPreparacion || 'KDS');
     setFacturacionHabilitada(Boolean(empresa.facturacionElectronicaHabilitada));
     setConsumoEmpleadosHabilitado(Boolean(empresa.consumoEmpleadosHabilitado));
+    setCatalogoHabilitado(Boolean(empresa.catalogoHabilitado));
   };
 
   const cargarDatos = async () => {
@@ -153,7 +156,7 @@ export default function SuperadminPage() {
     if (!seleccionada) return;
     setGuardando(true);
     try {
-      await api.patch(`/superadmin/empresas/${seleccionada.id}/configuracion`, { plan, tipoNegocio, permisos, modoPreparacion, facturacionElectronicaHabilitada: facturacionHabilitada, consumoEmpleadosHabilitado });
+      await api.patch(`/superadmin/empresas/${seleccionada.id}/configuracion`, { plan, tipoNegocio, permisos, modoPreparacion, facturacionElectronicaHabilitada: facturacionHabilitada, consumoEmpleadosHabilitado, catalogoHabilitado });
       await cargarDatos();
     } finally {
       setGuardando(false);
@@ -324,6 +327,8 @@ export default function SuperadminPage() {
               <p className="text-slate-500 text-xs mt-2">Requiere un proveedor tecnológico y una integración específica antes de emitir facturas electrónicas.</p>
               {tipoNegocio === 'RESTAURANTE' && <><label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm mt-4"><span>Consumo de empleados</span><input type="checkbox" checked={consumoEmpleadosHabilitado} onChange={(event) => setConsumoEmpleadosHabilitado(event.target.checked)} className="h-4 w-4 accent-orange-500" /></label>
               <p className="text-slate-500 text-xs mt-2">Permite registrar la comida que se le da al personal. No se contabiliza como venta, pero sí descuenta inventario.</p></>}
+              <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm mt-4"><span>Catálogo de productos</span><input type="checkbox" checked={catalogoHabilitado} onChange={(event) => setCatalogoHabilitado(event.target.checked)} className="h-4 w-4 accent-orange-500" /></label>
+              <p className="text-slate-500 text-xs mt-2">Catálogo tipo folleto (independiente del inventario) para compartir con distribuidores. Actívalo solo si la empresa lo pidió.</p>
               <div className="mt-6 space-y-2">{MODULOS.filter((modulo) => tipoNegocio === 'RESTAURANTE' || modulo.id !== 'cocina').map((modulo) => <label key={modulo.id} className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm"><span>{modulo.label}</span><input type="checkbox" checked={Boolean(permisos[modulo.id])} onChange={(event) => setPermisos((actuales) => ({ ...actuales, [modulo.id]: event.target.checked }))} className="h-4 w-4 accent-orange-500" /></label>)}</div>
               <button onClick={guardarConfiguracion} disabled={guardando} className="w-full mt-6 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2"><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar configuracion'}</button>
             </>}

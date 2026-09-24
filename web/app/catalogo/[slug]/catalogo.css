@@ -192,6 +192,12 @@
   color: #66787f;
   margin: 0 0 10px;
 }
+.catalogo-presentacion {
+  display: block;
+  font-size: 12px;
+  color: #8a9ca2;
+  margin: -2px 0 6px;
+}
 .catalogo-precio {
   font-size: 16px;
   font-weight: 800;
