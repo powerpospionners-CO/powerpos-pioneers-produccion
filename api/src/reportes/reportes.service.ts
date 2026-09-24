@@ -116,16 +116,26 @@ export class ReportesService {
     });
 
     return productos.map((producto) => {
-      const costoReceta = producto.ingredientes.reduce((acc, pi) => {
-        const costoUnitario = pi.ingrediente.costoUnitario ? Number(pi.ingrediente.costoUnitario) : 0;
-        return acc + costoUnitario * Number(pi.cantidad);
-      }, 0);
+      const usaReceta = producto.ingredientes.length > 0;
+      let costoReceta: number;
+      let tieneCostosDefinidos: boolean;
+
+      if (usaReceta) {
+        // Negocios tipo restaurante: el costo sale de sumar los ingredientes de la receta.
+        costoReceta = producto.ingredientes.reduce((acc, pi) => {
+          const costoUnitario = pi.ingrediente.costoUnitario ? Number(pi.ingrediente.costoUnitario) : 0;
+          return acc + costoUnitario * Number(pi.cantidad);
+        }, 0);
+        tieneCostosDefinidos = producto.ingredientes.every((pi) => pi.ingrediente.costoUnitario !== null);
+      } else {
+        // Comercio/tienda/supermercado: no hay receta, el costo es el campo directo del producto.
+        costoReceta = producto.costo !== null && producto.costo !== undefined ? Number(producto.costo) : 0;
+        tieneCostosDefinidos = producto.costo !== null && producto.costo !== undefined;
+      }
 
       const precioVenta = Number(producto.precio);
       const margenAbsoluto = precioVenta - costoReceta;
       const margenPorcentual = precioVenta > 0 ? (margenAbsoluto / precioVenta) * 100 : 0;
-      const tieneCostosDefinidos = producto.ingredientes.length > 0 &&
-        producto.ingredientes.every((pi) => pi.ingrediente.costoUnitario !== null);
 
       return {
         id: producto.id,
