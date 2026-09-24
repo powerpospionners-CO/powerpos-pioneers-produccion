@@ -323,7 +323,7 @@ export class CatalogoService {
         doc.fillColor('#999').font('Helvetica').fontSize(8).text(
           `Página ${i + 1} de ${rango.count} · Catálogo generado con PowerPOS`,
           margenX,
-          altoPagina - 30,
+          altoPagina - 50,
           { width: anchoPagina - margenX * 2, align: 'center', lineBreak: false },
         );
       }
