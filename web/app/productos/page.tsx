@@ -97,6 +97,7 @@ export default function ProductosPage() {
     descripcion: '',
     precio: '',
     costo: '',
+    margenDeseado: '',
     categoriaId: '',
     disponible: true,
     aceptaAdicionales: true,
@@ -144,11 +145,15 @@ export default function ProductosPage() {
   const abrirModal = (producto?: Producto) => {
     if (producto) {
       setEditando(producto);
+      const costoInicial = producto.costo ? Number(producto.costo) : 0;
+      const precioInicial = Number(producto.precio) || 0;
+      const margenInicial = costoInicial > 0 && precioInicial > 0 ? ((precioInicial - costoInicial) / costoInicial) * 100 : 0;
       setForm({
         nombre: producto.nombre,
         descripcion: producto.descripcion || '',
         precio: producto.precio,
         costo: producto.costo ? String(producto.costo) : '',
+        margenDeseado: margenInicial > 0 ? String(Math.round(margenInicial * 10) / 10) : '',
         categoriaId: String(producto.categoria.id),
         disponible: producto.disponible,
         aceptaAdicionales: producto.aceptaAdicionales ?? true,
@@ -169,7 +174,7 @@ export default function ProductosPage() {
       setPreviewImagenProducto(producto.imagen || '');
     } else {
       setEditando(null);
-      setForm({ nombre: '', descripcion: '', precio: '', costo: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0' });
+      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0' });
       setRecetaTemp([]);
       setAdicionalIdsTemp([]);
       setPreviewImagenProducto('');
@@ -722,18 +727,44 @@ export default function ProductosPage() {
                 const precioNum = Number(form.precio) || 0;
                 const costoNum = Number(form.costo) || 0;
                 const ganancia = precioNum - costoNum;
-                const margen = costoNum > 0 && precioNum > 0 ? (ganancia / precioNum) * 100 : null;
+                // El margen de un producto ya hecho se piensa como "cuánto le subo al costo", no como % del precio de venta.
+                const margen = costoNum > 0 && precioNum > 0 ? (ganancia / costoNum) * 100 : null;
+
+                const actualizarCosto = (valor: string) => {
+                  const costo = Number(valor) || 0;
+                  const margenActual = Number(form.margenDeseado) || 0;
+                  if (valor && margenActual > 0) {
+                    const precioCalculado = Math.round(costo * (1 + margenActual / 100));
+                    setForm({ ...form, costo: valor, precio: String(precioCalculado) });
+                  } else {
+                    setForm({ ...form, costo: valor });
+                  }
+                };
+                const actualizarMargen = (valor: string) => {
+                  const margenPct = Number(valor) || 0;
+                  if (valor && costoNum > 0) {
+                    const precioCalculado = Math.round(costoNum * (1 + margenPct / 100));
+                    setForm({ ...form, margenDeseado: valor, precio: String(precioCalculado) });
+                  } else {
+                    setForm({ ...form, margenDeseado: valor });
+                  }
+                };
+
                 return (
                   <div className="space-y-3 rounded-xl border border-gray-800 p-3">
                     <div className="grid grid-cols-2 gap-3">
                       <label className="text-sm text-gray-400">Costo (lo que te vale)
-                        <input type="number" min="0" step="1" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} placeholder="0" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                        <input type="number" min="0" step="1" value={form.costo} onChange={(e) => actualizarCosto(e.target.value)} placeholder="0" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                       </label>
-                      <div className="text-sm text-gray-400">
-                        Ganancia por unidad
-                        <div className={`mt-1 w-full rounded-lg border px-3 py-2 font-semibold ${costoNum > 0 && precioNum > 0 ? (ganancia >= 0 ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400') : 'border-gray-700 bg-gray-800/50 text-gray-500'}`}>
-                          {costoNum > 0 && precioNum > 0 ? `$${ganancia.toLocaleString()} · ${margen!.toFixed(0)}%` : 'Ingresa costo y precio'}
-                        </div>
+                      <label className="text-sm text-gray-400">% de ganancia que quieres
+                        <input type="number" min="0" step="1" value={form.margenDeseado} onChange={(e) => actualizarMargen(e.target.value)} placeholder="Ej: 40" disabled={!form.costo} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white disabled:opacity-50" />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 -mt-1">Escribe el costo y el % que quieres ganarle — el precio de venta se calcula solo. También puedes escribir el precio directamente abajo.</p>
+                    <div className="text-sm text-gray-400">
+                      Ganancia por unidad
+                      <div className={`mt-1 w-full rounded-lg border px-3 py-2 font-semibold ${costoNum > 0 && precioNum > 0 ? (ganancia >= 0 ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400') : 'border-gray-700 bg-gray-800/50 text-gray-500'}`}>
+                        {costoNum > 0 && precioNum > 0 ? `$${ganancia.toLocaleString()} · ${margen!.toFixed(0)}% sobre el costo` : 'Ingresa costo y precio'}
                       </div>
                     </div>
                     <label className="block text-sm text-gray-400">Código de barras o SKU<input value={form.codigoBarras} onChange={(e) => setForm({ ...form, codigoBarras: e.target.value })} placeholder="Escanea o escribe el código" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
