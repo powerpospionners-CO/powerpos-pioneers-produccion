@@ -18,6 +18,22 @@ export class PedidosService {
     private readonly notificaciones: NotificacionesService,
   ) {}
 
+  private calcularCostoVenta(itemsValidados: { producto: any; cantidad: number }[]): number {
+    return itemsValidados.reduce((total, item) => {
+      const { producto, cantidad } = item;
+      let costoUnitario = 0;
+      if (producto.ingredientes && producto.ingredientes.length > 0) {
+        costoUnitario = producto.ingredientes.reduce((acc: number, pi: any) => {
+          const costoIngrediente = pi.ingrediente?.costoUnitario ? Number(pi.ingrediente.costoUnitario) : 0;
+          return acc + costoIngrediente * Number(pi.cantidad);
+        }, 0);
+      } else if (producto.costo !== null && producto.costo !== undefined) {
+        costoUnitario = Number(producto.costo);
+      }
+      return total + costoUnitario * cantidad;
+    }, 0);
+  }
+
   async crearPedido(datos: any, usuarioId: number, empresaId: number) {
     const pedido = await this.prisma.$transaction(tx => this.crearEnTransaccion(datos, usuarioId, empresaId, tx), { timeout: 15000 });
     this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
@@ -260,6 +276,26 @@ export class PedidosService {
         pedidoId: pedido.id,
       },
     });
+
+    // Registrar también el costo de lo vendido, para que la utilidad neta
+    // reste lo invertido y no muestre el ingreso completo como si fuera
+    // ganancia. En comercio/tienda usa el costo del producto; en
+    // restaurante, el costo de la receta (igual que en Reportes).
+    const costoVenta = this.calcularCostoVenta(itemsValidados);
+    if (costoVenta > 0) {
+      await db.movimientoFinanciero.create({
+        data: {
+          empresaId,
+          sucursalId,
+          usuarioId,
+          tipo: 'EGRESO',
+          categoria: 'COSTO_VENTA',
+          descripcion: `Costo de venta ${numero}`,
+          monto: Math.round(costoVenta * 100) / 100,
+          pedidoId: pedido.id,
+        },
+      });
+    }
 
     // Sumar puntos de fidelización si el pedido tiene cliente asociado
     if (clienteId) {

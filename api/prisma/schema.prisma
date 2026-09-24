@@ -564,6 +564,7 @@ enum TipoMovimiento {
 
 enum CategoriaMovimiento {
   VENTA
+  COSTO_VENTA
   COMPRA_INSUMOS
   NOMINA
   SERVICIOS
