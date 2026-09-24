@@ -20,6 +20,7 @@ async function bootstrap() {
   fs.mkdirSync(path.join(uploadsPath, 'logos'), { recursive: true });
   fs.mkdirSync(path.join(uploadsPath, 'anuncios'), { recursive: true });
   fs.mkdirSync(path.join(uploadsPath, 'productos'), { recursive: true });
+  fs.mkdirSync(path.join(uploadsPath, 'catalogo'), { recursive: true });
   console.log('Sirviendo archivos estáticos desde:', uploadsPath);
 
   app.useStaticAssets(uploadsPath, {

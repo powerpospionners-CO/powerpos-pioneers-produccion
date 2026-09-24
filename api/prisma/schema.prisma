@@ -66,8 +66,33 @@ model Empresa {
   lotesPreparacion LotePreparacion[]
   consumosEmpleados ConsumoEmpleado[]
   ingredientes Ingrediente[]
+  catalogoProductos CatalogoProducto[]
 
   @@map("empresas")
+}
+
+// ==========================================
+// CATÁLOGO DE PRODUCTOS (independiente del inventario/POS — es un
+// catálogo de venta/distribución tipo folleto, no afecta el stock ni las
+// ventas del sistema)
+// ==========================================
+model CatalogoProducto {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  nombre        String
+  descripcion   String?
+  precio        Decimal? @db.Decimal(10, 2)
+  categoria     String?
+  imagen        String?
+  orden         Int      @default(0)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId])
+  @@map("catalogo_productos")
 }
 
 model Sucursal {

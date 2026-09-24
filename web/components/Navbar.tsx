@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 
@@ -11,6 +11,7 @@ const ITEMS = [
   { href: '/pos', label: 'POS', icon: ShoppingCart },
   { href: '/domicilios', label: 'Domicilios', icon: ShoppingCart },
   { href: '/mi-tienda', label: 'Mi tienda', icon: Settings },
+  { href: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { href: '/fidelizacion', label: 'Puntos', icon: Users },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/productos', label: 'Productos', icon: Package },
@@ -45,7 +46,7 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
-    if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
+    if (['/mi-tienda','/fidelizacion','/catalogo'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
     if (usuario?.rol === 'DOMICILIARIO') return item.href === '/domicilios';
     if (usuario?.rol === 'CAJERO') return item.href === '/pos';
