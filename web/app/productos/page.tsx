@@ -77,6 +77,13 @@ export default function ProductosPage() {
   const iconosCategoria = esRestaurante ? ICONOS_CATEGORIA_RESTAURANTE : ICONOS_CATEGORIA_COMERCIO;
   const iconoCategoriaDefecto = esRestaurante ? '🍽️' : '📦';
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [busqueda, setBusqueda] = useState('');
+  const normalizarBusqueda = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const terminoBusqueda = normalizarBusqueda(busqueda);
+  const productosFiltrados = productos.filter((producto) =>
+    normalizarBusqueda(producto.nombre).includes(terminoBusqueda) ||
+    normalizarBusqueda(producto.codigoBarras || '').includes(terminoBusqueda),
+  );
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [ingredientesDisponibles, setIngredientesDisponibles] = useState<any[]>([]);
   const [adicionalesCatalogo, setAdicionalesCatalogo] = useState<Adicional[]>([]);
@@ -523,6 +530,22 @@ export default function ProductosPage() {
           </div>
         )}
 
+        <div className="mb-4">
+          <label htmlFor="buscar-productos" className="mb-2 block text-sm text-gray-300">Buscar productos</label>
+          <div className="flex items-center gap-2">
+            <input
+              id="buscar-productos"
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Nombre o código de barras"
+              className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-white placeholder:text-gray-500 focus:border-orange-500 focus:outline-none"
+            />
+            {busqueda && <button type="button" onClick={() => setBusqueda('')} className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800">Limpiar</button>}
+          </div>
+          <p role="status" className="mt-2 text-xs text-gray-500">{productosFiltrados.length} de {productos.length} productos</p>
+        </div>
+
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
@@ -536,7 +559,7 @@ export default function ProductosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {productos.map((producto) => (
+              {productosFiltrados.map((producto) => (
                 <tr key={producto.id} className="hover:bg-gray-800/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="text-white font-medium text-sm">{producto.nombre}</div>
@@ -594,6 +617,9 @@ export default function ProductosPage() {
                   </td>
                 </tr>
               ))}
+              {productosFiltrados.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">{terminoBusqueda ? 'No se encontraron productos con ese nombre o código de barras.' : 'No hay productos registrados.'}</td></tr>
+              )}
             </tbody>
           </table>
         </div>
