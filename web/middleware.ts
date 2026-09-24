@@ -17,6 +17,7 @@ const RUTAS_PANEL = [
   '/login', '/auth', '/dashboard', '/pos', '/cocina', '/domicilios', '/productos',
   '/inventario', '/clientes', '/financiero', '/reportes', '/configuracion',
   '/mi-tienda', '/fidelizacion', '/consumo-empleados', '/cliente', '/llamado',
+  '/registro', '/catalogo',
 ];
 
 export function middleware(request: NextRequest) {

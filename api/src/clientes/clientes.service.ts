@@ -1,5 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+
+function textoPublico(valor: unknown, campo: string, max: number, requerido = false): string | null {
+  if (valor === undefined || valor === null || valor === '') {
+    if (requerido) throw new BadRequestException(`${campo} es obligatorio`);
+    return null;
+  }
+  if (typeof valor !== 'string' || valor.trim().length > max) {
+    throw new BadRequestException(`${campo} no válido`);
+  }
+  return valor.trim();
+}
 
 @Injectable()
 export class ClientesService {
@@ -98,5 +109,45 @@ export class ClientesService {
 
   async redimirPuntos(clienteId: number, puntos: number, empresaId: number) {
     throw new BadRequestException('Canjee los puntos desde una venta en POS para aplicar y registrar el descuento.');
+  }
+
+  private async empresaPorSlug(slug: string) {
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { tiendaSlug: slug },
+      select: { id: true, nombre: true, logo: true, activo: true },
+    });
+    if (!empresa || !empresa.activo) throw new NotFoundException('Registro no disponible');
+    return empresa;
+  }
+
+  async infoPublica(slug: string) {
+    const empresa = await this.empresaPorSlug(slug);
+    return { nombre: empresa.nombre, logo: empresa.logo };
+  }
+
+  async crearPublico(slug: string, datos: any) {
+    const empresa = await this.empresaPorSlug(slug);
+    const nombre = textoPublico(datos.nombre, 'El nombre', 150, true);
+    const documento = textoPublico(datos.documento, 'El documento', 30);
+    const telefono = textoPublico(datos.telefono, 'El teléfono', 30);
+    const email = textoPublico(datos.email, 'El correo', 150);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('El correo no es válido');
+    }
+    const direccion = textoPublico(datos.direccion, 'La dirección', 300);
+    let fechaNacimiento: Date | null = null;
+    if (datos.fechaNacimiento) {
+      fechaNacimiento = new Date(datos.fechaNacimiento);
+      if (Number.isNaN(fechaNacimiento.getTime())) throw new BadRequestException('Fecha de nacimiento no válida');
+    }
+    try {
+      const cliente = await this.prisma.cliente.create({
+        data: { empresaId: empresa.id, nombre, documento, telefono, email, direccion, fechaNacimiento },
+      });
+      return { id: cliente.id, nombre: cliente.nombre };
+    } catch (e: any) {
+      if (e.code === 'P2002') throw new ConflictException('Ya existe un registro con ese documento');
+      throw e;
+    }
   }
 }

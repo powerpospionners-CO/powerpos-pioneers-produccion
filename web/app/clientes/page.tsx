@@ -1,9 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, Search, Star, Phone, Mail } from 'lucide-react';
+import { Plus, Search, Star, Phone, Mail, QrCode, Download, X } from 'lucide-react';
+import QRCode from 'qrcode';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com';
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([]);
@@ -15,6 +18,10 @@ export default function ClientesPage() {
   const [modalPuntos, setModalPuntos] = useState<any>(null);
   const [puntosForm, setPuntosForm] = useState({ tipo: 'agregar', cantidad: '' });
   const [loading, setLoading] = useState(false);
+  const [modalQR, setModalQR] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [urlRegistro, setUrlRegistro] = useState('');
+  const [nombreEmpresaQR, setNombreEmpresaQR] = useState('');
   const [formNuevo, setFormNuevo] = useState({
     nombre: '', documento: '', telefono: '', email: '', direccion: '', fechaNacimiento: '',
   });
@@ -74,6 +81,32 @@ export default function ClientesPage() {
     }
   };
 
+  const abrirQR = async () => {
+    setModalQR(true);
+    try {
+      const { data: empresa } = await api.get('/empresa');
+      const enDominioReal = window.location.hostname.endsWith(ROOT_DOMAIN);
+      const url = enDominioReal
+        ? `https://app.${ROOT_DOMAIN}/registro/${empresa.tiendaSlug}`
+        : `${window.location.origin}/registro/${empresa.tiendaSlug}`;
+      setUrlRegistro(url);
+      setNombreEmpresaQR(empresa.nombre);
+      const dataUrl = await QRCode.toDataURL(url, { width: 480, margin: 2, color: { dark: '#101f26', light: '#ffffff' } });
+      setQrDataUrl(dataUrl);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const descargarQR = () => {
+    const enlace = document.createElement('a');
+    enlace.href = qrDataUrl;
+    enlace.download = `qr-registro-${nombreEmpresaQR.toLowerCase().replace(/\s+/g, '-')}.png`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+  };
+
   const toggleActivo = async (cliente: any) => {
     try {
       await api.patch(`/clientes/${cliente.id}/toggle-activo`);
@@ -124,13 +157,22 @@ export default function ClientesPage() {
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
-              <button
-                onClick={() => setModalNuevo(true)}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
-              >
-                <Plus size={16} />
-                Nuevo cliente
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={abrirQR}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                >
+                  <QrCode size={16} />
+                  Código QR de registro
+                </button>
+                <button
+                  onClick={() => setModalNuevo(true)}
+                  className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                >
+                  <Plus size={16} />
+                  Nuevo cliente
+                </button>
+              </div>
             </div>
 
             {clientes.length === 0 ? (
@@ -184,6 +226,43 @@ export default function ClientesPage() {
             )}
           </div>
         </div>
+
+        {/* Modal código QR de registro */}
+        {modalQR && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-gray-800 text-center">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                  <QrCode size={20} className="text-orange-500" />
+                  Código QR de registro
+                </h3>
+                <button onClick={() => setModalQR(false)} className="text-gray-500 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-gray-500 text-sm mb-4 text-left">
+                Imprime este código y ponlo en tu local. El cliente lo escanea, llena sus datos y queda registrado directo en tu base de clientes.
+              </p>
+              {qrDataUrl ? (
+                <>
+                  <div className="bg-white rounded-xl p-4 inline-block">
+                    <img src={qrDataUrl} alt="Código QR de registro" className="w-56 h-56" />
+                  </div>
+                  <p className="text-gray-500 text-xs break-all mt-3">{urlRegistro}</p>
+                  <button
+                    onClick={descargarQR}
+                    className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg px-4 py-3 mt-4 transition-colors"
+                  >
+                    <Download size={16} />
+                    Descargar imagen
+                  </button>
+                </>
+              ) : (
+                <div className="py-10 text-gray-500 text-sm">Generando código...</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Modal nuevo cliente */}
         {modalNuevo && (
