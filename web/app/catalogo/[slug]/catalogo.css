@@ -154,6 +154,11 @@
   width: 100%;
   object-fit: cover;
 }
+.catalogo-enchila .catalogo-producto > img {
+  object-fit: contain;
+  background: #fff;
+  padding: 8px;
+}
 .catalogo-producto-placeholder {
   background: linear-gradient(160deg, var(--catalogo-color-soft), #eef3f4);
   display: flex;

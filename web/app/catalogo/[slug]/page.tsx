@@ -68,7 +68,7 @@ export default function CatalogoPublicoPage() {
   );
 
   return (
-    <main className="catalogo" style={{ "--catalogo-color": catalogo.color } as CSSProperties}>
+    <main className={`catalogo${slug === "enchilamarketpereira" ? " catalogo-enchila" : ""}`} style={{ "--catalogo-color": catalogo.color } as CSSProperties}>
       <header className="catalogo-header">
         <div className="catalogo-marca">
           {catalogo.logo ? (
@@ -110,7 +110,7 @@ export default function CatalogoPublicoPage() {
           {visibles.map((p) => (
             <article className="catalogo-producto" key={p.id}>
               {p.imagen ? (
-                <img loading="lazy" src={p.imagen} alt={p.nombre} />
+                <img loading="lazy" decoding="async" src={slug === "enchilamarketpereira" ? p.imagen.replace(/^https:\/\/app\.powerpospioneers\.com(?=\/catalogo-imagenes\/)/, "") : p.imagen} alt={p.nombre} />
               ) : (
                 <div className="catalogo-producto-placeholder">
                   {p.categoria && <span>{p.categoria}</span>}
@@ -132,6 +132,7 @@ export default function CatalogoPublicoPage() {
       <footer className="catalogo-footer">
         <strong>{catalogo.nombre}</strong>
         {catalogo.telefono && <span>{catalogo.telefono}</span>}
+        {slug === "enchilamarketpereira" && <small>Imágenes de referencia. Consulta el tamaño o contenido indicado en cada presentación.</small>}
         <small>Catálogo generado con PowerPOS</small>
       </footer>
     </main>

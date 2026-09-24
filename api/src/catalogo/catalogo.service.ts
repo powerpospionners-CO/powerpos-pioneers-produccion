@@ -203,7 +203,7 @@ export class CatalogoService {
 
   private async descargarImagen(url: string): Promise<Buffer | null> {
     try {
-      const respuesta = await fetch(url);
+      const respuesta = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (!respuesta.ok) return null;
       const arrayBuffer = await respuesta.arrayBuffer();
       return Buffer.from(arrayBuffer);
@@ -215,9 +215,18 @@ export class CatalogoService {
   private async construirPDF(nombreEmpresa: string, color: string, items: any[]): Promise<Buffer> {
     const imagenesPorItem = new Map<number, Buffer | null>();
     const urlVistas = new Map<string, Buffer | null>();
+    const urls = [...new Set(items.map(item => item.imagen).filter(Boolean))] as string[];
+    let siguiente = 0;
+    // Un catálogo puede tener cientos de presentaciones. Descargar cada foto
+    // una sola vez y con concurrencia limitada evita esperar una por una.
+    await Promise.all(Array.from({ length: Math.min(6, urls.length) }, async () => {
+      while (siguiente < urls.length) {
+        const url = urls[siguiente++];
+        urlVistas.set(url, await this.descargarImagen(url));
+      }
+    }));
     for (const item of items) {
       if (!item.imagen) continue;
-      if (!urlVistas.has(item.imagen)) urlVistas.set(item.imagen, await this.descargarImagen(item.imagen));
       imagenesPorItem.set(item.id, urlVistas.get(item.imagen) ?? null);
     }
 

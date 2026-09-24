@@ -3,6 +3,7 @@ import { PedidosService } from './pedidos.service';
 
 function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado = 1) {
   const db: any = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     empresa: { findFirst: jest.fn().mockResolvedValue({ id: 1, activo: true, tipoNegocio, fidelizacionConfig: {} }) },
     caja: { findFirst: jest.fn().mockResolvedValue({ id: 4, usuarioId: 3, usuario: { id: 3, nombre: 'Cajero' } }) },
     usuario: { findUnique: jest.fn().mockResolvedValue({ nombre: 'Cajero', rol: 'CAJERO' }) },

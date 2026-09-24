@@ -4,13 +4,16 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { jwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'powerpos_secret_key_2024',
-      signOptions: { expiresIn: '8h' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: jwtSecret(),
+        signOptions: { expiresIn: '8h' },
+      }),
     }),
   ],
   providers: [AuthService, JwtStrategy],
