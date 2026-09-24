@@ -135,7 +135,11 @@ export class ReportesService {
 
       const precioVenta = Number(producto.precio);
       const margenAbsoluto = precioVenta - costoReceta;
-      const margenPorcentual = precioVenta > 0 ? (margenAbsoluto / precioVenta) * 100 : 0;
+      // Restaurante: margen sobre el precio de venta (cuánto del precio es ganancia).
+      // Comercio/tienda/supermercado: margen sobre el costo (cuánto se le subió al costo), que es como se maneja el margen en la venta de productos ya hechos.
+      const margenPorcentual = usaReceta
+        ? (precioVenta > 0 ? (margenAbsoluto / precioVenta) * 100 : 0)
+        : (costoReceta > 0 ? (margenAbsoluto / costoReceta) * 100 : 0);
 
       return {
         id: producto.id,
