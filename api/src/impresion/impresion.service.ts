@@ -375,7 +375,11 @@ export class ImpresionService {
       lineas.push(`NOTA: ${pedido.observacion}\n`);
     }
     lineas.push(`TOTAL: ${total.toFixed(0)}\n`);
-    if (pedido.metodoPago) {
+    if (Array.isArray(pedido.pagos) && pedido.pagos.length > 1) {
+      for (const pago of pedido.pagos) {
+        lineas.push(`PAGO ${pago.metodoPago}: ${Number(pago.monto).toFixed(0)}\n`);
+      }
+    } else if (pedido.metodoPago) {
       lineas.push(`PAGO: ${pedido.metodoPago}\n`);
     }
     lineas.push('--------------------------------\n');

@@ -1,8 +1,11 @@
 import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { CajaService } from './caja.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
 @Controller('caja')
 export class CajaController {
   constructor(private readonly cajaService: CajaService) {}

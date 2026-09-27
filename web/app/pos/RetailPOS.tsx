@@ -5,6 +5,9 @@ import { Barcode, Minus, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-rea
 import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import CajaControl from '@/components/CajaControl';
+import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
+import VentasTurno from '@/components/VentasTurno';
 import { useAuthStore } from '@/store/authStore';
 
 type Producto = {
@@ -14,7 +17,7 @@ type Producto = {
 };
 type Categoria = { id: number; nombre: string; parentId?: number | null };
 type Linea = { producto: Producto; cantidad: number };
-type Caja = { id: number; usuarioId: number; usuario?: { nombre: string } };
+type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalVentas?: number; totalEfectivo?: number; totalEsperado?: number };
 
 const moneda = (valor: number) => valor.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -26,7 +29,7 @@ export default function RetailPOS() {
   const [busqueda, setBusqueda] = useState('');
   const [carrito, setCarrito] = useState<Linea[]>([]);
   const [caja, setCaja] = useState<Caja | null>(null);
-  const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+  const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -81,23 +84,25 @@ export default function RetailPOS() {
 
   const total = carrito.reduce((suma, linea) => suma + Number(linea.producto.precio) * linea.cantidad, 0);
   const cajaDeOtro = !!caja && !!usuario && caja.usuarioId !== usuario.id && !['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol);
-  const vender = async () => {
+  const vender = async (pago: PagoConfirmado) => {
     if (!carrito.length || !caja || cajaDeOtro || procesando) return;
     setProcesando(true); setError(''); setAviso('');
     try {
       const { data } = await api.post('/pedidos', {
         sucursalId: usuario?.sucursalId,
-        metodoPago,
+        metodoPago: pago.metodoPago,
+        pagos: pago.pagos,
         items: carrito.map(({ producto, cantidad }) => ({ productoId: producto.id, cantidad })),
       });
       setCarrito([]);
       setUltimoRecibo(data);
+      setModalCobroAbierto(false);
       setAviso(`Venta ${data.numero} registrada · ${moneda(Number(data.total))}`);
       await cargar();
       try {
         const impresion = await api.post('/impresion/ticket', data);
         if (!impresion.data?.impreso) setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`);
-        if (metodoPago === 'EFECTIVO') void api.post('/impresion/abrir-cajon').catch(() => undefined);
+        if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) void api.post('/impresion/abrir-cajon').catch(() => undefined);
       } catch { setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`); }
     } catch (e: any) {
       setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
@@ -108,9 +113,12 @@ export default function RetailPOS() {
     if (!ultimoRecibo) return;
     const ventana = window.open('', '_blank', 'width=420,height=700');
     if (!ventana) { setError('El navegador bloqueó la ventana del recibo. Permite ventanas emergentes para imprimir.'); return; }
+    const pagos = Array.isArray(ultimoRecibo.pagos) && ultimoRecibo.pagos.length > 1
+      ? ultimoRecibo.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
+      : [`PAGO  ${ultimoRecibo.metodoPago}`];
     const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${ultimoRecibo.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
       ...(ultimoRecibo.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}   ${moneda(Number(d.subtotal))}`),
-      '--------------------------------', `TOTAL  ${moneda(Number(ultimoRecibo.total))}`, `PAGO  ${ultimoRecibo.metodoPago}`, 'Gracias por su compra'];
+      '--------------------------------', `TOTAL  ${moneda(Number(ultimoRecibo.total))}`, ...pagos, 'Gracias por su compra'];
     const pre = ventana.document.createElement('pre');
     pre.style.cssText = 'font:14px/1.5 monospace;white-space:pre-wrap;padding:20px;';
     pre.textContent = lineas.join('\n');
@@ -120,10 +128,11 @@ export default function RetailPOS() {
 
   const titulo = usuario?.tipoNegocio === 'SUPERMERCADO' ? 'Caja de supermercado' : usuario?.tipoNegocio === 'TIENDA' ? 'Caja de tienda' : 'Punto de venta comercial';
   return <AuthGuard><main className="min-h-screen bg-gray-950 text-white"><Navbar />
+    <CajaControl caja={caja} cajaBloqueadaPorUsuario={cajaDeOtro} onCambio={cargar} />
+    {cajaDeOtro && <div className="border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm font-medium text-red-200">Caja asignada a {caja?.usuario?.nombre || 'otro cajero'}. Solo esa persona o un administrador puede vender.</div>}
     <div className="mx-auto max-w-[1600px] px-4 py-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Busca por nombre o escanea el código de barras. Las cantidades se descuentan al finalizar la venta.</p></div>
-        <div className={`rounded-xl border px-4 py-3 text-sm ${caja && !cajaDeOtro ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>{!caja ? 'Caja cerrada · abre la caja desde Dashboard' : cajaDeOtro ? `Caja asignada a ${caja.usuario?.nombre || 'otro cajero'}` : 'Caja abierta · lista para vender'}</div>
       </div>
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
       {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={imprimirRecibo} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
@@ -139,9 +148,13 @@ export default function RetailPOS() {
         </section>
         <aside className="flex h-fit flex-col rounded-2xl border border-gray-800 bg-gray-900 p-4 lg:sticky lg:top-4 lg:min-h-[580px]"><div className="flex items-center justify-between border-b border-gray-800 pb-4"><div className="flex items-center gap-2"><ShoppingBasket className="text-orange-500" size={21} /><h2 className="text-lg font-bold">Venta actual</h2></div><span className="text-sm text-gray-400">{carrito.reduce((s,l) => s+l.cantidad, 0)} artículos</span></div>
           <div className="max-h-[45vh] flex-1 space-y-3 overflow-y-auto py-4">{carrito.length === 0 && <p className="py-16 text-center text-sm text-gray-500">Agrega productos para comenzar la venta.</p>}{carrito.map(({ producto, cantidad }) => <div key={producto.id} className="rounded-xl bg-gray-800 p-3"><div className="flex justify-between gap-3"><div><div className="font-medium text-white">{producto.nombre}</div><div className="text-xs text-gray-400">{moneda(Number(producto.precio))} por unidad</div></div><button aria-label={`Quitar ${producto.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.producto.id !== producto.id))} className="text-gray-400 hover:text-red-400"><Trash2 size={16} /></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={`Reducir ${producto.nombre}`} onClick={() => cambiarCantidad(producto, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button><span className="w-7 text-center">{cantidad}</span><button aria-label={`Aumentar ${producto.nombre}`} onClick={() => cambiarCantidad(producto, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button></div><strong>{moneda(Number(producto.precio) * cantidad)}</strong></div></div>)}</div>
-          <div className="mt-auto space-y-4 border-t border-gray-800 pt-4"><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div><label className="block text-sm text-gray-400">Medio de pago<select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-3 text-white"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="TRANSFERENCIA">Transferencia</option><option value="NEQUI">Nequi</option><option value="DAVIPLATA">Daviplata</option></select></label><button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={vender} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">{procesando ? 'Registrando…' : 'Cobrar y registrar venta'}</button></div>
+          <div className="mt-auto space-y-4 border-t border-gray-800 pt-4"><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div><button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button></div>
         </aside>
       </div>
     </div>
+    <VentasTurno cajaId={caja?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaDeOtro} />
+    {modalCobroAbierto && (
+      <ModalCobro total={total} procesando={procesando} onConfirmar={vender} onCancelar={() => setModalCobroAbierto(false)} />
+    )}
   </main></AuthGuard>;
 }

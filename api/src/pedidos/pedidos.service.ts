@@ -9,7 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { PedidosEventosService } from './pedidos-eventos.service';
-import { bloquearCajaSucursal } from '../caja/caja-lock';
+
+const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
 @Injectable()
 export class PedidosService {
@@ -18,6 +19,30 @@ export class PedidosService {
     private readonly eventos: PedidosEventosService,
     private readonly notificaciones: NotificacionesService,
   ) {}
+
+  // Valida y normaliza el desglose de pago de una venta. Acepta el campo
+  // clásico `metodoPago` (pago único) o `pagos: [{metodoPago, monto}]` para
+  // pagos mixtos (ej. parte en efectivo, parte por transferencia).
+  private normalizarPagos(datos: any, total: number): { metodoPago: string; pagos: { metodoPago: string; monto: number }[] } {
+    if (Array.isArray(datos.pagos) && datos.pagos.length > 0) {
+      if (datos.pagos.length > 5) throw new BadRequestException('Un pago admite máximo 5 medios distintos');
+      const pagos = datos.pagos.map((p: any) => {
+        if (!METODOS_PAGO_VALIDOS.includes(p.metodoPago)) throw new BadRequestException('Medio de pago no válido');
+        const monto = Number(p.monto);
+        if (!Number.isFinite(monto) || monto <= 0) throw new BadRequestException('El monto de cada pago debe ser mayor a cero');
+        return { metodoPago: p.metodoPago, monto: Math.round(monto * 100) / 100 };
+      });
+      const suma = pagos.reduce((acc: number, p: any) => acc + p.monto, 0);
+      if (Math.round(suma * 100) !== Math.round(total * 100)) {
+        throw new BadRequestException(`La suma de los pagos ($${suma.toLocaleString('es-CO')}) no coincide con el total de la venta ($${total.toLocaleString('es-CO')})`);
+      }
+      const metodoPago = pagos.length > 1 ? 'MIXTO' : pagos[0].metodoPago;
+      return { metodoPago, pagos };
+    }
+    const metodoPago = datos.metodoPago || 'EFECTIVO';
+    if (!METODOS_PAGO_VALIDOS.includes(metodoPago)) throw new BadRequestException('Medio de pago no válido');
+    return { metodoPago, pagos: [{ metodoPago, monto: total }] };
+  }
 
   private calcularCostoVenta(itemsValidados: { producto: any; cantidad: number }[]): number {
     return itemsValidados.reduce((total, item) => {
@@ -44,16 +69,14 @@ export class PedidosService {
   }
 
   async crearEnTransaccion(datos: any, usuarioId: number, empresaId: number, db: Prisma.TransactionClient, costoDomicilio = 0) {
-    const { items, metodoPago, clienteId, observacion, sucursalId, cajaId } =
+    const { items, clienteId, observacion, sucursalId, cajaId } =
       datos;
 
     if (!Array.isArray(items) || items.length < 1 || items.length > 100 || items.some(i => !Number.isInteger(i.cantidad) || i.cantidad < 1 || i.cantidad > 999 || !Number.isInteger(i.productoId))) throw new BadRequestException('Productos o cantidades no válidos');
-    if (metodoPago && !['EFECTIVO','TARJETA','TRANSFERENCIA','NEQUI','DAVIPLATA'].includes(metodoPago)) throw new BadRequestException('Medio de pago no válido');
     const empresa = await db.empresa.findFirst({ where: { id: empresaId, activo: true } });
     if (!empresa) throw new NotFoundException('Empresa no disponible');
     const esRestaurante = empresa.tipoNegocio === 'RESTAURANTE';
     const reglas = puntosConfig(empresa.fidelizacionConfig);
-    await bloquearCajaSucursal(db, sucursalId);
     const cajaAbierta = await db.caja.findFirst({
       where: { sucursalId, sucursal: { empresaId }, estado: 'ABIERTA' },
       include: { usuario: { select: { id: true, nombre: true } } },
@@ -92,7 +115,7 @@ export class PedidosService {
     }
     if (cajaId) {
       const caja = await db.caja.findFirst({
-        where: { id: Number(cajaId), sucursalId, ...(esSupervisor ? {} : { usuarioId }) },
+        where: { id: cajaId, sucursalId, usuarioId },
       });
       if (!caja)
         throw new NotFoundException('Caja no encontrada para este usuario');
@@ -200,6 +223,7 @@ export class PedidosService {
     const total = subtotal - descuento + costoDomicilio;
     monto(Math.round(total * 100) / 100, 'Total', 0, 99999999.99);
     if (puntosGanados > 2147483647) throw new BadRequestException('Revise la regla de acumulación: genera demasiados puntos');
+    const { metodoPago, pagos } = this.normalizarPagos(datos, Math.round(total * 100) / 100);
 
     for (const item of itemsValidados) {
       if (!item.producto.controlaStock) continue;
@@ -220,12 +244,15 @@ export class PedidosService {
         usuarioId,
         clienteId: clienteId || null,
         cajaId: cajaActivaId,
-        metodoPago: metodoPago || 'EFECTIVO',
+        metodoPago: metodoPago as any,
         subtotal,
         descuento,
         total,
         observacion: observacion || null,
         estado: esRestaurante ? 'PENDIENTE' : 'ENTREGADO',
+        pagos: {
+          create: pagos.map((p) => ({ metodoPago: p.metodoPago as any, monto: p.monto })),
+        },
         detalles: {
           create: itemsValidados.map((item) => ({
             productoId: item.producto.id,
@@ -257,6 +284,7 @@ export class PedidosService {
             adicionales: { include: { adicional: true } },
           },
         },
+        pagos: true,
         usuario: { select: { nombre: true } },
         cliente: { select: { nombre: true, telefono: true } },
       },
@@ -383,6 +411,7 @@ export class PedidosService {
             adicionales: { include: { adicional: true } },
           },
         },
+        pagos: true,
         usuario: { select: { nombre: true } },
         cliente: { select: { nombre: true, telefono: true } },
       },
@@ -403,6 +432,7 @@ export class PedidosService {
             adicionales: { include: { adicional: true } },
           },
         },
+        pagos: true,
         usuario: { select: { nombre: true } },
         cliente: { select: { nombre: true, telefono: true } },
         sucursal: { select: { nombre: true } },
@@ -412,37 +442,132 @@ export class PedidosService {
     return pedido;
   }
 
-  async actualizarEstado(id: number, estado: string, empresaId: number, usuarioId?: number) {
+  // Un cajero solo puede editar/anular ventas de su propio turno mientras la
+  // caja de esa venta siga abierta; un administrador o gerente puede hacerlo
+  // siempre. Esto evita que se toquen ventas ya conciliadas por otro turno.
+  private async verificarPermisoSobreVenta(pedido: { cajaId: number | null }, usuarioId: number, rol: string) {
+    const esSupervisor = rol === 'ADMIN_EMPRESA' || rol === 'GERENTE';
+    if (esSupervisor) return;
+    if (!pedido.cajaId) throw new BadRequestException('Esta venta no tiene una caja asociada; solicita a un administrador que la gestione');
+    const caja = await this.prisma.caja.findUnique({ where: { id: pedido.cajaId } });
+    if (!caja || caja.estado !== 'ABIERTA' || caja.usuarioId !== usuarioId) {
+      throw new BadRequestException('Solo puedes modificar ventas de tu turno mientras tu caja esté abierta. Pide a un administrador que la gestione.');
+    }
+  }
+
+  async actualizarPago(id: number, datos: any, usuarioId: number, rol: string, empresaId: number) {
+    const pedido = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } } });
+    if (!pedido) throw new NotFoundException('Pedido no encontrado');
+    if (pedido.estado === 'ANULADO') throw new BadRequestException('Una venta anulada no puede modificarse');
+    await this.verificarPermisoSobreVenta(pedido, usuarioId, rol);
+
+    const { metodoPago, pagos } = this.normalizarPagos(datos, Number(pedido.total));
+    const metodoAnterior = pedido.metodoPago;
+
+    const actualizado = await this.prisma.$transaction(async (db) => {
+      await db.pagoPedido.deleteMany({ where: { pedidoId: id } });
+      return db.pedido.update({
+        where: { id },
+        data: {
+          metodoPago: metodoPago as any,
+          pagos: { create: pagos.map((p) => ({ metodoPago: p.metodoPago as any, monto: p.monto })) },
+        },
+        include: { pagos: true },
+      });
+    });
+
+    if (pedido.cajaId) {
+      await this.prisma.eventoCaja.create({
+        data: {
+          cajaId: pedido.cajaId,
+          tipo: 'EDICION_PAGO',
+          descripcion: `Pago de la venta ${pedido.numero} cambiado de ${metodoAnterior} a ${metodoPago}`,
+          usuarioId,
+        },
+      });
+    }
+
+    this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: actualizado.estado });
+    return actualizado;
+  }
+
+  async anularPedido(id: number, usuarioId: number, rol: string, empresaId: number) {
+    const pedido = await this.prisma.pedido.findFirst({
+      where: { id, sucursal: { empresaId } },
+      include: {
+        detalles: {
+          include: {
+            producto: { include: { ingredientes: { include: { ingrediente: true } } } },
+            adicionales: { include: { adicional: true } },
+          },
+        },
+      },
+    });
+    if (!pedido) throw new NotFoundException('Pedido no encontrado');
+    if (pedido.estado === 'ANULADO') throw new BadRequestException('Esta venta ya está anulada');
+    await this.verificarPermisoSobreVenta(pedido, usuarioId, rol);
+
+    const web = await this.prisma.pedidoWeb.findUnique({ where: { pedidoId: id } });
+    if (web && ['EN_CAMINO', 'ENTREGADO'].includes(web.estado)) {
+      throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de anular.');
+    }
+    if (pedido.puntosGanados || pedido.puntosCanjeados) {
+      throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');
+    }
+
+    await this.prisma.$transaction(async (db) => {
+      for (const detalle of pedido.detalles) {
+        if (detalle.producto.controlaStock) {
+          await db.producto.update({ where: { id: detalle.productoId }, data: { stockActual: { increment: detalle.cantidad } } });
+        }
+        for (const pi of detalle.producto.ingredientes) {
+          const excluido = detalle.exclusiones.includes(pi.ingrediente.nombre);
+          if (!excluido) {
+            const cantidad = this.obtenerCantidadInventario(pi.ingrediente, Number(pi.cantidad)) * detalle.cantidad;
+            await db.ingrediente.update({ where: { id: pi.ingredienteId }, data: { stock: { increment: cantidad } } });
+          }
+        }
+        for (const da of detalle.adicionales) {
+          if (da.adicional.ingredienteId) {
+            const cantidad = Number(da.cantidad) * detalle.cantidad;
+            await db.ingrediente.update({ where: { id: da.adicional.ingredienteId }, data: { stock: { increment: cantidad } } });
+          }
+        }
+      }
+      await db.movimientoFinanciero.deleteMany({ where: { pedidoId: id } });
+      await db.pedido.update({ where: { id }, data: { estado: 'ANULADO' } });
+      if (pedido.cajaId) {
+        await db.eventoCaja.create({
+          data: {
+            cajaId: pedido.cajaId,
+            tipo: 'ANULACION',
+            descripcion: `Venta ${pedido.numero} anulada (total $${Number(pedido.total).toLocaleString('es-CO')})`,
+            usuarioId,
+            esAlerta: true,
+          },
+        });
+      }
+    });
+
+    this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: 'ANULADO' });
+    return { ok: true };
+  }
+
+  async actualizarEstado(id: number, estado: string, empresaId: number, usuarioId: number, rol: string) {
     if (!['PENDIENTE','EN_COCINA','LISTO','ENTREGADO','ANULADO'].includes(estado)) throw new BadRequestException('Estado no válido');
-    const referencia = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } }, select: { sucursalId: true } });
-    if (!referencia) throw new NotFoundException('Pedido no encontrado');
-    const actualizado = await this.prisma.$transaction(async tx => {
-    await bloquearCajaSucursal(tx, referencia.sucursalId);
-    const empresa = await tx.empresa.findUnique({ where: { id: empresaId }, select: { tipoNegocio: true } });
+    if (estado === 'ANULADO') return this.anularPedido(id, usuarioId, rol, empresaId);
+    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { tipoNegocio: true } });
     if (empresa?.tipoNegocio !== 'RESTAURANTE') throw new BadRequestException('Las ventas comerciales requieren un flujo de devoluciones y conciliación para modificarse');
-    const pedido = await tx.pedido.findFirst({
+    const pedido = await this.prisma.pedido.findFirst({
       where: { id, sucursal: { empresaId } },
     });
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
     if (pedido.estado === 'ANULADO') throw new BadRequestException('Un pedido anulado no puede reabrirse');
-    const web = await tx.pedidoWeb.findUnique({ where: { pedidoId: id } });
-    if (web && (['ENTREGADO','ANULADO'].includes(estado) || ['EN_CAMINO','ENTREGADO'].includes(web.estado))) throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de cancelar.');
-    if (estado === 'ANULADO' && (pedido.puntosGanados || pedido.puntosCanjeados)) throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');
-    if (estado === 'ANULADO') {
-      const caja = pedido.cajaId ? await tx.caja.findUnique({ where: { id: pedido.cajaId } }) : null;
-      if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja está cerrada. Esta venta requiere conciliación antes de anular.');
-      const ingreso = await tx.movimientoFinanciero.findFirst({ where: { pedidoId: id, empresaId, tipo: 'INGRESO', categoria: 'VENTA' } });
-      if (!ingreso) throw new BadRequestException('No se encontró el ingreso de la venta. Requiere conciliación.');
-      await tx.movimientoFinanciero.create({ data: {
-        empresaId, sucursalId: pedido.sucursalId, usuarioId: usuarioId ?? pedido.usuarioId,
-        pedidoId: id, tipo: 'EGRESO', categoria: 'VENTA', monto: ingreso.monto,
-        descripcion: `Anulación de venta ${pedido.numero}`,
-      } });
-    }
-    return tx.pedido.update({
+    const web = await this.prisma.pedidoWeb.findUnique({ where: { pedidoId: id } });
+    if (web && (estado === 'ENTREGADO' || ['EN_CAMINO','ENTREGADO'].includes(web.estado))) throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de cancelar.');
+    const actualizado = await this.prisma.pedido.update({
       where: { id },
       data: { estado: estado as any },
-    });
     });
     this.eventos.emitir(empresaId, {
       tipo: 'ACTUALIZADO',

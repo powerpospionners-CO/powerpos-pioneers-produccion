@@ -413,6 +413,7 @@ enum MetodoPago {
   TRANSFERENCIA
   NEQUI
   DAVIPLATA
+  MIXTO
 }
 
 model Cliente {
@@ -462,8 +463,22 @@ model Pedido {
   caja        Caja?                  @relation(fields: [cajaId], references: [id])
   detalles    DetallePedido[]
   movimientos MovimientoFinanciero[]
+  pagos       PagoPedido[]
 
   @@map("pedidos")
+}
+
+model PagoPedido {
+  id         Int        @id @default(autoincrement())
+  pedidoId   Int
+  metodoPago MetodoPago
+  monto      Decimal    @db.Decimal(10, 2)
+  creadoEn   DateTime   @default(now())
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+
+  @@index([pedidoId])
+  @@map("pagos_pedido")
 }
 
 model DetallePedido {
@@ -536,6 +551,8 @@ enum TipoEventoCaja {
   APERTURA_IRREGULAR
   DIFERENCIA
   MOVIMIENTO
+  EDICION_PAGO
+  ANULACION
 }
 
 model EventoCaja {

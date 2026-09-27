@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
-import { ShoppingBag, DollarSign, TrendingUp, Clock } from 'lucide-react';
+import { ShoppingBag, DollarSign, TrendingUp, Clock, Pencil } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import RetailDashboard from './RetailDashboard';
 import { useTema } from '@/components/ThemeProvider';
 import {
@@ -19,6 +20,7 @@ interface Pedido {
   estado: string;
   total: string;
   metodoPago: string;
+  pagos?: { metodoPago: string; monto: string }[];
   creadoEn: string;
   usuario: { nombre: string };
   cliente?: { nombre: string };
@@ -191,6 +193,14 @@ function RestauranteDashboard() {
     const pedidoSeleccionado = pedidos.find((pedido) => pedido.id === id);
     await api.patch(`/pedidos/${id}/estado`, { estado });
     await emitirLlamadoCliente(pedidoSeleccionado, estado);
+    cargarDatos();
+  };
+
+  const [pedidoEditarPago, setPedidoEditarPago] = useState<Pedido | null>(null);
+  const guardarPago = async (pago: PagoConfirmado) => {
+    if (!pedidoEditarPago) return;
+    await api.patch(`/pedidos/${pedidoEditarPago.id}/pago`, pago);
+    setPedidoEditarPago(null);
     cargarDatos();
   };
 
@@ -557,6 +567,11 @@ function RestauranteDashboard() {
                       <span>{pedido.usuario?.nombre}</span>
                       <span>·</span>
                       <span>{pedido.metodoPago}</span>
+                      {pedido.estado !== 'ANULADO' && (
+                        <button type="button" title="Editar medio de pago" onClick={() => setPedidoEditarPago(pedido)} className="text-gray-500 hover:text-orange-400">
+                          <Pencil size={12} />
+                        </button>
+                      )}
                       <span>·</span>
                       <span>{new Date(pedido.creadoEn).toLocaleTimeString()}</span>
                     </div>
@@ -583,6 +598,9 @@ function RestauranteDashboard() {
           )}
         </div>
       </div>
+      {pedidoEditarPago && (
+        <ModalCobro total={Number(pedidoEditarPago.total)} titulo={`Editar pago · ${pedidoEditarPago.numero}`} textoConfirmar="Guardar pago" metodoInicial={pedidoEditarPago.metodoPago} pagosIniciales={pedidoEditarPago.pagos} onConfirmar={guardarPago} onCancelar={() => setPedidoEditarPago(null)} />
+      )}
     </div>
     </AuthGuard>
   );

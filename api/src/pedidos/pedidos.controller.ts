@@ -50,6 +50,12 @@ export class PedidosController {
   @Patch(':id/estado')
   @Roles('COCINERO', 'CAJERO', 'ADMIN_EMPRESA', 'GERENTE', 'DOMICILIARIO')
   actualizarEstado(@Param('id') id: string, @Body() body: { estado: string }, @Request() req: any) {
-    return this.pedidosService.actualizarEstado(+id, body.estado, req.user.empresaId, req.user.id);
+    return this.pedidosService.actualizarEstado(+id, body.estado, req.user.empresaId, req.user.id, req.user.rol);
+  }
+
+  @Patch(':id/pago')
+  @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
+  actualizarPago(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.pedidosService.actualizarPago(+id, body, req.user.id, req.user.rol, req.user.empresaId);
   }
 }

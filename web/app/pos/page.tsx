@@ -6,6 +6,9 @@ import api from '@/lib/api';
 import { ShoppingCart, Plus, Minus, Trash2, User, X, Search, Keyboard, LayoutGrid, ChevronDown } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import CajaControl from '@/components/CajaControl';
+import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
+import VentasTurno from '@/components/VentasTurno';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import RetailPOS from './RetailPOS';
 
@@ -62,7 +65,7 @@ function RestaurantePOS() {
   const [adicionalesTemp, setAdicionalesTemp] = useState<AdicionalSeleccionado[]>([]);
   const [observacionTemp, setObservacionTemp] = useState('');
   const [cantidadTemp, setCantidadTemp] = useState(1);
-  const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+  const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pedidoExitoso, setPedidoExitoso] = useState<string | null>(null);
   const [alertDialog, setAlertDialog] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
@@ -116,17 +119,18 @@ function RestaurantePOS() {
     setMounted(true);
   }, []);
 
+  const cargarCaja = async () => {
+    try {
+      const { data } = await api.get('/caja/abierta');
+      setCajaAbierta(data);
+    } catch {
+      setCajaAbierta(null);
+    }
+  };
+
   useEffect(() => {
     if (!mounted) return;
     cargarDatos();
-    const cargarCaja = async () => {
-      try {
-        const { data } = await api.get('/caja/abierta');
-        setCajaAbierta(data);
-      } catch {
-        setCajaAbierta(null);
-      }
-    };
     void cargarCaja();
   }, [mounted]);
 
@@ -527,7 +531,9 @@ function RestaurantePOS() {
           </div>
         </div>
 
-        <div class="metodo-pago">✓ Pago en ${pedido.metodoPago}</div>
+        ${Array.isArray(pedido.pagos) && pedido.pagos.length > 1
+          ? pedido.pagos.map((p: any) => `<div class="metodo-pago">✓ ${p.metodoPago}: $${Number(p.monto).toLocaleString()}</div>`).join('')
+          : `<div class="metodo-pago">✓ Pago en ${pedido.metodoPago}</div>`}
 
         ${pedido.cliente ? `
           <div class="observacion-pedido">
@@ -768,12 +774,12 @@ function RestaurantePOS() {
     }));
   };
 
-  const confirmarPedido = async () => {
+  const confirmarPedido = async (pago: PagoConfirmado) => {
     if (!cajaAbierta) {
       setAlertDialog({
         open: true,
         title: 'Caja cerrada',
-        message: 'No se puede vender hasta que el administrador abra la caja del día. Solicita la apertura antes de registrar pedidos.',
+        message: 'No se puede vender hasta que se abra la caja del día. Ábrela desde el botón de "Abrir caja" antes de registrar pedidos.',
       });
       return;
     }
@@ -790,7 +796,8 @@ function RestaurantePOS() {
     try {
       const { data } = await api.post('/pedidos', {
         sucursalId: usuario?.sucursalId || 1,
-        metodoPago,
+        metodoPago: pago.metodoPago,
+        pagos: pago.pagos,
         clienteId: clienteSeleccionado?.id || null,
         puntosCanjeados: canjeAplicado,
         items: carrito.map((item) => ({
@@ -801,6 +808,7 @@ function RestaurantePOS() {
           observacion: item.observacion,
         })),
       });
+      setModalCobroAbierto(false);
       setPedidoExitoso(data.numero);
       setUltimoPedido(data.numero);
       setCarrito([]);
@@ -833,7 +841,7 @@ function RestaurantePOS() {
           }
         }
       }
-      if (metodoPago === 'EFECTIVO') {
+      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) {
         api.post('/impresion/abrir-cajon').catch(() => undefined);
       }
 
@@ -847,6 +855,7 @@ function RestaurantePOS() {
       }
 
       setTimeout(() => setPedidoExitoso(null), 4000);
+      void cargarCaja();
     } catch (e) {
       setAlertDialog({
         open: true,
@@ -901,11 +910,7 @@ function RestaurantePOS() {
           </div>
         )}
 
-        {!cajaAbierta && (
-          <div className="border-b border-red-500/30 bg-red-500/10 text-red-200 px-4 py-3 text-center text-sm font-medium">
-            La caja de la sucursal está cerrada. Solo el administrador puede abrirla para poder vender.
-          </div>
-        )}
+        <CajaControl caja={cajaAbierta} cajaBloqueadaPorUsuario={cajaBloqueadaPorUsuario} onCambio={cargarCaja} />
 
         {cajaBloqueadaPorUsuario && (
           <div className="border-b border-red-500/30 bg-red-500/10 text-red-200 px-4 py-3 text-center text-sm font-medium">
@@ -1111,23 +1116,12 @@ function RestaurantePOS() {
                 <span>Total</span>
                 <span className="text-orange-500">${total.toLocaleString()}</span>
               </div>
-              <select
-                value={metodoPago}
-                onChange={(e) => setMetodoPago(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
-              >
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="TARJETA">Tarjeta</option>
-                <option value="NEQUI">Nequi</option>
-                <option value="DAVIPLATA">Daviplata</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-              </select>
               <button
-                onClick={confirmarPedido}
+                onClick={() => setModalCobroAbierto(true)}
                 disabled={carrito.length === 0 || loading || !cajaAbierta || cajaBloqueadaPorUsuario}
                 className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/30 text-white font-bold rounded-lg py-3 transition-colors"
               >
-                {loading ? 'Procesando...' : 'Confirmar pedido'}
+                {loading ? 'Procesando...' : 'Cobrar'}
               </button>
               <button
                 onClick={() => window.open('/cliente', 'powerpos-pantalla-cliente', 'width=1280,height=800')}
@@ -1296,6 +1290,12 @@ function RestaurantePOS() {
             onChange={setObservacionTemp}
             onClose={() => setTecladoObservacionVisible(false)}
           />
+        )}
+
+        <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
+
+        {modalCobroAbierto && (
+          <ModalCobro total={total} procesando={loading} onConfirmar={confirmarPedido} onCancelar={() => setModalCobroAbierto(false)} />
         )}
       </div>
     </AuthGuard>
