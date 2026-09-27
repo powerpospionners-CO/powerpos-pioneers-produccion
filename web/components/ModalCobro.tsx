@@ -85,7 +85,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-5">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-3 sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold text-white">{titulo}</h3>
