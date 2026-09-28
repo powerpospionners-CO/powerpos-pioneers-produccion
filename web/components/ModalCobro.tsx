@@ -1,15 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, Banknote, CreditCard, ArrowLeftRight, Smartphone } from 'lucide-react';
 import CalculadoraBilletes from './CalculadoraBilletes';
 
 const METODOS = [
-  { value: 'EFECTIVO', label: 'Efectivo' },
-  { value: 'TARJETA', label: 'Tarjeta' },
-  { value: 'TRANSFERENCIA', label: 'Transferencia' },
-  { value: 'NEQUI', label: 'Nequi' },
-  { value: 'DAVIPLATA', label: 'Daviplata' },
+  { value: 'EFECTIVO', label: 'Efectivo', icono: Banknote },
+  { value: 'TARJETA', label: 'Tarjeta', icono: CreditCard },
+  { value: 'TRANSFERENCIA', label: 'Transferencia', icono: ArrowLeftRight },
+  { value: 'NEQUI', label: 'Nequi', icono: Smartphone },
+  { value: 'DAVIPLATA', label: 'Daviplata', icono: Smartphone },
 ];
 
 const moneda = (n: number) => n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -85,17 +85,18 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-3 sm:p-5">
+      <div role="dialog" aria-modal="true" aria-label={titulo} className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-3 sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold text-white">{titulo}</h3>
             <p className="text-sm text-gray-400">Total a pagar: <span className="font-bold text-orange-500">{moneda(total)}</span></p>
           </div>
-          <button type="button" onClick={onCancelar} className="text-gray-500 hover:text-white"><X size={20} /></button>
+          <button type="button" aria-label="Cerrar cobro" disabled={procesando} onClick={onCancelar} className="flex h-11 w-11 items-center justify-center text-gray-500 hover:text-white"><X size={20} /></button>
         </div>
 
         <button
           type="button"
+          disabled={procesando}
           onClick={() => setMixto((v) => !v)}
           className={`mb-4 w-full rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${mixto ? 'border-orange-500/50 bg-orange-500/10 text-orange-400' : 'border-gray-700 text-gray-300 hover:border-gray-600'}`}
         >
@@ -103,16 +104,31 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
         </button>
 
         {!mixto ? (
-          <div className="space-y-3">
-            <label className="block text-sm text-gray-400">
-              Medio de pago
-              <select value={metodoUnico} onChange={(e) => { setMetodoUnico(e.target.value); setRecibidoUnico(0); }} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white">
-                {METODOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </label>
-            {metodoUnico === 'EFECTIVO' && (
-              <CalculadoraBilletes key="unico" objetivo={total} onCambiar={setRecibidoUnico} />
-            )}
+          <div className="grid gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
+            <div>
+              <p className="mb-2 text-sm font-semibold text-gray-300">¿Cómo va a pagar?</p>
+              <div role="group" aria-label="Medio de pago" className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-1">
+                {METODOS.map((m) => (
+                  <button key={m.value} type="button" aria-pressed={metodoUnico === m.value} disabled={procesando}
+                    onClick={() => { if (metodoUnico !== m.value) { setMetodoUnico(m.value); setRecibidoUnico(0); } }}
+                    className={`flex min-h-14 touch-manipulation items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-orange-400 ${metodoUnico === m.value ? 'border-orange-500 bg-orange-500/15 text-orange-300' : 'border-gray-700 bg-gray-800 text-gray-200 hover:border-gray-500'}`}>
+                    <m.icono size={22} className="shrink-0" />{m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="min-w-0">
+              {metodoUnico === 'EFECTIVO' ? (
+                <CalculadoraBilletes key="unico" objetivo={total} onCambiar={setRecibidoUnico} />
+              ) : (
+                <div className="rounded-xl border border-gray-700 bg-gray-950 p-6">
+                  <p className="text-lg font-semibold text-white">Pago con {METODOS.find((m) => m.value === metodoUnico)?.label}</p>
+                  <p className="mt-4 text-sm text-gray-400">Total a cobrar</p>
+                  <p className="mt-1 text-3xl font-bold text-orange-400">{moneda(total)}</p>
+                  <p className="mt-5 text-sm text-gray-300">Verifica que hayas recibido el pago antes de confirmar el cobro.</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -154,7 +170,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
         )}
 
         <div className="mt-5 flex gap-3">
-          <button type="button" onClick={onCancelar} className="flex-1 rounded-lg bg-gray-800 py-3 text-white hover:bg-gray-700">Cancelar</button>
+          <button type="button" disabled={procesando} onClick={onCancelar} className="flex-1 rounded-lg bg-gray-800 py-3 text-white hover:bg-gray-700">Cancelar</button>
           <button type="button" onClick={confirmar} disabled={!puedeConfirmar} className="flex-1 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-40">
             {procesando ? 'Guardando…' : textoConfirmar}
           </button>
