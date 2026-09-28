@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Ban, Pencil, Receipt } from 'lucide-react';
 import api from '@/lib/api';
+import { moneda } from '@/lib/formato';
 import ModalCobro, { PagoConfirmado } from './ModalCobro';
-
-const moneda = (n: number) => n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 type Venta = {
   id: number; numero: string; total: string; metodoPago: string; estado: string; creadoEn: string;
@@ -20,9 +19,10 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
   const [error, setError] = useState('');
 
   const cargar = async () => {
+    if (!cajaId) { setVentas([]); return; }
     try {
-      const { data } = await api.get('/pedidos', { params: sucursalId ? { sucursalId } : undefined });
-      setVentas(cajaId ? data.filter((v: any) => v.cajaId === cajaId) : []);
+      const { data } = await api.get('/pedidos', { params: { cajaId, ...(sucursalId ? { sucursalId } : {}) } });
+      setVentas(data);
     } catch { /* silencioso: panel informativo */ }
   };
 

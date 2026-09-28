@@ -9,3 +9,5 @@ powerpos-data/
 *.log
 backups/*.dump
 api/agente-impresion/config.json
+*_resp.html
+*_resp_test.html

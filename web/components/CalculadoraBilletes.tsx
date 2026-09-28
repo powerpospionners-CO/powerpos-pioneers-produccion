@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import { moneda } from '@/lib/formato';
 
 const DENOMINACIONES = [
   { valor: 100000, tipo: 'billete' },
@@ -16,8 +16,6 @@ const DENOMINACIONES = [
   { valor: 100, tipo: 'moneda' },
 ] as const;
 
-const moneda = (n: number) => n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
-
 export default function CalculadoraBilletes({ objetivo, onCambiar }: { objetivo: number; onCambiar?: (recibido: number) => void }) {
   const [conteo, setConteo] = useState<Record<number, number>>({});
   const recibido = DENOMINACIONES.reduce((acc, d) => acc + (conteo[d.valor] || 0) * d.valor, 0);
@@ -31,35 +29,22 @@ export default function CalculadoraBilletes({ objetivo, onCambiar }: { objetivo:
     <div className="rounded-xl border border-gray-800 bg-gray-950 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-300">Billetes y monedas recibidos</span>
-        <button type="button" onClick={() => setConteo({})} className="min-h-11 px-3 text-sm text-gray-400 hover:text-white touch-manipulation">Limpiar</button>
+        <button type="button" onClick={() => setConteo({})} className="text-xs text-gray-500 hover:text-white">Limpiar</button>
       </div>
-      <p className="mb-3 text-xs text-gray-400">Toca un billete o una moneda para agregarlo.</p>
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))' }}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {DENOMINACIONES.map((d) => (
-          <div key={d.valor} className={`rounded-xl border p-2 text-center transition-colors ${conteo[d.valor] ? 'border-orange-500/70 bg-orange-500/10' : 'border-gray-800 bg-gray-900'}`}>
+          <div key={d.valor} className="rounded-lg border border-gray-800 bg-gray-900 p-2 text-center">
             <button
               type="button"
               onClick={() => sumar(d.valor, 1)}
-              aria-label={`Agregar ${d.tipo} de ${moneda(d.valor)}`}
-              className="group w-full touch-manipulation select-none rounded-lg p-1 text-sm font-bold text-white transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400"
+              className={`w-full rounded-lg py-2 text-xs font-bold transition-colors ${d.tipo === 'billete' ? 'border border-green-700/40 bg-green-900/30 text-green-300 hover:bg-green-900/50' : 'border border-yellow-700/40 bg-yellow-900/30 text-yellow-300 hover:bg-yellow-900/50'}`}
             >
-              <span className="relative mb-2 flex h-24 items-center justify-center sm:h-28">
-                <Image
-                  src={`/efectivo/${d.tipo}-${d.valor}.${[50000, 20000, 5000].includes(d.valor) ? 'png' : 'jpg'}`}
-                  alt={`${d.tipo === 'billete' ? 'Billete colombiano' : 'Moneda colombiana'} de ${moneda(d.valor)}`}
-                  width={d.tipo === 'billete' ? 480 : 235}
-                  height={d.tipo === 'billete' ? 210 : 235}
-                  unoptimized
-                  draggable={false}
-                  className={d.tipo === 'billete' ? 'max-h-full w-full rounded object-contain drop-shadow-md' : 'h-24 w-24 rounded-full object-contain shadow-md'}
-                />
-              </span>
-              {moneda(d.valor)}
+              {d.tipo === 'billete' ? '💵' : '🪙'} {moneda(d.valor)}
             </button>
             <div className="mt-1 flex items-center justify-center gap-2">
-              <button type="button" aria-label={`Quitar ${moneda(d.valor)}`} disabled={!conteo[d.valor]} onClick={() => sumar(d.valor, -1)} className="h-11 w-11 shrink-0 touch-manipulation rounded-lg bg-gray-800 text-xl text-gray-300 hover:text-white active:bg-gray-700 disabled:opacity-30">−</button>
-              <span aria-label={`Cantidad de ${moneda(d.valor)}`} className="min-w-5 text-center text-base font-semibold tabular-nums text-white">{conteo[d.valor] || 0}</span>
-              <button type="button" aria-label={`Agregar ${moneda(d.valor)}`} onClick={() => sumar(d.valor, 1)} className="h-11 w-11 shrink-0 touch-manipulation rounded-lg bg-gray-800 text-xl text-gray-300 hover:text-white active:bg-gray-700">+</button>
+              <button type="button" aria-label={`Quitar ${moneda(d.valor)}`} onClick={() => sumar(d.valor, -1)} className="rounded bg-gray-800 px-2 py-0.5 text-gray-300 hover:text-white">−</button>
+              <span className="w-5 text-center text-sm text-white">{conteo[d.valor] || 0}</span>
+              <button type="button" aria-label={`Agregar ${moneda(d.valor)}`} onClick={() => sumar(d.valor, 1)} className="rounded bg-gray-800 px-2 py-0.5 text-gray-300 hover:text-white">+</button>
             </div>
           </div>
         ))}

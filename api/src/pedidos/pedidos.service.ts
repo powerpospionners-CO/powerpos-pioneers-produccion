@@ -398,11 +398,12 @@ export class PedidosService {
     }
   }
 
-  async listarPedidos(empresaId: number, sucursalId?: number) {
+  async listarPedidos(empresaId: number, sucursalId?: number, cajaId?: number) {
     return this.prisma.pedido.findMany({
       where: {
         sucursal: { empresaId },
         ...(sucursalId && { sucursalId }),
+        ...(cajaId && { cajaId }),
       },
       include: {
         detalles: {
@@ -416,7 +417,10 @@ export class PedidosService {
         cliente: { select: { nombre: true, telefono: true } },
       },
       orderBy: { creadoEn: 'desc' },
-      take: 50,
+      // Sin filtro por caja el límite evita listas enormes; filtrando por una
+      // sola caja (el turno actual) todas sus ventas deben verse, así no se
+      // "pierdan" ventas viejas del turno cuando la sucursal ya tiene +50.
+      take: cajaId ? undefined : 50,
     });
   }
 
@@ -508,8 +512,8 @@ export class PedidosService {
     await this.verificarPermisoSobreVenta(pedido, usuarioId, rol);
 
     const web = await this.prisma.pedidoWeb.findUnique({ where: { pedidoId: id } });
-    if (web && ['EN_CAMINO', 'ENTREGADO'].includes(web.estado)) {
-      throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de anular.');
+    if (web) {
+      throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas de domicilio requieren conciliación antes de anular.');
     }
     if (pedido.puntosGanados || pedido.puntosCanjeados) {
       throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');

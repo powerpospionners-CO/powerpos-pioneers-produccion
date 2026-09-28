@@ -61,10 +61,23 @@ export class FinancieroService {
       if (fechaDesde) where.creadoEn.gte = new Date(fechaDesde);
       if (fechaHasta) where.creadoEn.lte = new Date(fechaHasta);
     }
-    const pedidos = await this.prisma.pedido.findMany({ where, select: { total: true, metodoPago: true } });
+    const pedidos = await this.prisma.pedido.findMany({
+      where,
+      select: { total: true, metodoPago: true, pagos: { select: { metodoPago: true, monto: true } } },
+    });
+    // Una venta con pago mixto (metodoPago = 'MIXTO') no debe sumarse como un
+    // solo bloque: se reparte entre sus medios reales (tabla `pagos`) para que
+    // el desglose coincida con el de Caja. Las ventas anteriores a los pagos
+    // mixtos no tienen filas en `pagos`, así que usan `metodoPago` de respaldo.
     const mapa = new Map<string, number>();
     for (const p of pedidos) {
-      mapa.set(p.metodoPago, (mapa.get(p.metodoPago) || 0) + Number(p.total));
+      if (p.pagos.length > 0) {
+        for (const pago of p.pagos) {
+          mapa.set(pago.metodoPago, (mapa.get(pago.metodoPago) || 0) + Number(pago.monto));
+        }
+      } else {
+        mapa.set(p.metodoPago, (mapa.get(p.metodoPago) || 0) + Number(p.total));
+      }
     }
     return {
       ventasPorMetodoPago: Array.from(mapa.entries()).map(([metodo, total]) => ({ metodo, total })),

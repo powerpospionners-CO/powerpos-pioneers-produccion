@@ -6,13 +6,13 @@ import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
+import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
 
 type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalEsperado?: number };
 type Producto = { id: number; nombre: string; codigoBarras?: string; controlaStock: boolean; stockActual: number; stockMinimo: number };
 type Venta = { id: number; numero: string; total: string; metodoPago: string; creadoEn: string; estado: string; pagos?: { metodoPago: string; monto: string }[] };
 type Cajero = { id: number; nombre: string; rol: string };
-const moneda = (n: number) => n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
 export default function RetailDashboard() {
   const usuario = useAuthStore((s) => s.usuario);
