@@ -205,25 +205,29 @@ export default function RetailPOS() {
       await cargar();
       try {
         const impresion = await api.post('/impresion/ticket', data);
-        if (!impresion.data?.impreso) setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`);
+        if (!impresion.data?.impreso) {
+          if (impresion.data?.fallbackBrowser) await imprimirRecibo(data);
+          else setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`);
+        }
         if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) void api.post('/impresion/abrir-cajon').catch(() => undefined);
-      } catch { setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`); }
+      } catch { await imprimirRecibo(data); }
       if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
     } catch (e: any) {
       setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
     } finally { setProcesando(false); buscarRef.current?.focus(); }
   };
 
-  const imprimirRecibo = () => {
-    if (!ultimoRecibo) return;
+  const imprimirRecibo = (recibo?: any) => {
+    const pedido = recibo || ultimoRecibo;
+    if (!pedido) return;
     const ventana = window.open('', '_blank', 'width=420,height=700');
     if (!ventana) { setError('El navegador bloqueó la ventana del recibo. Permite ventanas emergentes para imprimir.'); return; }
-    const pagos = Array.isArray(ultimoRecibo.pagos) && ultimoRecibo.pagos.length > 1
-      ? ultimoRecibo.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
-      : [`PAGO  ${ultimoRecibo.metodoPago}`];
-    const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${ultimoRecibo.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
-      ...(ultimoRecibo.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
-      '--------------------------------', `TOTAL  ${moneda(Number(ultimoRecibo.total))}`, ...pagos, 'Gracias por su compra'];
+    const pagos = Array.isArray(pedido.pagos) && pedido.pagos.length > 1
+      ? pedido.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
+      : [`PAGO  ${pedido.metodoPago}`];
+    const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${pedido.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
+      ...(pedido.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
+      '--------------------------------', `TOTAL  ${moneda(Number(pedido.total))}`, ...pagos, 'Gracias por su compra'];
     const pre = ventana.document.createElement('pre');
     pre.style.cssText = 'font:14px/1.5 monospace;white-space:pre-wrap;padding:20px;';
     pre.textContent = lineas.join('\n');
@@ -240,7 +244,7 @@ export default function RetailPOS() {
         <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Escanea el código de barras para agregar de una, o escribe el nombre y selecciona el producto.</p></div>
       </div>
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
-      {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={imprimirRecibo} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
+      {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={() => imprimirRecibo()} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div className="lg:col-span-2"><VentasPendientes
           clave={usuario ? `pos-pendientes:comercio:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
