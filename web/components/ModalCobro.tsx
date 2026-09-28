@@ -22,7 +22,7 @@ function MarcaPago({ metodo, grande = false }: { metodo: string; grande?: boolea
   </span>;
 }
 
-export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[] };
+export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number };
 
 type Linea = { metodoPago: string; monto: string };
 
@@ -85,12 +85,14 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
   const confirmar = () => {
     if (!puedeConfirmar) return;
     if (!mixto) {
-      onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }] });
+      const cambio = metodoUnico === 'EFECTIVO' ? Math.max(0, recibidoUnico - total) : 0;
+      onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }], cambio });
       return;
     }
     const pagos = lineas.map((l) => ({ metodoPago: l.metodoPago, monto: Math.round((Number(l.monto) || 0) * 100) / 100 }));
     const metodoPago = pagos.length > 1 ? 'MIXTO' : pagos[0].metodoPago;
-    onConfirmar({ metodoPago, pagos });
+    const cambio = indiceEfectivoMixto >= 0 ? Math.max(0, recibidoMixtoEfectivo - montoEfectivoMixto) : 0;
+    onConfirmar({ metodoPago, pagos, cambio });
   };
 
   return (

@@ -43,6 +43,7 @@ export default function RetailPOS() {
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [ultimoRecibo, setUltimoRecibo] = useState<any>(null);
+  const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
   const buscarRef = useRef<HTMLInputElement>(null);
   const solicitudProductos = useRef(0);
   const cargarProductos = useCallback(async (signal?: AbortSignal) => {
@@ -159,6 +160,24 @@ export default function RetailPOS() {
     if (cambio > 0) { agregar(item); return; }
     setCarrito((actual) => actual.map((linea) => linea.item.key === item.key ? { ...linea, cantidad: linea.cantidad - 1 } : linea).filter((linea) => linea.cantidad > 0));
   };
+  // Permite digitar la cantidad directamente (ej. venden 500 unidades) en
+  // vez de dar clic al + esa cantidad de veces.
+  const establecerCantidad = (item: ItemVendible, valor: string) => {
+    const cantidad = Math.floor(Number(valor));
+    if (!Number.isFinite(cantidad) || cantidad < 1) return;
+    const productoActual = productos.find((p) => p.id === item.productoId);
+    if (item.controlaStock && productoActual) {
+      const otrasLineas = carrito.filter((l) => l.item.productoId === item.productoId && l.item.key !== item.key).reduce((s, l) => s + l.cantidad * l.item.factorUnidades, 0);
+      const maxCantidad = Math.floor((productoActual.stockActual - otrasLineas) / item.factorUnidades);
+      if (cantidad > maxCantidad) {
+        setError(`Solo hay ${Math.max(0, maxCantidad)} disponibles de ${item.nombre}.`);
+        setCarrito((actual) => actual.map((linea) => linea.item.key === item.key ? { ...linea, cantidad: Math.max(1, maxCantidad) } : linea));
+        return;
+      }
+    }
+    setError('');
+    setCarrito((actual) => actual.map((linea) => linea.item.key === item.key ? { ...linea, cantidad } : linea));
+  };
   const escanear = (event: React.FormEvent) => {
     event.preventDefault();
     const codigo = busqueda.trim();
@@ -189,6 +208,7 @@ export default function RetailPOS() {
         if (!impresion.data?.impreso) setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`);
         if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) void api.post('/impresion/abrir-cajon').catch(() => undefined);
       } catch { setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`); }
+      if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
     } catch (e: any) {
       setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
     } finally { setProcesando(false); buscarRef.current?.focus(); }
@@ -264,7 +284,15 @@ export default function RetailPOS() {
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <button aria-label={`Reducir ${item.nombre}`} onClick={() => cambiarCantidad(item, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button>
-                      <span className="w-7 text-center">{cantidad}</span>
+                      <input
+                        aria-label={`Cantidad de ${item.nombre}`}
+                        type="number"
+                        min={1}
+                        value={cantidad}
+                        onChange={(e) => establecerCantidad(item, e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        className="w-14 rounded bg-gray-900 border border-gray-700 py-1 text-center text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
                       <button aria-label={`Aumentar ${item.nombre}`} onClick={() => cambiarCantidad(item, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button>
                     </div>
                     <strong>{moneda(item.precio * cantidad)}</strong>
@@ -283,6 +311,15 @@ export default function RetailPOS() {
     <VentasTurno cajaId={caja?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaDeOtro} />
     {modalCobroAbierto && (
       <ModalCobro total={total} procesando={procesando} onConfirmar={vender} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+    )}
+    {cambioAMostrar !== null && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+        <div role="alertdialog" aria-modal="true" aria-label="Cambio a devolver" className="w-full max-w-sm rounded-2xl border border-green-500/30 bg-gray-900 p-6 text-center shadow-2xl">
+          <p className="text-sm uppercase tracking-widest text-gray-400">Devuelve al cliente</p>
+          <p className="mt-2 text-5xl font-bold tabular-nums text-green-400">{moneda(cambioAMostrar)}</p>
+          <button type="button" autoFocus onClick={() => { setCambioAMostrar(null); buscarRef.current?.focus(); }} className="mt-6 w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600">Listo</button>
+        </div>
+      </div>
     )}
   </main></AuthGuard>;
 }

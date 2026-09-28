@@ -67,6 +67,7 @@ function RestaurantePOS() {
   const [observacionTemp, setObservacionTemp] = useState('');
   const [cantidadTemp, setCantidadTemp] = useState(1);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
+  const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [pedidoExitoso, setPedidoExitoso] = useState<string | null>(null);
   const [alertDialog, setAlertDialog] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
@@ -729,6 +730,13 @@ function RestaurantePOS() {
     setCantidadTemp(1);
   };
 
+  // Permite digitar la cantidad directamente (ej. un pedido grande de 50
+  // porciones) en vez de dar clic al + esa cantidad de veces.
+  const establecerCantidad = (index: number, valor: string) => {
+    const cantidad = Math.floor(Number(valor));
+    if (!Number.isFinite(cantidad) || cantidad < 1) return;
+    setCarrito((prev) => prev.map((linea, i) => (i === index ? { ...linea, cantidad } : linea)));
+  };
   const cambiarCantidad = (index: number, delta: number) => {
     setCarrito((prev) => {
       const nuevo = [...prev];
@@ -858,6 +866,7 @@ function RestaurantePOS() {
 
       setTimeout(() => setPedidoExitoso(null), 4000);
       void cargarCaja();
+      if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
     } catch (e) {
       setAlertDialog({
         open: true,
@@ -1109,7 +1118,15 @@ function RestaurantePOS() {
                     <button onClick={() => cambiarCantidad(index, -1)} className="bg-gray-700 hover:bg-gray-600 text-white rounded w-6 h-6 flex items-center justify-center transition-colors">
                       <Minus size={12} />
                     </button>
-                    <span className="text-white text-sm font-medium">{item.cantidad}</span>
+                    <input
+                      aria-label={`Cantidad de ${item.producto.nombre}`}
+                      type="number"
+                      min={1}
+                      value={item.cantidad}
+                      onChange={(e) => establecerCantidad(index, e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-12 rounded bg-gray-900 border border-gray-700 py-0.5 text-center text-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
                     <button onClick={() => cambiarCantidad(index, 1)} className="bg-gray-700 hover:bg-gray-600 text-white rounded w-6 h-6 flex items-center justify-center transition-colors">
                       <Plus size={12} />
                     </button>
@@ -1309,6 +1326,15 @@ function RestaurantePOS() {
 
         {modalCobroAbierto && (
           <ModalCobro total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+        )}
+        {cambioAMostrar !== null && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+            <div role="alertdialog" aria-modal="true" aria-label="Cambio a devolver" className="w-full max-w-sm rounded-2xl border border-green-500/30 bg-gray-900 p-6 text-center shadow-2xl">
+              <p className="text-sm uppercase tracking-widest text-gray-400">Devuelve al cliente</p>
+              <p className="mt-2 text-5xl font-bold tabular-nums text-green-400">${cambioAMostrar.toLocaleString('es-CO')}</p>
+              <button type="button" autoFocus onClick={() => setCambioAMostrar(null)} className="mt-6 w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600">Listo</button>
+            </div>
+          </div>
         )}
       </div>
     </AuthGuard>
