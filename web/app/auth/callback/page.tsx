@@ -6,6 +6,14 @@ import { useAuthStore } from '@/store/authStore';
 // Recibe la sesión cuando el login (genérico, en app.tudominio.com u otro
 // subdominio) redirige a la empresa a su propio subdominio de marca.
 // El token viaja una sola vez por la URL y se limpia de inmediato.
+//
+// Esta página NUNCA debe quedar en caché: cada visita trae un token distinto
+// (uno por cada inicio de sesión). Cachearla sirve un token viejo o, tras un
+// despliegue nuevo, referencias a archivos JS de una versión ya eliminada
+// (pantalla de carga trabada, error 403 en los chunks).
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function AuthCallbackPage() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
