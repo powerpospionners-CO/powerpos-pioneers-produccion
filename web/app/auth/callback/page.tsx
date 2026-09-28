@@ -1,48 +1,21 @@
-'use client';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/authStore';
+import AuthCallbackClient from './AuthCallbackClient';
 
 // Recibe la sesión cuando el login (genérico, en app.tudominio.com u otro
 // subdominio) redirige a la empresa a su propio subdominio de marca.
 // El token viaja una sola vez por la URL y se limpia de inmediato.
 //
 // Esta página NUNCA debe quedar en caché: cada visita trae un token distinto
-// (uno por cada inicio de sesión). Cachearla sirve un token viejo o, tras un
-// despliegue nuevo, referencias a archivos JS de una versión ya eliminada
-// (pantalla de carga trabada, error 403 en los chunks).
+// (uno por cada inicio de sesión). `force-dynamic` no bastaba porque el
+// contenido es 100% de cliente (sin datos de servidor), así que Next.js la
+// seguía generando como página estática; leer `searchParams` aquí obliga a
+// que cada visita se resuelva en el servidor, sin caché.
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-export default function AuthCallbackPage() {
-  const router = useRouter();
-  const { setAuth } = useAuthStore();
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const datosUsuario = params.get('u');
-    const siguiente = params.get('next') || '/dashboard';
-
-    if (!token || !datosUsuario) {
-      router.replace('/login');
-      return;
-    }
-
-    try {
-      const usuario = JSON.parse(atob(decodeURIComponent(datosUsuario)));
-      setAuth(token, usuario);
-      router.replace(siguiente);
-    } catch {
-      router.replace('/login');
-    }
-  }, [router, setAuth]);
-
-  return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="text-orange-500 text-xl font-bold animate-pulse">
-        Power<span className="text-white">POS</span>
-      </div>
-    </div>
-  );
+export default async function AuthCallbackPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  await searchParams;
+  return <AuthCallbackClient />;
 }
