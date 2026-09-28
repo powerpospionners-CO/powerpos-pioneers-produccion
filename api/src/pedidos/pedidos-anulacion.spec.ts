@@ -25,9 +25,11 @@ function escenario() {
     pedidoWeb: { findUnique: jest.fn().mockResolvedValue(null) },
     caja: { findUnique: jest.fn().mockResolvedValue({ estado: 'ABIERTA' }) },
     movimientoFinanciero: {
-      findFirst: jest.fn().mockResolvedValue({ monto: 20000 }),
+      findFirst: jest.fn().mockImplementation(async ({ where }: any) =>
+        where.categoria === 'VENTA' ? { monto: 20000 } : null),
       create: jest.fn().mockResolvedValue({}),
     },
+    eventoCaja: { create: jest.fn().mockResolvedValue({}) },
   };
   db.$transaction = jest.fn(async (fn) => fn(db));
   const eventos = { emitir: jest.fn() };

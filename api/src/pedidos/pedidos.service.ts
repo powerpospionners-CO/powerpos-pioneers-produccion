@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { PedidosEventosService } from './pedidos-eventos.service';
+import { bloquearCajaSucursal } from '../caja/caja-lock';
 
 const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
@@ -77,6 +78,7 @@ export class PedidosService {
     if (!empresa) throw new NotFoundException('Empresa no disponible');
     const esRestaurante = empresa.tipoNegocio === 'RESTAURANTE';
     const reglas = puntosConfig(empresa.fidelizacionConfig);
+    await bloquearCajaSucursal(db, sucursalId);
     const cajaAbierta = await db.caja.findFirst({
       where: { sucursalId, sucursal: { empresaId }, estado: 'ABIERTA' },
       include: { usuario: { select: { id: true, nombre: true } } },
@@ -115,7 +117,7 @@ export class PedidosService {
     }
     if (cajaId) {
       const caja = await db.caja.findFirst({
-        where: { id: cajaId, sucursalId, usuarioId },
+        where: { id: Number(cajaId), sucursalId, ...(esSupervisor ? {} : { usuarioId }) },
       });
       if (!caja)
         throw new NotFoundException('Caja no encontrada para este usuario');
@@ -446,24 +448,16 @@ export class PedidosService {
     return pedido;
   }
 
-  // Un cajero solo puede editar/anular ventas de su propio turno mientras la
-  // caja de esa venta siga abierta; un administrador o gerente puede hacerlo
-  // siempre. Esto evita que se toquen ventas ya conciliadas por otro turno.
-  private async verificarPermisoSobreVenta(pedido: { cajaId: number | null }, usuarioId: number, rol: string) {
-    const esSupervisor = rol === 'ADMIN_EMPRESA' || rol === 'GERENTE';
-    if (esSupervisor) return;
-    if (!pedido.cajaId) throw new BadRequestException('Esta venta no tiene una caja asociada; solicita a un administrador que la gestione');
-    const caja = await this.prisma.caja.findUnique({ where: { id: pedido.cajaId } });
-    if (!caja || caja.estado !== 'ABIERTA' || caja.usuarioId !== usuarioId) {
-      throw new BadRequestException('Solo puedes modificar ventas de tu turno mientras tu caja esté abierta. Pide a un administrador que la gestione.');
-    }
-  }
-
-  async actualizarPago(id: number, datos: any, usuarioId: number, rol: string, empresaId: number) {
+  async actualizarPago(id: number, datos: any, usuarioId: number, empresaId: number) {
     const pedido = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } } });
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
     if (pedido.estado === 'ANULADO') throw new BadRequestException('Una venta anulada no puede modificarse');
-    await this.verificarPermisoSobreVenta(pedido, usuarioId, rol);
+    if (pedido.cajaId) {
+      const caja = await this.prisma.caja.findUnique({ where: { id: pedido.cajaId } });
+      if (!caja || caja.estado !== 'ABIERTA') {
+        throw new BadRequestException('La caja de esta venta ya está cerrada. Requiere conciliación para modificar el pago.');
+      }
+    }
 
     const { metodoPago, pagos } = this.normalizarPagos(datos, Number(pedido.total));
     const metodoAnterior = pedido.metodoPago;
@@ -495,83 +489,90 @@ export class PedidosService {
     return actualizado;
   }
 
-  async anularPedido(id: number, usuarioId: number, rol: string, empresaId: number) {
-    const pedido = await this.prisma.pedido.findFirst({
-      where: { id, sucursal: { empresaId } },
-      include: {
-        detalles: {
-          include: {
-            producto: { include: { ingredientes: { include: { ingrediente: true } } } },
-            adicionales: { include: { adicional: true } },
+  async actualizarEstado(id: number, estado: string, empresaId: number, usuarioId?: number) {
+    if (!['PENDIENTE','EN_COCINA','LISTO','ENTREGADO','ANULADO'].includes(estado)) throw new BadRequestException('Estado no válido');
+    const referencia = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } }, select: { sucursalId: true } });
+    if (!referencia) throw new NotFoundException('Pedido no encontrado');
+    const actualizado = await this.prisma.$transaction(async tx => {
+      await bloquearCajaSucursal(tx, referencia.sucursalId);
+      const empresa = await tx.empresa.findUnique({ where: { id: empresaId }, select: { tipoNegocio: true } });
+      // Los estados de cocina solo aplican a restaurantes; anular una venta
+      // (con reposición de inventario y reversión contable) aplica a
+      // cualquier tipo de negocio.
+      if (estado !== 'ANULADO' && empresa?.tipoNegocio !== 'RESTAURANTE') throw new BadRequestException('Las ventas comerciales requieren un flujo de devoluciones y conciliación para modificarse');
+      const pedido = await tx.pedido.findFirst({
+        where: { id, sucursal: { empresaId } },
+        include: estado === 'ANULADO' ? {
+          detalles: {
+            include: {
+              producto: { include: { ingredientes: { include: { ingrediente: true } } } },
+              adicionales: { include: { adicional: true } },
+            },
           },
-        },
-      },
-    });
-    if (!pedido) throw new NotFoundException('Pedido no encontrado');
-    if (pedido.estado === 'ANULADO') throw new BadRequestException('Esta venta ya está anulada');
-    await this.verificarPermisoSobreVenta(pedido, usuarioId, rol);
+        } : undefined,
+      });
+      if (!pedido) throw new NotFoundException('Pedido no encontrado');
+      if (pedido.estado === 'ANULADO') throw new BadRequestException('Un pedido anulado no puede reabrirse');
+      const web = await tx.pedidoWeb.findUnique({ where: { pedidoId: id } });
+      if (web && (['ENTREGADO','ANULADO'].includes(estado) || ['EN_CAMINO','ENTREGADO'].includes(web.estado))) throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de cancelar.');
+      if (estado === 'ANULADO' && (pedido.puntosGanados || pedido.puntosCanjeados)) throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');
+      if (estado === 'ANULADO') {
+        const caja = pedido.cajaId ? await tx.caja.findUnique({ where: { id: pedido.cajaId } }) : null;
+        if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja está cerrada. Esta venta requiere conciliación antes de anular.');
 
-    const web = await this.prisma.pedidoWeb.findUnique({ where: { pedidoId: id } });
-    if (web) {
-      throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas de domicilio requieren conciliación antes de anular.');
-    }
-    if (pedido.puntosGanados || pedido.puntosCanjeados) {
-      throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');
-    }
-
-    await this.prisma.$transaction(async (db) => {
-      for (const detalle of pedido.detalles) {
-        if (detalle.producto.controlaStock) {
-          await db.producto.update({ where: { id: detalle.productoId }, data: { stockActual: { increment: detalle.cantidad } } });
-        }
-        for (const pi of detalle.producto.ingredientes) {
-          const excluido = detalle.exclusiones.includes(pi.ingrediente.nombre);
-          if (!excluido) {
-            const cantidad = this.obtenerCantidadInventario(pi.ingrediente, Number(pi.cantidad)) * detalle.cantidad;
-            await db.ingrediente.update({ where: { id: pi.ingredienteId }, data: { stock: { increment: cantidad } } });
+        // Reponer existencias: stockActual directo (comercio) y, si la venta
+        // usó receta, los ingredientes descontados en la venta original.
+        for (const detalle of (pedido as any).detalles || []) {
+          if (detalle.producto.controlaStock) {
+            await tx.producto.update({ where: { id: detalle.productoId }, data: { stockActual: { increment: detalle.cantidad } } });
+          }
+          for (const pi of detalle.producto.ingredientes) {
+            const excluido = detalle.exclusiones.includes(pi.ingrediente.nombre);
+            if (!excluido) {
+              const cantidad = this.obtenerCantidadInventario(pi.ingrediente, Number(pi.cantidad)) * detalle.cantidad;
+              await tx.ingrediente.update({ where: { id: pi.ingredienteId }, data: { stock: { increment: cantidad } } });
+            }
+          }
+          for (const da of detalle.adicionales || []) {
+            if (da.adicional?.ingredienteId) {
+              const cantidad = Number(da.cantidad) * detalle.cantidad;
+              await tx.ingrediente.update({ where: { id: da.adicional.ingredienteId }, data: { stock: { increment: cantidad } } });
+            }
           }
         }
-        for (const da of detalle.adicionales) {
-          if (da.adicional.ingredienteId) {
-            const cantidad = Number(da.cantidad) * detalle.cantidad;
-            await db.ingrediente.update({ where: { id: da.adicional.ingredienteId }, data: { stock: { increment: cantidad } } });
-          }
+
+        // Revertir los movimientos financieros de la venta creando el
+        // movimiento contrario (no se borra el original) para conservar el
+        // rastro de auditoría completo.
+        const ingreso = await tx.movimientoFinanciero.findFirst({ where: { pedidoId: id, empresaId, tipo: 'INGRESO', categoria: 'VENTA' } });
+        if (!ingreso) throw new BadRequestException('No se encontró el ingreso de la venta. Requiere conciliación.');
+        await tx.movimientoFinanciero.create({ data: {
+          empresaId, sucursalId: pedido.sucursalId, usuarioId: usuarioId ?? pedido.usuarioId,
+          pedidoId: id, tipo: 'EGRESO', categoria: 'VENTA', monto: ingreso.monto,
+          descripcion: `Anulación de venta ${pedido.numero}`,
+        } });
+        const costo = await tx.movimientoFinanciero.findFirst({ where: { pedidoId: id, empresaId, tipo: 'EGRESO', categoria: 'COSTO_VENTA' } });
+        if (costo) {
+          await tx.movimientoFinanciero.create({ data: {
+            empresaId, sucursalId: pedido.sucursalId, usuarioId: usuarioId ?? pedido.usuarioId,
+            pedidoId: id, tipo: 'INGRESO', categoria: 'COSTO_VENTA', monto: costo.monto,
+            descripcion: `Reversión de costo de venta ${pedido.numero}`,
+          } });
         }
-      }
-      await db.movimientoFinanciero.deleteMany({ where: { pedidoId: id } });
-      await db.pedido.update({ where: { id }, data: { estado: 'ANULADO' } });
-      if (pedido.cajaId) {
-        await db.eventoCaja.create({
+        await tx.eventoCaja.create({
           data: {
-            cajaId: pedido.cajaId,
+            cajaId: pedido.cajaId!,
             tipo: 'ANULACION',
-            descripcion: `Venta ${pedido.numero} anulada (total $${Number(pedido.total).toLocaleString('es-CO')})`,
-            usuarioId,
+            descripcion: `Venta ${pedido.numero} anulada (total $${Number(ingreso.monto).toLocaleString('es-CO')})`,
+            usuarioId: usuarioId ?? pedido.usuarioId,
             esAlerta: true,
           },
         });
       }
-    });
-
-    this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: 'ANULADO' });
-    return { ok: true };
-  }
-
-  async actualizarEstado(id: number, estado: string, empresaId: number, usuarioId: number, rol: string) {
-    if (!['PENDIENTE','EN_COCINA','LISTO','ENTREGADO','ANULADO'].includes(estado)) throw new BadRequestException('Estado no válido');
-    if (estado === 'ANULADO') return this.anularPedido(id, usuarioId, rol, empresaId);
-    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { tipoNegocio: true } });
-    if (empresa?.tipoNegocio !== 'RESTAURANTE') throw new BadRequestException('Las ventas comerciales requieren un flujo de devoluciones y conciliación para modificarse');
-    const pedido = await this.prisma.pedido.findFirst({
-      where: { id, sucursal: { empresaId } },
-    });
-    if (!pedido) throw new NotFoundException('Pedido no encontrado');
-    if (pedido.estado === 'ANULADO') throw new BadRequestException('Un pedido anulado no puede reabrirse');
-    const web = await this.prisma.pedidoWeb.findUnique({ where: { pedidoId: id } });
-    if (web && (estado === 'ENTREGADO' || ['EN_CAMINO','ENTREGADO'].includes(web.estado))) throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de cancelar.');
-    const actualizado = await this.prisma.pedido.update({
-      where: { id },
-      data: { estado: estado as any },
+      return tx.pedido.update({
+        where: { id },
+        data: { estado: estado as any },
+      });
     });
     this.eventos.emitir(empresaId, {
       tipo: 'ACTUALIZADO',

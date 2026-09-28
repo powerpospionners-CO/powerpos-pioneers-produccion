@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import CajaControl from '@/components/CajaControl';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import VentasTurno from '@/components/VentasTurno';
+import VentasPendientes from '@/components/VentasPendientes';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
 
@@ -136,6 +137,12 @@ export default function RetailPOS() {
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
       {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={imprimirRecibo} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
+        <div className="lg:col-span-2"><VentasPendientes
+          clave={usuario ? `pos-pendientes:comercio:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
+          datos={{ carrito }} total={total} vacia={!carrito.length} bloqueado={procesando || !caja || cajaDeOtro}
+          onGuardar={() => { setCarrito([]); setBusqueda(''); setAviso('Venta guardada. Ya puedes atender a otro cliente.'); buscarRef.current?.focus(); }}
+          onRestaurar={(venta) => { setCarrito(venta.carrito); setError(''); setAviso('Venta recuperada. Revisa los productos y pulsa Cobrar.'); }}
+        /></div>
         <section className="min-w-0 rounded-2xl border border-gray-800 bg-gray-900 p-4">
           <form onSubmit={escanear} className="mb-4 flex items-center gap-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3"><Barcode className="text-orange-500" size={23} /><input ref={buscarRef} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setError(''); }} placeholder="Código de barras o nombre del producto" aria-label="Código de barras o nombre del producto" className="min-w-0 flex-1 bg-transparent text-white outline-none" /><button type="submit" aria-label="Buscar código" className="text-gray-400 hover:text-orange-500"><Search size={20} /></button></form>
           <div className="mb-4 flex gap-2 overflow-x-auto pb-1"><button onClick={() => setCategoriaId(null)} className={`shrink-0 rounded-full px-3 py-2 text-sm ${categoriaId === null ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-300'}`}>Todos</button>{categorias.filter((c) => !c.parentId).map((c) => <button key={c.id} onClick={() => setCategoriaId(c.id)} className={`shrink-0 rounded-full px-3 py-2 text-sm ${categoriaId === c.id ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-300'}`}>{c.nombre}</button>)}</div>
@@ -153,7 +160,7 @@ export default function RetailPOS() {
     </div>
     <VentasTurno cajaId={caja?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaDeOtro} />
     {modalCobroAbierto && (
-      <ModalCobro total={total} procesando={procesando} onConfirmar={vender} onCancelar={() => setModalCobroAbierto(false)} />
+      <ModalCobro total={total} procesando={procesando} onConfirmar={vender} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
     )}
   </main></AuthGuard>;
 }
