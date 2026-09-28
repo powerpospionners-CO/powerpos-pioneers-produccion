@@ -17,15 +17,14 @@ type Producto = {
   disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number;
   categoria: { id: number; nombre: string; icono?: string; parentId?: number | null };
 };
-type Categoria = { id: number; nombre: string; parentId?: number | null };
 type Linea = { producto: Producto; cantidad: number };
 type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalVentas?: number; totalEfectivo?: number; totalEsperado?: number };
+
+const LIMITE_RESULTADOS = 20;
 
 export default function RetailPOS() {
   const usuario = useAuthStore((state) => state.usuario);
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [categoriaId, setCategoriaId] = useState<number | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [carrito, setCarrito] = useState<Linea[]>([]);
   const [caja, setCaja] = useState<Caja | null>(null);
@@ -37,23 +36,29 @@ export default function RetailPOS() {
   const buscarRef = useRef<HTMLInputElement>(null);
 
   const cargar = async () => {
-    const [p, c, cajaRes] = await Promise.allSettled([
-      api.get('/productos'), api.get('/categorias'), api.get('/caja/abierta'),
+    const [p, cajaRes] = await Promise.allSettled([
+      api.get('/productos'), api.get('/caja/abierta'),
     ]);
     if (p.status === 'fulfilled') setProductos(p.value.data);
-    if (c.status === 'fulfilled') setCategorias(c.value.data);
     setCaja(cajaRes.status === 'fulfilled' ? cajaRes.value.data : null);
-    if (p.status === 'rejected' || c.status === 'rejected') setError('No se pudo cargar el catálogo de productos.');
+    if (p.status === 'rejected') setError('No se pudo cargar el catálogo de productos.');
   };
 
   useEffect(() => { void cargar(); }, []);
 
-  const visible = useMemo(() => productos.filter((producto) => {
-    if (!producto.disponible) return false;
-    if (categoriaId && producto.categoria.id !== categoriaId && producto.categoria.parentId !== categoriaId) return false;
-    const termino = busqueda.trim().toLocaleLowerCase('es-CO');
-    return !termino || producto.nombre.toLocaleLowerCase('es-CO').includes(termino) || producto.codigoBarras?.includes(termino);
-  }), [productos, categoriaId, busqueda]);
+  // Con existencias en 0 el producto no debe encontrarse ni por nombre ni
+  // por código: hay que reponer stock en Inventario antes de que vuelva a
+  // aparecer aquí.
+  const conStock = useMemo(() => productos.filter((producto) => producto.disponible && !(producto.controlaStock && producto.stockActual <= 0)), [productos]);
+
+  const termino = busqueda.trim().toLocaleLowerCase('es-CO');
+  const resultados = useMemo(() => {
+    if (!termino) return [];
+    return conStock.filter((producto) =>
+      producto.nombre.toLocaleLowerCase('es-CO').includes(termino) || producto.codigoBarras?.toLocaleLowerCase('es-CO').includes(termino),
+    );
+  }, [conStock, termino]);
+  const visible = resultados.slice(0, LIMITE_RESULTADOS);
 
   const cantidadEnCarrito = (id: number) => carrito.find((linea) => linea.producto.id === id)?.cantidad || 0;
   const agregar = (producto: Producto) => {
@@ -68,6 +73,7 @@ export default function RetailPOS() {
         ? actual.map((linea) => linea.producto.id === producto.id ? { ...linea, cantidad: linea.cantidad + 1 } : linea)
         : [...actual, { producto, cantidad: 1 }];
     });
+    setBusqueda('');
     buscarRef.current?.focus();
   };
   const cambiarCantidad = (producto: Producto, cambio: number) => {
@@ -78,7 +84,7 @@ export default function RetailPOS() {
     event.preventDefault();
     const codigo = busqueda.trim();
     const exacto = productos.find((producto) => producto.disponible && producto.codigoBarras === codigo);
-    if (exacto) { agregar(exacto); setBusqueda(''); }
+    if (exacto) agregar(exacto);
     else if (codigo) setError('No se encontró un producto con ese código. Puedes buscarlo por nombre.');
   };
 
@@ -132,7 +138,7 @@ export default function RetailPOS() {
     {cajaDeOtro && <div className="border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm font-medium text-red-200">Caja asignada a {caja?.usuario?.nombre || 'otro cajero'}. Solo esa persona o un administrador puede vender.</div>}
     <div className="mx-auto max-w-[1600px] px-4 py-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Busca por nombre o escanea el código de barras. Las cantidades se descuentan al finalizar la venta.</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Escanea el código de barras para agregar de una, o escribe el nombre y selecciona el producto.</p></div>
       </div>
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
       {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={imprimirRecibo} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
@@ -145,12 +151,28 @@ export default function RetailPOS() {
         /></div>
         <section className="min-w-0 rounded-2xl border border-gray-800 bg-gray-900 p-4">
           <form onSubmit={escanear} className="mb-4 flex items-center gap-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3"><Barcode className="text-orange-500" size={23} /><input ref={buscarRef} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setError(''); }} placeholder="Código de barras o nombre del producto" aria-label="Código de barras o nombre del producto" className="min-w-0 flex-1 bg-transparent text-white outline-none" /><button type="submit" aria-label="Buscar código" className="text-gray-400 hover:text-orange-500"><Search size={20} /></button></form>
-          <div className="mb-4 flex gap-2 overflow-x-auto pb-1"><button onClick={() => setCategoriaId(null)} className={`shrink-0 rounded-full px-3 py-2 text-sm ${categoriaId === null ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-300'}`}>Todos</button>{categorias.filter((c) => !c.parentId).map((c) => <button key={c.id} onClick={() => setCategoriaId(c.id)} className={`shrink-0 rounded-full px-3 py-2 text-sm ${categoriaId === c.id ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-300'}`}>{c.nombre}</button>)}</div>
-          <div className="grid max-h-[68vh] grid-cols-2 gap-3 overflow-y-auto pr-1 md:grid-cols-3 xl:grid-cols-4">{visible.map((producto) => {
-            const agotado = producto.controlaStock && producto.stockActual <= 0;
-            return <button key={producto.id} disabled={agotado || !caja || cajaDeOtro} onClick={() => agregar(producto)} className="min-h-36 rounded-xl border border-gray-800 bg-gray-950 p-4 text-left transition hover:border-orange-500/60 disabled:opacity-50"><div className="text-2xl">{producto.categoria?.icono || '📦'}</div><div className="mt-3 font-semibold text-white">{producto.nombre}</div><div className="mt-1 text-xs text-gray-500">{producto.codigoBarras || producto.categoria?.nombre}</div><div className="mt-2 font-bold text-orange-500">{moneda(Number(producto.precio))}</div><div className={`mt-1 text-xs ${agotado ? 'text-red-400' : producto.controlaStock && producto.stockActual <= producto.stockMinimo ? 'text-yellow-400' : 'text-gray-400'}`}>{producto.controlaStock ? `Existencias: ${producto.stockActual}` : 'Sin control de existencias'}</div></button>;
-          })}</div>
-          {!visible.length && <div className="py-14 text-center text-gray-400">No hay productos que coincidan. Regístralos en Productos.</div>}
+          {!termino && <div className="py-14 text-center text-gray-500">Escanea un código de barras o escribe el nombre del producto para agregarlo.</div>}
+          {!!termino && (
+            <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
+              {visible.map((producto) => (
+                <button
+                  key={producto.id}
+                  disabled={!caja || cajaDeOtro}
+                  onClick={() => agregar(producto)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-gray-800 bg-gray-950 p-3 text-left transition hover:border-orange-500/60 disabled:opacity-50"
+                >
+                  <div className="text-2xl">{producto.categoria?.icono || '📦'}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold text-white">{producto.nombre}</div>
+                    <div className="text-xs text-gray-500">{producto.codigoBarras || producto.categoria?.nombre}{producto.controlaStock ? ` · Existencias: ${producto.stockActual}` : ''}</div>
+                  </div>
+                  <div className="font-bold text-orange-500">{moneda(Number(producto.precio))}</div>
+                </button>
+              ))}
+              {resultados.length > LIMITE_RESULTADOS && <p className="py-2 text-center text-xs text-gray-500">Y {resultados.length - LIMITE_RESULTADOS} más · sigue escribiendo para afinar la búsqueda.</p>}
+              {!resultados.length && <div className="py-14 text-center text-gray-400">No hay productos con existencias que coincidan.</div>}
+            </div>
+          )}
         </section>
         <aside className="flex h-fit flex-col rounded-2xl border border-gray-800 bg-gray-900 p-4 lg:sticky lg:top-4 lg:min-h-[580px]"><div className="flex items-center justify-between border-b border-gray-800 pb-4"><div className="flex items-center gap-2"><ShoppingBasket className="text-orange-500" size={21} /><h2 className="text-lg font-bold">Venta actual</h2></div><span className="text-sm text-gray-400">{carrito.reduce((s,l) => s+l.cantidad, 0)} artículos</span></div>
           <div className="max-h-[45vh] flex-1 space-y-3 overflow-y-auto py-4">{carrito.length === 0 && <p className="py-16 text-center text-sm text-gray-500">Agrega productos para comenzar la venta.</p>}{carrito.map(({ producto, cantidad }) => <div key={producto.id} className="rounded-xl bg-gray-800 p-3"><div className="flex justify-between gap-3"><div><div className="font-medium text-white">{producto.nombre}</div><div className="text-xs text-gray-400">{moneda(Number(producto.precio))} por unidad</div></div><button aria-label={`Quitar ${producto.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.producto.id !== producto.id))} className="text-gray-400 hover:text-red-400"><Trash2 size={16} /></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={`Reducir ${producto.nombre}`} onClick={() => cambiarCantidad(producto, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button><span className="w-7 text-center">{cantidad}</span><button aria-label={`Aumentar ${producto.nombre}`} onClick={() => cambiarCantidad(producto, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button></div><strong>{moneda(Number(producto.precio) * cantidad)}</strong></div></div>)}</div>
