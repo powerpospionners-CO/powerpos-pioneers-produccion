@@ -18,13 +18,14 @@ export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; 
 
 type Linea = { metodoPago: string; monto: string };
 
-export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', metodoInicial = 'EFECTIVO', pagosIniciales }: {
+export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales }: {
   total: number;
   procesando?: boolean;
   onConfirmar: (pago: PagoConfirmado) => void;
   onCancelar: () => void;
   titulo?: string;
   textoConfirmar?: string;
+  textoCancelar?: string;
   metodoInicial?: string;
   pagosIniciales?: { metodoPago: string; monto: string | number }[];
 }) {
@@ -170,7 +171,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
         )}
 
         <div className="mt-5 flex gap-3">
-          <button type="button" disabled={procesando} onClick={onCancelar} className="flex-1 rounded-lg bg-gray-800 py-3 text-white hover:bg-gray-700">Cancelar</button>
+          <button type="button" disabled={procesando} onClick={onCancelar} className="flex-1 rounded-lg bg-gray-800 py-3 text-white hover:bg-gray-700">{textoCancelar}</button>
           <button type="button" onClick={confirmar} disabled={!puedeConfirmar} className="flex-1 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-40">
             {procesando ? 'Guardando…' : textoConfirmar}
           </button>

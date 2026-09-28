@@ -9,6 +9,7 @@ import Navbar from '@/components/Navbar';
 import CajaControl from '@/components/CajaControl';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import VentasTurno from '@/components/VentasTurno';
+import VentasPendientes from '@/components/VentasPendientes';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import RetailPOS from './RetailPOS';
 
@@ -83,8 +84,9 @@ function RestaurantePOS() {
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
   const [reglasPuntos, setReglasPuntos] = useState<{habilitado:boolean;compraPorPunto:number;valorPunto:number;categoriasExcluidas:number[];productosExcluidos:number[]}|null>(null);
   const [puntosCanjeados, setPuntosCanjeados] = useState(0);
+  const puntosRestaurados = useRef<number | null>(null);
   useEffect(() => { if (!usuario) return; api.get('/tienda-admin/configuracion').then(r=>setReglasPuntos(r.data.fidelizacion)).catch(()=>setReglasPuntos(null)); }, [usuario]);
-  useEffect(() => { setPuntosCanjeados(0); }, [clienteSeleccionado?.id]);
+  useEffect(() => { setPuntosCanjeados(puntosRestaurados.current ?? 0); puntosRestaurados.current = null; }, [clienteSeleccionado?.id]);
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [tecladoClienteVisible, setTecladoClienteVisible] = useState(false);
   const [tecladoObservacionVisible, setTecladoObservacionVisible] = useState(false);
@@ -878,6 +880,17 @@ function RestaurantePOS() {
           </div>
         )}
 
+        <VentasPendientes
+          clave={usuario ? `pos-pendientes:restaurante:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
+          datos={{ carrito, cliente: clienteSeleccionado, puntos: puntosCanjeados }} total={total}
+          vacia={!carrito.length} bloqueado={loading || !cajaAbierta || cajaBloqueadaPorUsuario}
+          onGuardar={() => { setCarrito([]); setClienteSeleccionado(null); setPuntosCanjeados(0); setBusquedaCliente(''); setMostrarDropdownCliente(false); }}
+          onRestaurar={(venta) => {
+            if (clienteSeleccionado?.id !== venta.cliente?.id) puntosRestaurados.current = venta.puntos;
+            setCarrito(venta.carrito); setClienteSeleccionado(venta.cliente); setPuntosCanjeados(venta.puntos);
+            setBusquedaCliente(''); setMostrarDropdownCliente(false); setPedidoExitoso(null);
+          }}
+        />
         {pedidoExitoso && (
           <div className="bg-green-500/10 border-b border-green-500/20 text-green-400 text-center py-3 text-sm font-medium">
             ✓ Pedido {pedidoExitoso} registrado exitosamente
@@ -1295,7 +1308,7 @@ function RestaurantePOS() {
         <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
 
         {modalCobroAbierto && (
-          <ModalCobro total={total} procesando={loading} onConfirmar={confirmarPedido} onCancelar={() => setModalCobroAbierto(false)} />
+          <ModalCobro total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
         )}
       </div>
     </AuthGuard>
