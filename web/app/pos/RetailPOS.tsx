@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Barcode, Minus, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
@@ -32,17 +32,45 @@ export default function RetailPOS() {
   const [aviso, setAviso] = useState('');
   const [ultimoRecibo, setUltimoRecibo] = useState<any>(null);
   const buscarRef = useRef<HTMLInputElement>(null);
+  const solicitudProductos = useRef(0);
+  const cargarProductos = useCallback(async (signal?: AbortSignal) => {
+    const solicitud = ++solicitudProductos.current;
+    const { data } = await api.get('/productos', { signal });
+    if (!signal?.aborted && solicitud === solicitudProductos.current) setProductos(data);
+  }, []);
 
   const cargar = async () => {
     const [p, cajaRes] = await Promise.allSettled([
-      api.get('/productos'), api.get('/caja/abierta'),
+      cargarProductos(), api.get('/caja/abierta'),
     ]);
-    if (p.status === 'fulfilled') setProductos(p.value.data);
     setCaja(cajaRes.status === 'fulfilled' ? cajaRes.value.data : null);
     if (p.status === 'rejected') setError('No se pudo cargar el catálogo de productos.');
   };
 
   useEffect(() => { void cargar(); }, []);
+
+  useEffect(() => {
+    let pendiente = false;
+    const controller = new AbortController();
+    const actualizar = async () => {
+      if (document.visibilityState !== 'visible' || pendiente) return;
+      pendiente = true;
+      try { await cargarProductos(controller.signal); }
+      catch { /* Se conservan las existencias anteriores y se reintenta en el siguiente ciclo. */ }
+      finally { pendiente = false; }
+    };
+    const intervalo = window.setInterval(actualizar, 15000);
+    window.addEventListener('focus', actualizar);
+    window.addEventListener('online', actualizar);
+    document.addEventListener('visibilitychange', actualizar);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalo);
+      window.removeEventListener('focus', actualizar);
+      window.removeEventListener('online', actualizar);
+      document.removeEventListener('visibilitychange', actualizar);
+    };
+  }, [cargarProductos]);
 
   // Con existencias en 0 el producto no debe encontrarse ni por nombre ni
   // por código: hay que reponer stock en Inventario antes de que vuelva a
@@ -60,7 +88,9 @@ export default function RetailPOS() {
   const cantidadEnCarrito = (id: number) => carrito.find((linea) => linea.producto.id === id)?.cantidad || 0;
   const agregar = (producto: Producto) => {
     setError('');
-    if (producto.controlaStock && cantidadEnCarrito(producto.id) >= producto.stockActual) {
+    const actualizado = productos.find((p) => p.id === producto.id);
+    if (!actualizado?.disponible) { setError(`${producto.nombre} no está disponible.`); return; }
+    if (actualizado.controlaStock && cantidadEnCarrito(producto.id) >= actualizado.stockActual) {
       setError(`No hay más existencias de ${producto.nombre}.`);
       return;
     }

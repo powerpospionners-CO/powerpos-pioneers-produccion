@@ -15,10 +15,10 @@ const METODOS = [
 ];
 
 function MarcaPago({ metodo, grande = false }: { metodo: string; grande?: boolean }) {
-  const logo = ({ NEQUI: 'nequi.svg', DAVIPLATA: 'daviplata.png', DAVIVIENDA: 'davivienda.svg' } as Record<string, string>)[metodo];
+  const logo = ({ EFECTIVO: '/efectivo/billete-50000.png', TRANSFERENCIA: '/pagos/transferencia.svg', NEQUI: '/pagos/nequi.svg', DAVIPLATA: '/pagos/daviplata.png', DAVIVIENDA: '/pagos/davivienda.svg' } as Record<string, string>)[metodo];
   const Icono = METODOS.find((m) => m.value === metodo)?.icono || ArrowLeftRight;
   return <span className={`flex shrink-0 items-center justify-center rounded-xl ${metodo === 'DAVIPLATA' || metodo === 'DAVIVIENDA' ? 'bg-[#ed1c24] p-2' : logo ? 'bg-white p-2' : 'bg-white/10 text-orange-300'} ${grande ? 'h-20 w-48' : 'h-11 w-20'}`}>
-    {logo ? <Image src={`/pagos/${logo}`} alt="" width={180} height={60} unoptimized className="h-full w-full object-contain" /> : <Icono size={grande ? 36 : 24} />}
+    {logo ? <Image src={logo} alt="" width={180} height={60} unoptimized className="h-full w-full object-contain" /> : <Icono size={grande ? 36 : 24} />}
   </span>;
 }
 

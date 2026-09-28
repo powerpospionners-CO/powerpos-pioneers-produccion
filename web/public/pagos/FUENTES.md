@@ -7,3 +7,6 @@ Descargados de los sitios oficiales el 28 de septiembre de 2026. Se utilizan par
 - Davivienda: https://www.davivienda.com/documents/d/global/logodavivienda
 
 Davivienda identifica visualmente una transferencia. El método persistido sigue siendo TRANSFERENCIA; no se almacena el banco.
+
+- Efectivo: reutiliza la fotografía del billete de $50.000 del Banco de la República; fuente en `../efectivo/FUENTES.md`.
+- Transferencia: ilustración SVG propia de banco, celular y flechas de transferencia; no representa una entidad bancaria específica.
