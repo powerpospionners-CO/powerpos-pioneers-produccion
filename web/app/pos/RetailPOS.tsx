@@ -148,32 +148,53 @@ export default function RetailPOS() {
         /></div>
         <section className="min-w-0 rounded-2xl border border-gray-800 bg-gray-900 p-4">
           <form onSubmit={escanear} className="mb-4 flex items-center gap-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3"><Barcode className="text-orange-500" size={23} /><input ref={buscarRef} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setError(''); }} placeholder="Código de barras o nombre del producto" aria-label="Código de barras o nombre del producto" className="min-w-0 flex-1 bg-transparent text-white outline-none" /><button type="submit" aria-label="Buscar código" className="text-gray-400 hover:text-orange-500"><Search size={20} /></button></form>
-          <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
-            {visible.map((producto) => (
-              <button
-                key={producto.id}
-                disabled={!caja || cajaDeOtro}
-                onClick={() => agregar(producto)}
-                className="flex w-full items-center gap-3 rounded-xl border border-gray-800 bg-gray-950 p-3 text-left transition hover:border-orange-500/60 disabled:opacity-50"
-              >
-                <div className="text-2xl">{producto.categoria?.icono || '📦'}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-white">{producto.nombre}</div>
-                  <div className="text-xs text-gray-500">{producto.codigoBarras || producto.categoria?.nombre}{producto.controlaStock ? ` · Existencias: ${producto.stockActual}` : ''}</div>
+          {termino ? (
+            <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
+              {visible.map((producto) => (
+                <button
+                  key={producto.id}
+                  disabled={!caja || cajaDeOtro}
+                  onClick={() => agregar(producto)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-gray-800 bg-gray-950 p-3 text-left transition hover:border-orange-500/60 disabled:opacity-50"
+                >
+                  <div className="text-2xl">{producto.categoria?.icono || '📦'}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold text-white">{producto.nombre}</div>
+                    <div className="text-xs text-gray-500">{producto.codigoBarras || producto.categoria?.nombre}{producto.controlaStock ? ` · Existencias: ${producto.stockActual}` : ''}</div>
+                  </div>
+                  <div className="font-bold text-orange-500">{moneda(Number(producto.precio))}</div>
+                </button>
+              ))}
+              {!visible.length && <div className="py-14 text-center text-gray-400">No hay productos con existencias que coincidan.</div>}
+            </div>
+          ) : (
+            <div className="max-h-[68vh] space-y-3 overflow-y-auto pr-1">
+              {carrito.length === 0 && <p className="py-16 text-center text-sm text-gray-500">Escanea un código de barras o busca un producto por nombre para comenzar la venta.</p>}
+              {carrito.map(({ producto, cantidad }) => (
+                <div key={producto.id} className="rounded-xl bg-gray-800 p-3">
+                  <div className="flex justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-white">{producto.nombre}</div>
+                      <div className="text-xs text-gray-400">{moneda(Number(producto.precio))} por unidad</div>
+                    </div>
+                    <button aria-label={`Quitar ${producto.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.producto.id !== producto.id))} className="shrink-0 text-gray-400 hover:text-red-400"><Trash2 size={16} /></button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button aria-label={`Reducir ${producto.nombre}`} onClick={() => cambiarCantidad(producto, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button>
+                      <span className="w-7 text-center">{cantidad}</span>
+                      <button aria-label={`Aumentar ${producto.nombre}`} onClick={() => cambiarCantidad(producto, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button>
+                    </div>
+                    <strong>{moneda(Number(producto.precio) * cantidad)}</strong>
+                  </div>
                 </div>
-                <div className="font-bold text-orange-500">{moneda(Number(producto.precio))}</div>
-              </button>
-            ))}
-            {!visible.length && (
-              <div className="py-14 text-center text-gray-400">
-                {termino ? 'No hay productos con existencias que coincidan.' : 'No hay productos con existencias registradas.'}
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
-        <aside className="flex h-fit flex-col rounded-2xl border border-gray-800 bg-gray-900 p-4 lg:sticky lg:top-4 lg:min-h-[580px]"><div className="flex items-center justify-between border-b border-gray-800 pb-4"><div className="flex items-center gap-2"><ShoppingBasket className="text-orange-500" size={21} /><h2 className="text-lg font-bold">Venta actual</h2></div><span className="text-sm text-gray-400">{carrito.reduce((s,l) => s+l.cantidad, 0)} artículos</span></div>
-          <div className="max-h-[45vh] flex-1 space-y-3 overflow-y-auto py-4">{carrito.length === 0 && <p className="py-16 text-center text-sm text-gray-500">Agrega productos para comenzar la venta.</p>}{carrito.map(({ producto, cantidad }) => <div key={producto.id} className="rounded-xl bg-gray-800 p-3"><div className="flex justify-between gap-3"><div><div className="font-medium text-white">{producto.nombre}</div><div className="text-xs text-gray-400">{moneda(Number(producto.precio))} por unidad</div></div><button aria-label={`Quitar ${producto.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.producto.id !== producto.id))} className="text-gray-400 hover:text-red-400"><Trash2 size={16} /></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={`Reducir ${producto.nombre}`} onClick={() => cambiarCantidad(producto, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button><span className="w-7 text-center">{cantidad}</span><button aria-label={`Aumentar ${producto.nombre}`} onClick={() => cambiarCantidad(producto, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button></div><strong>{moneda(Number(producto.precio) * cantidad)}</strong></div></div>)}</div>
-          <div className="mt-auto space-y-4 border-t border-gray-800 pt-4"><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div><button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button></div>
+        <aside className="flex h-fit flex-col rounded-2xl border border-gray-800 bg-gray-900 p-4 lg:sticky lg:top-4">
+          <div className="flex items-center justify-between border-b border-gray-800 pb-4"><div className="flex items-center gap-2"><ShoppingBasket className="text-orange-500" size={21} /><h2 className="text-lg font-bold">Venta actual</h2></div><span className="text-sm text-gray-400">{carrito.reduce((s,l) => s+l.cantidad, 0)} artículos</span></div>
+          <div className="mt-4 space-y-4"><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div><button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button></div>
         </aside>
       </div>
     </div>
