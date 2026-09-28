@@ -8,10 +8,15 @@ const INICIO = Buffer.from([0x1b, 0x40]);
 const CORTE = Buffer.from([0x1d, 0x56, 0x41, 0x03]);
 const CAJON = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
 const TIMEOUT_MS = 3000;
+const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
 @Injectable()
 export class ImpresionService {
   private readonly logger = new Logger(ImpresionService.name);
+  // El logo se descarga y se convierte a formato ESC/POS en cada recibo;
+  // como no cambia entre una venta y otra, se guarda en memoria por URL para
+  // no repetir ese trabajo (y ese riesgo de red) en cada impresión.
+  private readonly cacheLogos = new Map<string, Buffer>();
 
   constructor(
     private readonly prisma?: PrismaService,
@@ -183,10 +188,13 @@ export class ImpresionService {
       return Buffer.from('');
     }
 
-    try {
-      const logoUrl = String(empresa.logo).trim();
-      if (!logoUrl) return Buffer.from('');
+    const logoUrl = String(empresa.logo).trim();
+    if (!logoUrl) return Buffer.from('');
 
+    const enCache = this.cacheLogos.get(logoUrl);
+    if (enCache) return enCache;
+
+    try {
       let urlValida: URL;
       try {
         urlValida = new URL(logoUrl);
@@ -198,10 +206,13 @@ export class ImpresionService {
         return Buffer.from('');
       }
 
+      // Sin límite de tiempo ni de tamaño, un logo pesado (subido a
+      // resolución completa) puede dejar la petición colgada el tiempo
+      // suficiente para que el proxy tumbe la conexión con el agente de
+      // impresión — por eso ambos límites son obligatorios aquí.
       const respuesta = await fetch(logoUrl, {
-        headers: {
-          'User-Agent': 'PowerPos-Printer/1.0',
-        },
+        headers: { 'User-Agent': 'PowerPos-Printer/1.0' },
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!respuesta.ok) return Buffer.from('');
@@ -209,7 +220,17 @@ export class ImpresionService {
       const contentType = respuesta.headers.get('content-type') || '';
       if (!contentType.startsWith('image/')) return Buffer.from('');
 
+      const largoDeclarado = Number(respuesta.headers.get('content-length') || 0);
+      if (largoDeclarado > LOGO_MAX_BYTES) {
+        this.logger.warn(`Logo de empresa demasiado pesado (${largoDeclarado} bytes), se omite del recibo: ${logoUrl}`);
+        return Buffer.from('');
+      }
+
       const buffer = Buffer.from(await respuesta.arrayBuffer());
+      if (buffer.length > LOGO_MAX_BYTES) {
+        this.logger.warn(`Logo de empresa demasiado pesado (${buffer.length} bytes), se omite del recibo: ${logoUrl}`);
+        return Buffer.from('');
+      }
       const { data, info } = await sharp(buffer)
         .resize({ width: 300, height: 120, fit: 'inside', withoutEnlargement: true })
         .grayscale()
@@ -242,8 +263,11 @@ export class ImpresionService {
       }
 
       lineas.push(Buffer.from([0x1b, 0x61, 0x00]));
-      return Buffer.concat(lineas);
-    } catch {
+      const resultado = Buffer.concat(lineas);
+      this.cacheLogos.set(logoUrl, resultado);
+      return resultado;
+    } catch (error) {
+      this.logger.warn(`No se pudo preparar el logo para el recibo (${logoUrl}): ${error instanceof Error ? error.message : error}`);
       return Buffer.from('');
     }
   }
