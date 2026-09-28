@@ -12,12 +12,24 @@ import VentasPendientes from '@/components/VentasPendientes';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
 
+type Presentacion = { id: number; nombre: string; factorUnidades: number; precio: string; codigoBarras?: string | null };
 type Producto = {
   id: number; nombre: string; precio: string; codigoBarras?: string | null;
   disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number;
   categoria: { id: number; nombre: string; icono?: string; parentId?: number | null };
+  presentaciones?: Presentacion[];
 };
-type Linea = { producto: Producto; cantidad: number };
+// Una forma concreta de vender un producto: el producto tal cual, o una de
+// sus presentaciones (ej. "Tarro" vs "Unidad"). Todas comparten el mismo
+// `stockBase` del producto — factorUnidades es cuántas unidades base
+// consume una venta de este ítem.
+type ItemVendible = {
+  key: string; productoId: number; presentacionId: number | null;
+  nombre: string; precio: number; codigoBarras: string | null;
+  controlaStock: boolean; factorUnidades: number; stockBase: number;
+  categoria: { icono?: string; nombre?: string };
+};
+type Linea = { item: ItemVendible; cantidad: number };
 type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalVentas?: number; totalEfectivo?: number; totalEsperado?: number };
 
 export default function RetailPOS() {
@@ -49,6 +61,9 @@ export default function RetailPOS() {
 
   useEffect(() => { void cargar(); }, []);
 
+  // Las existencias se refrescan solas cada 15s (y al volver a la pestaña),
+  // porque otra caja puede vender el mismo producto mientras esta pantalla
+  // está abierta.
   useEffect(() => {
     let pendiente = false;
     const controller = new AbortController();
@@ -72,50 +87,87 @@ export default function RetailPOS() {
     };
   }, [cargarProductos]);
 
-  // Con existencias en 0 el producto no debe encontrarse ni por nombre ni
-  // por código: hay que reponer stock en Inventario antes de que vuelva a
-  // aparecer aquí.
-  const conStock = useMemo(() => productos.filter((producto) => producto.disponible && !(producto.controlaStock && producto.stockActual <= 0)), [productos]);
+  // Cada producto se convierte en uno o varios ítems vendibles: si no tiene
+  // presentaciones, es el producto tal cual (factor 1); si tiene, cada
+  // presentación es su propio ítem, todos con el mismo stockBase.
+  const itemsVendibles = useMemo<ItemVendible[]>(() => productos.filter((producto) => producto.disponible).flatMap((producto): ItemVendible[] => {
+    if (producto.presentaciones && producto.presentaciones.length > 0) {
+      return producto.presentaciones.map((p) => ({
+        key: `${producto.id}:${p.id}`,
+        productoId: producto.id,
+        presentacionId: p.id,
+        nombre: `${producto.nombre} — ${p.nombre}`,
+        precio: Number(p.precio),
+        codigoBarras: p.codigoBarras || null,
+        controlaStock: producto.controlaStock,
+        factorUnidades: p.factorUnidades,
+        stockBase: producto.stockActual,
+        categoria: producto.categoria,
+      }));
+    }
+    return [{
+      key: `${producto.id}`,
+      productoId: producto.id,
+      presentacionId: null,
+      nombre: producto.nombre,
+      precio: Number(producto.precio),
+      codigoBarras: producto.codigoBarras || null,
+      controlaStock: producto.controlaStock,
+      factorUnidades: 1,
+      stockBase: producto.stockActual,
+      categoria: producto.categoria,
+    }];
+  }), [productos]);
+
+  // Con menos existencias base que las que necesita esta presentación, no
+  // debe encontrarse ni por nombre ni por código hasta reponer stock.
+  const conStock = useMemo(() => itemsVendibles.filter((item) => !(item.controlaStock && item.stockBase < item.factorUnidades)), [itemsVendibles]);
 
   const termino = busqueda.trim().toLocaleLowerCase('es-CO');
   const visible = useMemo(() => {
     if (!termino) return conStock;
-    return conStock.filter((producto) =>
-      producto.nombre.toLocaleLowerCase('es-CO').includes(termino) || producto.codigoBarras?.toLocaleLowerCase('es-CO').includes(termino),
+    return conStock.filter((item) =>
+      item.nombre.toLocaleLowerCase('es-CO').includes(termino) || item.codigoBarras?.toLocaleLowerCase('es-CO').includes(termino),
     );
   }, [conStock, termino]);
 
-  const cantidadEnCarrito = (id: number) => carrito.find((linea) => linea.producto.id === id)?.cantidad || 0;
-  const agregar = (producto: Producto) => {
+  // Unidades base del mismo producto ya reservadas en el carrito, sumando
+  // todas sus presentaciones (ej. si ya hay 2 unidades sueltas en el
+  // carrito, un tarro de 50 debe validarse contra esas 2 ya comprometidas).
+  const unidadesBaseEnCarrito = (productoId: number) => carrito.filter((l) => l.item.productoId === productoId).reduce((s, l) => s + l.cantidad * l.item.factorUnidades, 0);
+
+  const agregar = (item: ItemVendible) => {
     setError('');
-    const actualizado = productos.find((p) => p.id === producto.id);
-    if (!actualizado?.disponible) { setError(`${producto.nombre} no está disponible.`); return; }
-    if (actualizado.controlaStock && cantidadEnCarrito(producto.id) >= actualizado.stockActual) {
-      setError(`No hay más existencias de ${producto.nombre}.`);
+    // Se revalida contra el estado más reciente de `productos` (que se
+    // refresca solo cada 15s) por si otra caja vendió justo antes de este clic.
+    const productoActual = productos.find((p) => p.id === item.productoId);
+    if (!productoActual?.disponible) { setError(`${item.nombre} no está disponible.`); return; }
+    if (item.controlaStock && unidadesBaseEnCarrito(item.productoId) + item.factorUnidades > productoActual.stockActual) {
+      setError(`No hay más existencias de ${item.nombre}.`);
       return;
     }
     setCarrito((actual) => {
-      const existente = actual.find((linea) => linea.producto.id === producto.id);
+      const existente = actual.find((linea) => linea.item.key === item.key);
       return existente
-        ? actual.map((linea) => linea.producto.id === producto.id ? { ...linea, cantidad: linea.cantidad + 1 } : linea)
-        : [...actual, { producto, cantidad: 1 }];
+        ? actual.map((linea) => linea.item.key === item.key ? { ...linea, cantidad: linea.cantidad + 1 } : linea)
+        : [...actual, { item, cantidad: 1 }];
     });
     setBusqueda('');
     buscarRef.current?.focus();
   };
-  const cambiarCantidad = (producto: Producto, cambio: number) => {
-    if (cambio > 0) { agregar(producto); return; }
-    setCarrito((actual) => actual.map((linea) => linea.producto.id === producto.id ? { ...linea, cantidad: linea.cantidad - 1 } : linea).filter((linea) => linea.cantidad > 0));
+  const cambiarCantidad = (item: ItemVendible, cambio: number) => {
+    if (cambio > 0) { agregar(item); return; }
+    setCarrito((actual) => actual.map((linea) => linea.item.key === item.key ? { ...linea, cantidad: linea.cantidad - 1 } : linea).filter((linea) => linea.cantidad > 0));
   };
   const escanear = (event: React.FormEvent) => {
     event.preventDefault();
     const codigo = busqueda.trim();
-    const exacto = productos.find((producto) => producto.disponible && producto.codigoBarras === codigo);
+    const exacto = itemsVendibles.find((item) => item.codigoBarras === codigo);
     if (exacto) agregar(exacto);
     else if (codigo) setError('No se encontró un producto con ese código. Puedes buscarlo por nombre.');
   };
 
-  const total = carrito.reduce((suma, linea) => suma + Number(linea.producto.precio) * linea.cantidad, 0);
+  const total = carrito.reduce((suma, linea) => suma + linea.item.precio * linea.cantidad, 0);
   const cajaDeOtro = !!caja && !!usuario && caja.usuarioId !== usuario.id && !['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol);
   const vender = async (pago: PagoConfirmado) => {
     if (!carrito.length || !caja || cajaDeOtro || procesando) return;
@@ -125,7 +177,7 @@ export default function RetailPOS() {
         sucursalId: usuario?.sucursalId,
         metodoPago: pago.metodoPago,
         pagos: pago.pagos,
-        items: carrito.map(({ producto, cantidad }) => ({ productoId: producto.id, cantidad })),
+        items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, cantidad })),
       });
       setCarrito([]);
       setUltimoRecibo(data);
@@ -150,7 +202,7 @@ export default function RetailPOS() {
       ? ultimoRecibo.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
       : [`PAGO  ${ultimoRecibo.metodoPago}`];
     const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${ultimoRecibo.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
-      ...(ultimoRecibo.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}   ${moneda(Number(d.subtotal))}`),
+      ...(ultimoRecibo.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
       '--------------------------------', `TOTAL  ${moneda(Number(ultimoRecibo.total))}`, ...pagos, 'Gracias por su compra'];
     const pre = ventana.document.createElement('pre');
     pre.style.cssText = 'font:14px/1.5 monospace;white-space:pre-wrap;padding:20px;';
@@ -180,19 +232,19 @@ export default function RetailPOS() {
           <form onSubmit={escanear} className="mb-4 flex items-center gap-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3"><Barcode className="text-orange-500" size={23} /><input ref={buscarRef} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setError(''); }} placeholder="Código de barras o nombre del producto" aria-label="Código de barras o nombre del producto" className="min-w-0 flex-1 bg-transparent text-white outline-none" /><button type="submit" aria-label="Buscar código" className="text-gray-400 hover:text-orange-500"><Search size={20} /></button></form>
           {termino ? (
             <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
-              {visible.map((producto) => (
+              {visible.map((item) => (
                 <button
-                  key={producto.id}
+                  key={item.key}
                   disabled={!caja || cajaDeOtro}
-                  onClick={() => agregar(producto)}
+                  onClick={() => agregar(item)}
                   className="flex w-full items-center gap-3 rounded-xl border border-gray-800 bg-gray-950 p-3 text-left transition hover:border-orange-500/60 disabled:opacity-50"
                 >
-                  <div className="text-2xl">{producto.categoria?.icono || '📦'}</div>
+                  <div className="text-2xl">{item.categoria?.icono || '📦'}</div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold text-white">{producto.nombre}</div>
-                    <div className="text-xs text-gray-500">{producto.codigoBarras || producto.categoria?.nombre}{producto.controlaStock ? ` · Existencias: ${producto.stockActual}` : ''}</div>
+                    <div className="truncate font-semibold text-white">{item.nombre}</div>
+                    <div className="text-xs text-gray-500">{item.codigoBarras || item.categoria?.nombre}{item.controlaStock ? ` · Existencias: ${Math.floor(item.stockBase / item.factorUnidades)}` : ''}</div>
                   </div>
-                  <div className="font-bold text-orange-500">{moneda(Number(producto.precio))}</div>
+                  <div className="font-bold text-orange-500">{moneda(item.precio)}</div>
                 </button>
               ))}
               {!visible.length && <div className="py-14 text-center text-gray-400">No hay productos con existencias que coincidan.</div>}
@@ -200,22 +252,22 @@ export default function RetailPOS() {
           ) : (
             <div className="max-h-[68vh] space-y-3 overflow-y-auto pr-1">
               {carrito.length === 0 && <p className="py-16 text-center text-sm text-gray-500">Escanea un código de barras o busca un producto por nombre para comenzar la venta.</p>}
-              {carrito.map(({ producto, cantidad }) => (
-                <div key={producto.id} className="rounded-xl bg-gray-800 p-3">
+              {carrito.map(({ item, cantidad }) => (
+                <div key={item.key} className="rounded-xl bg-gray-800 p-3">
                   <div className="flex justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate font-semibold text-white">{producto.nombre}</div>
-                      <div className="text-xs text-gray-400">{moneda(Number(producto.precio))} por unidad</div>
+                      <div className="truncate font-semibold text-white">{item.nombre}</div>
+                      <div className="text-xs text-gray-400">{moneda(item.precio)} por unidad</div>
                     </div>
-                    <button aria-label={`Quitar ${producto.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.producto.id !== producto.id))} className="shrink-0 text-gray-400 hover:text-red-400"><Trash2 size={16} /></button>
+                    <button aria-label={`Quitar ${item.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.item.key !== item.key))} className="shrink-0 text-gray-400 hover:text-red-400"><Trash2 size={16} /></button>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <button aria-label={`Reducir ${producto.nombre}`} onClick={() => cambiarCantidad(producto, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button>
+                      <button aria-label={`Reducir ${item.nombre}`} onClick={() => cambiarCantidad(item, -1)} className="rounded bg-gray-700 p-1"><Minus size={15} /></button>
                       <span className="w-7 text-center">{cantidad}</span>
-                      <button aria-label={`Aumentar ${producto.nombre}`} onClick={() => cambiarCantidad(producto, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button>
+                      <button aria-label={`Aumentar ${item.nombre}`} onClick={() => cambiarCantidad(item, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button>
                     </div>
-                    <strong>{moneda(Number(producto.precio) * cantidad)}</strong>
+                    <strong>{moneda(item.precio * cantidad)}</strong>
                   </div>
                 </div>
               ))}

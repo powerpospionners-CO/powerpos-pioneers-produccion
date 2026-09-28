@@ -269,6 +269,7 @@ export class ProductosService {
           include: { adicional: { include: { ingrediente: true } } },
         },
         preparaciones: { include: { preparacion: true } },
+        presentaciones: { where: { activo: true }, orderBy: { orden: 'asc' } },
       },
       orderBy: { nombre: 'asc' },
     });
@@ -284,6 +285,7 @@ export class ProductosService {
           include: { adicional: { include: { ingrediente: true } } },
         },
         preparaciones: { include: { preparacion: true } },
+        presentaciones: { where: { activo: true }, orderBy: { orden: 'asc' } },
       },
     });
     if (!producto) throw new NotFoundException('Producto no encontrado');
@@ -470,5 +472,65 @@ export class ProductosService {
       orderBy: { creadoEn: 'desc' },
       take: 50,
     });
+  }
+
+  // Presentaciones: formas alternativas de vender un mismo producto (ej.
+  // "Tarro" x 50 unidades y "Unidad" x 1) que comparten el mismo
+  // `stockActual`, contado en la unidad base. No se borran físicamente para
+  // no romper el historial de ventas que ya las referencia; se desactivan.
+  private async validarPresentacion(datos: any, empresaId: number, productoId: number, presentacionId?: number) {
+    const nombre = String(datos.nombre || '').trim();
+    if (!nombre) throw new BadRequestException('El nombre de la presentación es obligatorio');
+    const factorUnidades = Number(datos.factorUnidades);
+    if (!Number.isInteger(factorUnidades) || factorUnidades < 1) {
+      throw new BadRequestException('Las unidades por presentación deben ser un entero mayor o igual a 1');
+    }
+    const precio = Number(datos.precio);
+    if (!Number.isFinite(precio) || precio <= 0) throw new BadRequestException('El precio debe ser un número mayor a 0');
+
+    const codigoBarras = datos.codigoBarras ? String(datos.codigoBarras).trim() : null;
+    if (codigoBarras) {
+      if (codigoBarras.length > 80) throw new BadRequestException('El código de barras es demasiado largo');
+      const enProducto = await this.prisma.producto.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } });
+      if (enProducto) throw new ConflictException('El código de barras ya está asignado a otro producto');
+      const enPresentacion = await this.prisma.productoPresentacion.findFirst({
+        where: { codigoBarras, producto: { empresaId }, ...(presentacionId ? { id: { not: presentacionId } } : {}) },
+        select: { id: true },
+      });
+      if (enPresentacion) throw new ConflictException('El código de barras ya está asignado a otra presentación');
+    }
+
+    return { nombre, factorUnidades, precio, codigoBarras };
+  }
+
+  async agregarPresentacion(productoId: number, datos: any, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const limpio = await this.validarPresentacion(datos, empresaId, productoId);
+    try {
+      return await this.prisma.productoPresentacion.create({ data: { ...limpio, productoId } });
+    } catch (e: any) {
+      if (e?.code === 'P2002') throw new ConflictException('Ya existe una presentación con ese nombre para este producto');
+      throw e;
+    }
+  }
+
+  async actualizarPresentacion(productoId: number, presentacionId: number, datos: any, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const presentacion = await this.prisma.productoPresentacion.findFirst({ where: { id: presentacionId, productoId } });
+    if (!presentacion) throw new NotFoundException('Presentación no encontrada');
+    const limpio = await this.validarPresentacion(datos, empresaId, productoId, presentacionId);
+    try {
+      return await this.prisma.productoPresentacion.update({ where: { id: presentacionId }, data: limpio });
+    } catch (e: any) {
+      if (e?.code === 'P2002') throw new ConflictException('Ya existe una presentación con ese nombre para este producto');
+      throw e;
+    }
+  }
+
+  async eliminarPresentacion(productoId: number, presentacionId: number, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const presentacion = await this.prisma.productoPresentacion.findFirst({ where: { id: presentacionId, productoId } });
+    if (!presentacion) throw new NotFoundException('Presentación no encontrada');
+    return this.prisma.productoPresentacion.update({ where: { id: presentacionId }, data: { activo: false } });
   }
 }

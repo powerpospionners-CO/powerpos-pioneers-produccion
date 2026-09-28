@@ -34,6 +34,14 @@ interface Adicional {
   ingrediente?: { id: number; nombre: string; unidad: string } | null;
 }
 
+interface Presentacion {
+  id: number;
+  nombre: string;
+  factorUnidades: number;
+  precio: string;
+  codigoBarras?: string | null;
+}
+
 interface Producto {
   id: number;
   nombre: string;
@@ -51,6 +59,7 @@ interface Producto {
   categoria: Categoria;
   ingredientes: { ingrediente: { id: number; nombre: string; unidad: string }; cantidad: string }[];
   adicionales: { adicional: { id: number; nombre: string; precio: string } }[];
+  presentaciones?: Presentacion[];
 }
 
 const ICONOS_CATEGORIA_RESTAURANTE = [
@@ -70,6 +79,82 @@ const ICONOS_CATEGORIA_COMERCIO = [
   '👜', '🧢', '🍼', '🐾', '✏️', '📓', '🎁', '🧸', '🗞️', '🔑',
   '🕯️', '🚬', '🧵', '🪒', '🎈', '🧊',
 ].filter((icono, indice, arreglo) => arreglo.indexOf(icono) === indice);
+
+function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onCambio: (producto: Producto) => void }) {
+  const [nuevo, setNuevo] = useState({ nombre: '', factorUnidades: '', precio: '', codigoBarras: '' });
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const presentaciones = producto.presentaciones || [];
+
+  const recargar = async () => {
+    const { data } = await api.get(`/productos/${producto.id}`);
+    onCambio(data);
+  };
+
+  const guardar = async () => {
+    if (!nuevo.nombre.trim() || !nuevo.factorUnidades || !nuevo.precio) return;
+    setOcupado(true); setError('');
+    try {
+      const payload = { nombre: nuevo.nombre.trim(), factorUnidades: Number(nuevo.factorUnidades), precio: Number(nuevo.precio), codigoBarras: nuevo.codigoBarras.trim() || null };
+      if (editandoId) await api.patch(`/productos/${producto.id}/presentaciones/${editandoId}`, payload);
+      else await api.post(`/productos/${producto.id}/presentaciones`, payload);
+      setNuevo({ nombre: '', factorUnidades: '', precio: '', codigoBarras: '' });
+      setEditandoId(null);
+      await recargar();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'No se pudo guardar la presentación.');
+    } finally { setOcupado(false); }
+  };
+
+  const editar = (p: Presentacion) => {
+    setEditandoId(p.id);
+    setNuevo({ nombre: p.nombre, factorUnidades: String(p.factorUnidades), precio: p.precio, codigoBarras: p.codigoBarras || '' });
+  };
+
+  const eliminar = async (id: number) => {
+    if (!window.confirm('¿Quitar esta presentación? Ya no se podrá vender así, pero las ventas anteriores no cambian.')) return;
+    setError('');
+    try { await api.delete(`/productos/${producto.id}/presentaciones/${id}`); await recargar(); }
+    catch (e: any) { setError(e?.response?.data?.message || 'No se pudo quitar la presentación.'); }
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-gray-800 p-3">
+      <div>
+        <p className="text-sm font-semibold text-gray-300">Presentaciones (opcional)</p>
+        <p className="text-xs text-gray-500">Para vender este producto de varias formas que comparten las mismas existencias — ej. "Tarro" (50 unidades) y "Unidad" (1 unidad). Al vender una, se descuenta sola del mismo inventario.</p>
+      </div>
+      {presentaciones.length > 0 && (
+        <div className="space-y-2">
+          {presentaciones.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <div className="truncate font-medium text-white">{p.nombre} · {p.factorUnidades} {p.factorUnidades === 1 ? 'unidad' : 'unidades'}</div>
+                <div className="text-xs text-gray-400">${Number(p.precio).toLocaleString()}{p.codigoBarras ? ` · ${p.codigoBarras}` : ''}</div>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" onClick={() => editar(p)} className="text-gray-400 hover:text-orange-400"><Edit size={14} /></button>
+                <button type="button" onClick={() => eliminar(p.id)} className="text-gray-400 hover:text-red-400"><Trash2 size={14} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <input value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre (ej. Tarro)" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <input type="number" min="1" step="1" value={nuevo.factorUnidades} onChange={(e) => setNuevo({ ...nuevo, factorUnidades: e.target.value })} placeholder="Unidades que trae" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <input type="number" min="0" step="1" value={nuevo.precio} onChange={(e) => setNuevo({ ...nuevo, precio: e.target.value })} placeholder="Precio de venta" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <input value={nuevo.codigoBarras} onChange={(e) => setNuevo({ ...nuevo, codigoBarras: e.target.value })} placeholder="Código de barras (opcional)" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+      </div>
+      <div className="flex gap-2">
+        <button type="button" disabled={ocupado} onClick={guardar} className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">{editandoId ? 'Guardar cambios' : 'Agregar presentación'}</button>
+        {editandoId && <button type="button" onClick={() => { setEditandoId(null); setNuevo({ nombre: '', factorUnidades: '', precio: '', codigoBarras: '' }); }} className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-300">Cancelar</button>}
+      </div>
+    </div>
+  );
+}
 
 export default function ProductosPage() {
   const tipoNegocio = useAuthStore((state) => state.usuario?.tipoNegocio);
@@ -803,6 +888,10 @@ export default function ProductosPage() {
                   </div>
                 );
               })()}
+
+              {!esRestaurante && editando && (
+                <SeccionPresentaciones producto={editando} onCambio={(actualizado) => { setEditando(actualizado); setProductos((prev) => prev.map((p) => p.id === actualizado.id ? actualizado : p)); }} />
+              )}
 
               <div className="flex items-center gap-3">
                 <input

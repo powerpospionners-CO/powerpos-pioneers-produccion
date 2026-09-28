@@ -45,9 +45,10 @@ export class PedidosService {
     return { metodoPago, pagos: [{ metodoPago, monto: total }] };
   }
 
-  private calcularCostoVenta(itemsValidados: { producto: any; cantidad: number }[]): number {
+  private calcularCostoVenta(itemsValidados: { producto: any; cantidad: number; factorUnidades?: number }[]): number {
     return itemsValidados.reduce((total, item) => {
       const { producto, cantidad } = item;
+      const factorUnidades = item.factorUnidades ?? 1;
       let costoUnitario = 0;
       if (producto.ingredientes && producto.ingredientes.length > 0) {
         costoUnitario = producto.ingredientes.reduce((acc: number, pi: any) => {
@@ -55,7 +56,10 @@ export class PedidosService {
           return acc + costoIngrediente * Number(pi.cantidad);
         }, 0);
       } else if (producto.costo !== null && producto.costo !== undefined) {
-        costoUnitario = Number(producto.costo);
+        // El costo del producto es por unidad base; una presentación de
+        // varias unidades (ej. un tarro) cuesta ese costo multiplicado por
+        // cuántas unidades base contiene.
+        costoUnitario = Number(producto.costo) * factorUnidades;
       }
       return total + costoUnitario * cantidad;
     }, 0);
@@ -150,6 +154,19 @@ export class PedidosService {
         throw new BadRequestException('Las recetas y adicionales solo se usan en restaurantes');
       }
 
+      // Presentación vendida (ej. "Tarro" vs "Unidad"): comparte el mismo
+      // stockActual del producto, contado en la unidad base. `factorUnidades`
+      // es cuántas unidades base representa una unidad de esta presentación.
+      let presentacion: { id: number; nombre: string; factorUnidades: number; precio: Prisma.Decimal } | null = null;
+      if (item.presentacionId) {
+        presentacion = await db.productoPresentacion.findFirst({
+          where: { id: Number(item.presentacionId), productoId: producto.id, activo: true },
+        });
+        if (!presentacion) throw new NotFoundException('La presentación seleccionada no está disponible');
+      }
+      const precioUnitario = presentacion ? Number(presentacion.precio) : Number(producto.precio);
+      const factorUnidades = presentacion ? presentacion.factorUnidades : 1;
+
       // Adicionales habilitados para este producto: los marcados en el producto,
       // o todo el catálogo activo de la empresa si el producto no tiene ninguno marcado
       // y "aceptaAdicionales" (las bebidas suelen tenerlo en false).
@@ -198,7 +215,7 @@ export class PedidosService {
       }
 
       const itemSubtotal =
-        (Number(producto.precio) + extrasPorUnidad) * item.cantidad;
+        (precioUnitario + extrasPorUnidad) * item.cantidad;
       subtotal += itemSubtotal;
 
       itemsValidados.push({
@@ -208,6 +225,10 @@ export class PedidosService {
         observacion: item.observacion || null,
         adicionales: adicionalesValidados,
         subtotal: itemSubtotal,
+        presentacionId: presentacion?.id ?? null,
+        presentacionNombre: presentacion?.nombre ?? null,
+        factorUnidades,
+        precioUnitario,
       });
     }
 
@@ -229,11 +250,12 @@ export class PedidosService {
 
     for (const item of itemsValidados) {
       if (!item.producto.controlaStock) continue;
+      const unidadesBase = item.cantidad * item.factorUnidades;
       const actualizado = await db.producto.updateMany({
-        where: { id: item.producto.id, empresaId, stockActual: { gte: item.cantidad } },
-        data: { stockActual: { decrement: item.cantidad } },
+        where: { id: item.producto.id, empresaId, stockActual: { gte: unidadesBase } },
+        data: { stockActual: { decrement: unidadesBase } },
       });
-      if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}`);
+      if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}${item.presentacionNombre ? ` (${item.presentacionNombre})` : ''}`);
     }
 
     const numero = await this.generarNumeroPedido(sucursalId);
@@ -259,8 +281,11 @@ export class PedidosService {
           create: itemsValidados.map((item) => ({
             productoId: item.producto.id,
             cantidad: item.cantidad,
-            // precioUnitario guarda el precio base del producto; subtotal ya incluye adicionales
-            precioUnitario: item.producto.precio,
+            // precioUnitario guarda el precio de la presentación vendida (o el del producto si no aplica); subtotal ya incluye adicionales
+            precioUnitario: item.precioUnitario,
+            presentacionId: item.presentacionId,
+            presentacionNombre: item.presentacionNombre,
+            factorUnidades: item.factorUnidades,
             subtotal: item.subtotal,
             exclusiones: item.exclusiones,
             observacion: item.observacion,
@@ -524,7 +549,8 @@ export class PedidosService {
         // usó receta, los ingredientes descontados en la venta original.
         for (const detalle of (pedido as any).detalles || []) {
           if (detalle.producto.controlaStock) {
-            await tx.producto.update({ where: { id: detalle.productoId }, data: { stockActual: { increment: detalle.cantidad } } });
+            const unidadesBase = detalle.cantidad * (detalle.factorUnidades || 1);
+            await tx.producto.update({ where: { id: detalle.productoId }, data: { stockActual: { increment: unidadesBase } } });
           }
           for (const pi of detalle.producto.ingredientes) {
             const excluido = detalle.exclusiones.includes(pi.ingrediente.nombre);

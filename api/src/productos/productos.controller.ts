@@ -101,4 +101,22 @@ export class ProductosController {
   eliminar(@Param('id') id: string, @Request() req: any) {
     return this.productosService.eliminar(+id, req.user.empresaId);
   }
+
+  @Post(':id/presentaciones')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  agregarPresentacion(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.agregarPresentacion(+id, body, req.user.empresaId);
+  }
+
+  @Patch(':id/presentaciones/:presentacionId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  actualizarPresentacion(@Param('id') id: string, @Param('presentacionId') presentacionId: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.actualizarPresentacion(+id, +presentacionId, body, req.user.empresaId);
+  }
+
+  @Delete(':id/presentaciones/:presentacionId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  eliminarPresentacion(@Param('id') id: string, @Param('presentacionId') presentacionId: string, @Request() req: any) {
+    return this.productosService.eliminarPresentacion(+id, +presentacionId, req.user.empresaId);
+  }
 }

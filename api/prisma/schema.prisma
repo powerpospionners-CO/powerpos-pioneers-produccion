@@ -208,10 +208,35 @@ model Producto {
   detallesPedido      DetallePedido[]
   consumoEmpleadoItems ConsumoEmpleadoItem[]
   movimientosInventario MovimientoInventario[]
+  presentaciones      ProductoPresentacion[]
 
   @@unique([empresaId, codigoBarras])
 
   @@map("productos")
+}
+
+// Formas alternativas de vender el mismo producto (ej. "Tarro" x 50 unidades
+// y "Unidad" x 1) que comparten el mismo `stockActual` del producto, contado
+// siempre en la unidad base (la más pequeña). Vender una presentación
+// descuenta `factorUnidades * cantidad` de ese único inventario, así que no
+// hace falta ningún ajuste manual para mantener el tarro y la unidad al día.
+model ProductoPresentacion {
+  id             Int      @id @default(autoincrement())
+  productoId     Int
+  nombre         String
+  factorUnidades Int      @default(1)
+  precio         Decimal  @db.Decimal(10, 2)
+  codigoBarras   String?
+  orden          Int      @default(0)
+  activo         Boolean  @default(true)
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+
+  producto Producto        @relation(fields: [productoId], references: [id])
+  detalles DetallePedido[]
+
+  @@unique([productoId, nombre])
+  @@map("producto_presentaciones")
 }
 
 model Ingrediente {
@@ -491,9 +516,18 @@ model DetallePedido {
   exclusiones    String[]
   observacion    String?
 
-  pedido      Pedido                   @relation(fields: [pedidoId], references: [id])
-  producto    Producto                 @relation(fields: [productoId], references: [id])
-  adicionales DetallePedidoAdicional[]
+  // Presentación vendida (ej. "Tarro" vs "Unidad"): se guarda una copia del
+  // nombre y del factor de unidades base al momento de la venta, para que el
+  // recibo y la reversión de inventario al anular sigan siendo correctos
+  // aunque luego se edite o desactive la presentación.
+  presentacionId     Int?
+  presentacionNombre String?
+  factorUnidades     Int     @default(1)
+
+  pedido       Pedido                   @relation(fields: [pedidoId], references: [id])
+  producto     Producto                 @relation(fields: [productoId], references: [id])
+  presentacion ProductoPresentacion?    @relation(fields: [presentacionId], references: [id])
+  adicionales  DetallePedidoAdicional[]
 
   @@map("detalle_pedidos")
 }
