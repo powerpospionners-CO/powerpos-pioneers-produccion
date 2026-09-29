@@ -48,7 +48,7 @@ export class CatalogoController {
 
   @Post('importar-imagenes')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
-  @UseInterceptors(FilesInterceptor('imagenes', 60, {
+  @UseInterceptors(FilesInterceptor('imagenes', 200, {
     storage: diskStorage({
       destination: './uploads/catalogo',
       filename: (req, file, cb) => {
