@@ -60,6 +60,10 @@ function RestaurantePOS() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaActiva, setCategoriaActiva] = useState<number | null>(null);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  // Mientras el cajero escribe la cantidad se guarda aquí el texto tal cual
+  // (incluyendo vacío, mientras borra el número anterior) para que el campo
+  // no "rebote" al valor viejo en cada tecla.
+  const [borradorCantidad, setBorradorCantidad] = useState<Record<number, string>>({});
   const [adicionalesCatalogo, setAdicionalesCatalogo] = useState<AdicionalProducto[]>([]);
   const [modalProducto, setModalProducto] = useState<Producto | null>(null);
   const [exclusionesTemp, setExclusionesTemp] = useState<string[]>([]);
@@ -1122,8 +1126,13 @@ function RestaurantePOS() {
                       aria-label={`Cantidad de ${item.producto.nombre}`}
                       type="number"
                       min={1}
-                      value={item.cantidad}
-                      onChange={(e) => establecerCantidad(index, e.target.value)}
+                      value={borradorCantidad[index] ?? String(item.cantidad)}
+                      onChange={(e) => {
+                        const valor = e.target.value;
+                        setBorradorCantidad((actual) => ({ ...actual, [index]: valor }));
+                        if (valor !== '') establecerCantidad(index, valor);
+                      }}
+                      onBlur={() => setBorradorCantidad((actual) => { const { [index]: _quitado, ...resto } = actual; return resto; })}
                       onFocus={(e) => e.target.select()}
                       className="w-12 rounded bg-gray-900 border border-gray-700 py-0.5 text-center text-white text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />

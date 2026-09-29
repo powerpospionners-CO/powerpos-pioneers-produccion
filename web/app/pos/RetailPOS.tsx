@@ -37,6 +37,10 @@ export default function RetailPOS() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [carrito, setCarrito] = useState<Linea[]>([]);
+  // Mientras el cajero escribe la cantidad se guarda aquí el texto tal cual
+  // (incluyendo vacío, mientras borra el número anterior para escribir uno
+  // nuevo) para que el campo no "rebote" al valor viejo en cada tecla.
+  const [borradorCantidad, setBorradorCantidad] = useState<Record<string, string>>({});
   const [caja, setCaja] = useState<Caja | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [procesando, setProcesando] = useState(false);
@@ -292,8 +296,13 @@ export default function RetailPOS() {
                         aria-label={`Cantidad de ${item.nombre}`}
                         type="number"
                         min={1}
-                        value={cantidad}
-                        onChange={(e) => establecerCantidad(item, e.target.value)}
+                        value={borradorCantidad[item.key] ?? String(cantidad)}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          setBorradorCantidad((actual) => ({ ...actual, [item.key]: valor }));
+                          if (valor !== '') establecerCantidad(item, valor);
+                        }}
+                        onBlur={() => setBorradorCantidad((actual) => { const { [item.key]: _quitado, ...resto } = actual; return resto; })}
                         onFocus={(e) => e.target.select()}
                         className="w-14 rounded bg-gray-900 border border-gray-700 py-1 text-center text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
