@@ -17,6 +17,8 @@ function normalizarTexto(texto: string): string {
   return QUITAR_ACENTOS(String(texto || '').toLowerCase())
     .replace(/\.[a-z0-9]+$/i, '')
     .replace(/[-_]+/g, ' ')
+    .replace(/(\d)([a-z])/g, '$1 $2') // "500g" -> "500 g", para que el gramaje quede como palabra aparte
+    .replace(/([a-z])(\d)/g, '$1 $2') // "x40" -> "x 40"
     .replace(/[^a-z0-9 ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -35,6 +37,27 @@ function puntajeCoincidencia(tokensArchivo: string[], tokensProducto: string[]):
   const set = new Set(tokensProducto);
   const coincidentes = tokensArchivo.filter((t) => set.has(t)).length;
   return coincidentes / Math.min(tokensArchivo.length, tokensProducto.length);
+}
+
+// Unidades de gramaje/presentación que suelen venir en el nombre del
+// archivo o del producto (ej. "500g", "500 G", "500 gramos" son la misma
+// medida) — se normalizan a una forma única para poder compararlas.
+const UNIDADES_CANONICAS: Record<string, string> = {
+  g: 'g', gr: 'g', grs: 'g', gramo: 'g', gramos: 'g',
+  kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg',
+  ml: 'ml', mililitro: 'ml', mililitros: 'ml',
+  l: 'l', lt: 'l', lts: 'l', litro: 'l', litros: 'l',
+  uni: 'uni', und: 'uni', unidad: 'uni', unidades: 'uni',
+  oz: 'oz', lb: 'lb', libra: 'lb', libras: 'lb',
+};
+const PATRON_MEDIDA = new RegExp(`\\b(\\d+(?:[.,]\\d+)?)\\s*(${Object.keys(UNIDADES_CANONICAS).join('|')})\\b`);
+
+// Extrae el gramaje/presentación de un texto (nombre de archivo o nombre +
+// presentación de producto), ej. "Salsa de ají 500 g" -> { numero: '500', unidad: 'g' }.
+function extraerMedida(texto: string): { numero: string; unidad: string } | null {
+  const match = normalizarTexto(texto).match(PATRON_MEDIDA);
+  if (!match) return null;
+  return { numero: match[1].replace(',', '.'), unidad: UNIDADES_CANONICAS[match[2]] };
 }
 
 const SINONIMOS_COLUMNAS: Record<string, string[]> = {
@@ -212,11 +235,25 @@ export class CatalogoService {
       }
 
       const tokensArchivo = tokensDeNombre(archivo.originalname);
+      const medidaArchivo = extraerMedida(archivo.originalname);
       let mejor: { item: (typeof items)[number]; score: number } | null = null;
       let empatados = 0;
       for (const item of items) {
-        const score = puntajeCoincidencia(tokensArchivo, tokensDeNombre(`${item.nombre} ${item.presentacion || ''}`));
+        const textoProducto = `${item.nombre} ${item.presentacion || ''}`;
+        let score = puntajeCoincidencia(tokensArchivo, tokensDeNombre(textoProducto));
         if (score <= 0) continue;
+
+        // Si el archivo trae un gramaje (ej. "500g") y el producto también,
+        // deben coincidir exactamente — si no, no es el mismo producto por
+        // más que el nombre se parezca (ej. 250 G vs 500 G). Si coinciden,
+        // se le da prioridad clara sobre variantes con otro gramaje o sin él.
+        const medidaProducto = extraerMedida(textoProducto);
+        if (medidaArchivo && medidaProducto) {
+          const coincideMedida = medidaArchivo.numero === medidaProducto.numero && medidaArchivo.unidad === medidaProducto.unidad;
+          if (!coincideMedida) continue;
+          score += 1;
+        }
+
         if (!mejor || score > mejor.score) {
           mejor = { item, score };
           empatados = 1;
