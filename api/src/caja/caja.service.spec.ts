@@ -33,11 +33,12 @@ function escenario() {
   };
   db.$transaction = jest.fn(async (fn) => fn(db));
   const notificaciones = { enviarAlerta: jest.fn().mockResolvedValue({}) };
+  const impresion = { imprimirCierreCaja: jest.fn().mockResolvedValue({ impreso: false }) };
   return {
     caja,
     db,
     notificaciones,
-    service: new CajaService(db, notificaciones as any),
+    service: new CajaService(db, notificaciones as any, impresion as any),
   };
 }
 

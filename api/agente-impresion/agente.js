@@ -132,7 +132,7 @@ function confirmar(config, id, ok, motivo) {
 }
 
 async function manejarTrabajo(config, trabajo) {
-  const etiqueta = { TICKET: 'ticket', COMANDA: 'comanda', CAJON: 'apertura de cajón' }[trabajo.tipo] || trabajo.tipo;
+  const etiqueta = { TICKET: 'ticket', COMANDA: 'comanda', CAJON: 'apertura de cajón', CIERRE: 'cierre de caja' }[trabajo.tipo] || trabajo.tipo;
   console.log(`→ Trabajo recibido: ${etiqueta} (${trabajo.id})`);
   const error = await imprimir(config, trabajo.datosBase64);
   if (error) {

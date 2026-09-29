@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 
@@ -14,6 +14,7 @@ const ITEMS = [
   { href: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { href: '/fidelizacion', label: 'Puntos', icon: Users },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/caja', label: 'Cajas', icon: Wallet },
   { href: '/productos', label: 'Productos', icon: Package },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
   { href: '/clientes', label: 'Clientes', icon: Users },

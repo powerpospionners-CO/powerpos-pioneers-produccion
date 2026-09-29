@@ -7,6 +7,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { ImpresionService } from '../impresion/impresion.service';
 import { bloquearCajaSucursal } from './caja-lock';
 
 @Injectable()
@@ -15,19 +16,47 @@ export class CajaService {
   constructor(
     private prisma: PrismaService,
     private notificaciones: NotificacionesService,
+    private impresion: ImpresionService,
   ) {}
+
+  // Reparte el total de cada venta entre sus medios de pago reales (tabla
+  // `pagos`); las ventas anteriores a los pagos mixtos no tienen filas ahí,
+  // así que usan `metodoPago` de respaldo para no perder ese histórico.
+  private desglosePorMetodo(pedidos: { total: any; metodoPago: string; pagos?: { metodoPago: string; monto: any }[] }[]) {
+    const mapa = new Map<string, number>();
+    for (const p of pedidos) {
+      if (p.pagos && p.pagos.length > 0) {
+        for (const pago of p.pagos) mapa.set(pago.metodoPago, (mapa.get(pago.metodoPago) || 0) + Number(pago.monto));
+      } else {
+        mapa.set(p.metodoPago, (mapa.get(p.metodoPago) || 0) + Number(p.total));
+      }
+    }
+    return Array.from(mapa.entries()).map(([metodo, total]) => ({ metodo, total }));
+  }
 
   // El dinero que debe contarse físicamente en la caja es solo lo pagado en
   // efectivo (tarjeta/transferencia/Nequi/Daviplata no entra a la gaveta).
-  // Ventas anteriores a los pagos mixtos no tienen filas en `pagos`, así que
-  // se usa `metodoPago` como respaldo para no perder ese histórico.
   private sumarEfectivo(pedidos: { total: any; metodoPago: string; pagos?: { metodoPago: string; monto: any }[] }[]) {
-    return pedidos.reduce((acc, p) => {
-      if (p.pagos && p.pagos.length > 0) {
-        return acc + p.pagos.filter((pg) => pg.metodoPago === 'EFECTIVO').reduce((s, pg) => s + Number(pg.monto), 0);
+    return this.desglosePorMetodo(pedidos).find((d) => d.metodo === 'EFECTIVO')?.total || 0;
+  }
+
+  // Agrupa por nombre de producto para el resumen/tirilla de cierre. No usa
+  // el id del producto porque, para el reporte, dos ventas del mismo nombre
+  // deben sumarse aunque el producto se haya editado entre una y otra.
+  private productosVendidos(pedidos: { detalles?: { cantidad: number; subtotal: any; producto?: { nombre: string } | null }[] }[]) {
+    const mapa = new Map<string, { cantidad: number; total: number }>();
+    for (const p of pedidos) {
+      for (const d of p.detalles || []) {
+        const nombre = d.producto?.nombre || 'Producto';
+        const actual = mapa.get(nombre) || { cantidad: 0, total: 0 };
+        actual.cantidad += d.cantidad;
+        actual.total += Number(d.subtotal);
+        mapa.set(nombre, actual);
       }
-      return acc + (p.metodoPago === 'EFECTIVO' ? Number(p.total) : 0);
-    }, 0);
+    }
+    return Array.from(mapa.entries())
+      .map(([nombre, v]) => ({ nombre, cantidad: v.cantidad, total: v.total }))
+      .sort((a, b) => b.total - a.total);
   }
 
   async abrirCaja(
@@ -204,7 +233,7 @@ export class CajaService {
       const caja = await tx.caja.findUnique({
         where: { id: cajaId },
         include: {
-          pedidos: { include: { pagos: true } },
+          pedidos: { include: { pagos: true, detalles: { include: { producto: { select: { nombre: true } } } } } },
           sucursal: { select: { nombre: true, empresaId: true } },
           usuario: { select: { nombre: true } },
         },
@@ -217,7 +246,9 @@ export class CajaService {
 
       const pedidosValidos = caja.pedidos.filter((p) => p.estado !== 'ANULADO');
       const totalVentas = pedidosValidos.reduce((acc, p) => acc + Number(p.total), 0);
-      const totalEfectivo = this.sumarEfectivo(pedidosValidos);
+      const ventasPorMetodoPago = this.desglosePorMetodo(pedidosValidos);
+      const totalEfectivo = ventasPorMetodoPago.find((d) => d.metodo === 'EFECTIVO')?.total || 0;
+      const productosVendidos = this.productosVendidos(pedidosValidos);
 
       const montoEsperado = Number(caja.montoInicial) + totalEfectivo;
       const montoFinal =
@@ -269,6 +300,9 @@ export class CajaService {
         montoEsperado,
         montoFinal,
         diferencia,
+        ventasPorMetodoPago,
+        productosVendidos,
+        cantidadVentas: pedidosValidos.length,
       };
     });
     const {
@@ -279,6 +313,9 @@ export class CajaService {
       montoEsperado,
       montoFinal,
       diferencia,
+      ventasPorMetodoPago,
+      productosVendidos,
+      cantidadVentas,
     } = resultado;
     if (Math.abs(diferencia) > 1000) {
       void this.notificaciones
@@ -304,12 +341,37 @@ export class CajaService {
       })
       .catch(() => this.logger.warn('No se pudo notificar el cierre de caja'));
 
+    // Tirilla de cierre: efecto secundario, no debe bloquear ni hacer
+    // fallar el cierre si no hay agente/impresora disponible en este momento.
+    void this.impresion
+      .imprimirCierreCaja(
+        {
+          cajeroNombre: caja.usuario.nombre,
+          sucursalNombre: caja.sucursal.nombre,
+          abiertaEn: caja.abiertaEn,
+          cerradaEn: cajaActualizada.cerradaEn,
+          montoInicial: caja.montoInicial,
+          montoFinal,
+          montoEsperado,
+          diferencia,
+          totalVentas,
+          cantidadVentas,
+          ventasPorMetodoPago,
+          productosVendidos,
+        },
+        empresaId!,
+      )
+      .catch(() => this.logger.warn('No se pudo imprimir el cierre de caja'));
+
     return {
       ...cajaActualizada,
       totalVentas,
       totalEfectivo,
       montoEsperado,
       diferencia,
+      ventasPorMetodoPago,
+      productosVendidos,
+      cantidadVentas,
       automatico,
     };
   }
@@ -342,6 +404,63 @@ export class CajaService {
     const totalEsperado = Number(caja.montoInicial) + totalEfectivo;
 
     return { ...caja, totalVentas, totalEfectivo, totalEsperado };
+  }
+
+  // Lista de cajas ya cerradas, para que el admin elija cuál revisar en
+  // detalle (ver obtenerResumenCaja). Más reciente primero.
+  async listarCajasCerradas(empresaId: number, sucursalId?: number) {
+    return this.prisma.caja.findMany({
+      where: {
+        sucursal: { empresaId, ...(sucursalId ? { id: sucursalId } : {}) },
+        estado: 'CERRADA',
+      },
+      include: {
+        usuario: { select: { nombre: true } },
+        sucursal: { select: { nombre: true } },
+      },
+      orderBy: { cerradaEn: 'desc' },
+      take: 90,
+    });
+  }
+
+  // Detalle completo de una caja (abierta o cerrada): lo que vendió, en qué
+  // medios de pago, y los productos — la misma información que trae la
+  // tirilla de cierre, pero para verla en pantalla en cualquier momento.
+  async obtenerResumenCaja(cajaId: number, empresaId: number) {
+    const caja = await this.prisma.caja.findFirst({
+      where: { id: cajaId, sucursal: { empresaId } },
+      include: {
+        usuario: { select: { nombre: true } },
+        sucursal: { select: { nombre: true } },
+        pedidos: {
+          where: { estado: { not: 'ANULADO' } },
+          include: { pagos: true, detalles: { include: { producto: { select: { nombre: true } } } } },
+        },
+      },
+    });
+    if (!caja) throw new NotFoundException('Caja no encontrada');
+
+    const totalVentas = caja.pedidos.reduce((acc, p) => acc + Number(p.total), 0);
+    const ventasPorMetodoPago = this.desglosePorMetodo(caja.pedidos);
+    const totalEfectivo = ventasPorMetodoPago.find((d) => d.metodo === 'EFECTIVO')?.total || 0;
+    const montoEsperado = Number(caja.montoInicial) + totalEfectivo;
+
+    return {
+      id: caja.id,
+      estado: caja.estado,
+      cajeroNombre: caja.usuario.nombre,
+      sucursalNombre: caja.sucursal.nombre,
+      abiertaEn: caja.abiertaEn,
+      cerradaEn: caja.cerradaEn,
+      montoInicial: Number(caja.montoInicial),
+      montoFinal: caja.montoFinal !== null ? Number(caja.montoFinal) : null,
+      diferencia: caja.diferencia !== null ? Number(caja.diferencia) : null,
+      montoEsperado,
+      totalVentas,
+      cantidadVentas: caja.pedidos.length,
+      ventasPorMetodoPago,
+      productosVendidos: this.productosVendidos(caja.pedidos),
+    };
   }
 
   async registrarAperturaIrregular(

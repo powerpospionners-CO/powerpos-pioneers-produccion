@@ -34,7 +34,7 @@ export class ImpresionService {
   // impresora, y se espera su confirmación.
   private async enviarAgenteOTcp(
     empresaId: number,
-    tipo: 'TICKET' | 'COMANDA' | 'CAJON',
+    tipo: 'TICKET' | 'COMANDA' | 'CAJON' | 'CIERRE',
     datos: Buffer,
     host?: string,
     port?: number,
@@ -131,6 +131,30 @@ export class ImpresionService {
     if (error) {
       this.logger.warn(`No se pudo imprimir el recibo (${modo}): ${error}`);
       return { impreso: false, modo, fallbackBrowser: true, motivo: error };
+    }
+
+    return { impreso: true, modo };
+  }
+
+  // Tirilla de cierre de caja (tipo "reporte Z"): se manda al agente/impresora
+  // como efecto del cierre, igual que un ticket de venta. Si no hay agente
+  // conectado simplemente no imprime nada (el admin igual puede ver el mismo
+  // desglose desde la pantalla de historial de caja).
+  async imprimirCierreCaja(resumen: any, empresaId: number) {
+    if (String(process.env.ESC_POS_ENABLED).toLowerCase() !== 'true') {
+      return { impreso: false, modo: 'browser', fallbackBrowser: false, motivo: 'ESC_POS_ENABLED no está activo' };
+    }
+
+    const contenido = await this.formatearCierreCaja(resumen, empresaId);
+    const modo = this.modoAgente() ? 'agente' : 'tcp';
+    const host = process.env.ESC_POS_HOST;
+    const port = Number(process.env.ESC_POS_PORT || 9100);
+
+    const error = await this.enviarAgenteOTcp(empresaId, 'CIERRE', Buffer.concat([INICIO, contenido, CORTE]), host, port);
+
+    if (error) {
+      this.logger.warn(`No se pudo imprimir el cierre de caja (${modo}): ${error}`);
+      return { impreso: false, modo, motivo: error };
     }
 
     return { impreso: true, modo };
@@ -408,6 +432,58 @@ export class ImpresionService {
     }
     lineas.push('--------------------------------\n');
     lineas.push('\nGracias por su compra\n\n');
+
+    return Buffer.concat(
+      lineas.map((segmento) =>
+        Buffer.isBuffer(segmento) ? segmento : Buffer.from(String(segmento), 'ascii'),
+      ),
+    );
+  }
+
+  private async formatearCierreCaja(resumen: any, empresaId: number) {
+    const empresa = await this.obtenerEmpresa(empresaId);
+    const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
+    const logo = await this.generarLogoEscPos(empresa);
+
+    const lineas: Array<string | Buffer> = ['\n'];
+    if (logo.length > 0) {
+      lineas.push(logo, Buffer.from('\n'));
+    }
+
+    lineas.push(
+      `${this.centrarTexto(nombre, 32)}\n`,
+      `${this.centrarTexto('CIERRE DE CAJA', 32)}\n`,
+      '--------------------------------\n',
+      `${this.recortarTexto(`CAJERO: ${resumen.cajeroNombre || ''}`, 32)}\n`,
+      `${this.recortarTexto(`SUCURSAL: ${resumen.sucursalNombre || ''}`, 32)}\n`,
+      `${this.recortarTexto(`APERTURA: ${new Date(resumen.abiertaEn).toLocaleString('es-CO')}`, 32)}\n`,
+      `${this.recortarTexto(`CIERRE: ${new Date(resumen.cerradaEn).toLocaleString('es-CO')}`, 32)}\n`,
+      '--------------------------------\n',
+      `${this.recortarTexto(`VENTAS DEL TURNO: ${resumen.cantidadVentas}`, 32)}\n`,
+      `TOTAL VENDIDO: ${Number(resumen.totalVentas).toFixed(0)}\n`,
+      '--------------------------------\n',
+      'POR MEDIO DE PAGO\n',
+    );
+    for (const p of resumen.ventasPorMetodoPago || []) {
+      lineas.push(`${this.recortarTexto(p.metodo, 20)}${String(Number(p.total).toFixed(0)).padStart(12, ' ')}\n`);
+    }
+    lineas.push(
+      '--------------------------------\n',
+      `BASE INICIAL: ${Number(resumen.montoInicial).toFixed(0)}\n`,
+      `EFECTIVO ESPERADO: ${Number(resumen.montoEsperado).toFixed(0)}\n`,
+      `EFECTIVO CONTADO: ${Number(resumen.montoFinal).toFixed(0)}\n`,
+      `DIFERENCIA: ${Number(resumen.diferencia).toFixed(0)}\n`,
+    );
+    if (resumen.productosVendidos?.length) {
+      lineas.push(
+        '--------------------------------\n',
+        'PRODUCTOS VENDIDOS\n',
+      );
+      for (const p of resumen.productosVendidos) {
+        lineas.push(`${p.cantidad}x ${p.nombre}\n`);
+      }
+    }
+    lineas.push('--------------------------------\n', '\n\n');
 
     return Buffer.concat(
       lineas.map((segmento) =>

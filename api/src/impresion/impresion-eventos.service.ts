@@ -4,7 +4,7 @@ import { Subject, filter, map, firstValueFrom, timeout, catchError, of } from 'r
 
 export interface TrabajoImpresion {
   id: string;
-  tipo: 'TICKET' | 'COMANDA' | 'CAJON';
+  tipo: 'TICKET' | 'COMANDA' | 'CAJON' | 'CIERRE';
   datosBase64: string;
 }
 

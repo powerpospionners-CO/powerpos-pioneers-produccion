@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { CajaService } from './caja.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -38,5 +38,17 @@ export class CajaController {
   @Post('apertura-irregular')
   aperturaIrregular(@Body() body: any, @Request() req: any) {
     return this.cajaService.registrarAperturaIrregular(body.cajaId, req.user.id, body.descripcion, req.user.empresaId);
+  }
+
+  @Get('historial')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  historial(@Request() req: any, @Query('sucursalId') sucursalId?: string) {
+    return this.cajaService.listarCajasCerradas(req.user.empresaId, sucursalId ? +sucursalId : undefined);
+  }
+
+  @Get(':id/resumen')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  resumen(@Param('id') id: string, @Request() req: any) {
+    return this.cajaService.obtenerResumenCaja(+id, req.user.empresaId);
   }
 }
