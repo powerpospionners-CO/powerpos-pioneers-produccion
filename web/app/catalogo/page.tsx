@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
-  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search,
+  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images,
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -38,6 +38,12 @@ export default function CatalogoPage() {
   const [slugTienda, setSlugTienda] = useState('');
   const [categoria, setCategoria] = useState('Todos');
   const [busqueda, setBusqueda] = useState('');
+
+  const [modalImagenes, setModalImagenes] = useState(false);
+  const [archivosImagenes, setArchivosImagenes] = useState<File[]>([]);
+  const [subiendoImagenes, setSubiendoImagenes] = useState(false);
+  const [resultadoImagenes, setResultadoImagenes] = useState<{ asignados: { archivo: string; producto: string }[]; sinCoincidencia: { archivo: string; motivo: string }[]; total: number } | null>(null);
+  const [errorImagenes, setErrorImagenes] = useState('');
 
   useEffect(() => {
     cargarDatos();
@@ -160,6 +166,34 @@ export default function CatalogoPage() {
     }
   };
 
+  const abrirModalImagenes = () => {
+    setArchivosImagenes([]);
+    setResultadoImagenes(null);
+    setErrorImagenes('');
+    setModalImagenes(true);
+  };
+
+  const subirImagenes = async () => {
+    if (!archivosImagenes.length) return;
+    setSubiendoImagenes(true);
+    setErrorImagenes('');
+    setResultadoImagenes(null);
+    try {
+      const formData = new FormData();
+      archivosImagenes.forEach((f) => formData.append('imagenes', f));
+      const { data } = await api.post('/catalogo/importar-imagenes', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setResultadoImagenes(data);
+      setArchivosImagenes([]);
+      if (data.asignados.length > 0) cargarDatos();
+    } catch (e: any) {
+      setErrorImagenes(e?.response?.data?.message || 'No se pudieron subir las imágenes');
+    } finally {
+      setSubiendoImagenes(false);
+    }
+  };
+
   const categorias = ['Todos', ...Array.from(new Set(items.map((i) => i.categoria).filter(Boolean) as string[]))];
   const visibles = items.filter(
     (i) =>
@@ -211,6 +245,13 @@ export default function CatalogoPage() {
               >
                 <FileSpreadsheet size={16} />
                 Importar Excel
+              </button>
+              <button
+                onClick={abrirModalImagenes}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+              >
+                <Images size={16} />
+                Subir imágenes
               </button>
               <button
                 onClick={() => abrirModal()}
@@ -468,6 +509,85 @@ export default function CatalogoPage() {
                 >
                   <Upload size={16} />
                   {importando ? 'Importando...' : 'Importar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal subir imágenes en lote */}
+        {modalImagenes && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                  <Images size={20} className="text-orange-500" />
+                  Subir imágenes en lote
+                </h3>
+                <button onClick={() => setModalImagenes(false)} className="text-gray-500 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-gray-500 text-sm mb-4">
+                Selecciona varias fotos a la vez. El nombre de cada archivo se compara con el nombre de los productos del catálogo para asignarla automáticamente — ej. &quot;banderillas-azucaradas-40-uni.png&quot; se asigna sola a &quot;BANDERILLAS AZUCARADAS 40 UNI&quot;.
+              </p>
+
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-1">Imágenes</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => { setArchivosImagenes(Array.from(e.target.files || [])); setResultadoImagenes(null); setErrorImagenes(''); }}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-gray-700 file:text-white file:text-sm"
+                />
+                {archivosImagenes.length > 0 && (
+                  <p className="text-gray-500 text-xs mt-1.5">{archivosImagenes.length} archivo(s) seleccionado(s)</p>
+                )}
+              </div>
+
+              {errorImagenes && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-3 mb-4 text-sm">
+                  {errorImagenes}
+                </div>
+              )}
+
+              {resultadoImagenes && (
+                <div className="mb-4 space-y-2">
+                  {resultadoImagenes.asignados.length > 0 && (
+                    <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                      <p className="font-medium mb-1">✅ {resultadoImagenes.asignados.length} de {resultadoImagenes.total} imagen(es) asignada(s):</p>
+                      <ul className="space-y-0.5">
+                        {resultadoImagenes.asignados.map((a, i) => (
+                          <li key={i}>{a.archivo} → {a.producto}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {resultadoImagenes.sinCoincidencia.length > 0 && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                      <p className="font-medium mb-1">{resultadoImagenes.sinCoincidencia.length} sin asignar (asígnalas a mano con &quot;Editar&quot;):</p>
+                      <ul className="space-y-0.5">
+                        {resultadoImagenes.sinCoincidencia.map((s, i) => (
+                          <li key={i}>{s.archivo}: {s.motivo}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button onClick={() => setModalImagenes(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors">
+                  Cerrar
+                </button>
+                <button
+                  onClick={subirImagenes}
+                  disabled={!archivosImagenes.length || subiendoImagenes}
+                  className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white font-bold rounded-lg py-3 transition-colors"
+                >
+                  <Upload size={16} />
+                  {subiendoImagenes ? 'Subiendo...' : 'Subir'}
                 </button>
               </div>
             </div>

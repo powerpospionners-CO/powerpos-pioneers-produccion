@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { promises as fs } from 'fs';
 import * as XLSX from 'xlsx';
 import PDFDocument = require('pdfkit');
 const sharp: typeof import('sharp').default = require('sharp');
@@ -6,6 +7,35 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || '').toLowerCase().trim());
+
+// Palabras demasiado comunes como para servir de pista al emparejar un
+// nombre de archivo con un producto (ej. "de", "x") — se ignoran para que
+// el puntaje de coincidencia se base en las palabras que sí identifican el producto.
+const PALABRAS_IGNORADAS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'x', 'con', 'y', 'para']);
+
+function normalizarTexto(texto: string): string {
+  return QUITAR_ACENTOS(String(texto || '').toLowerCase())
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokensDeNombre(texto: string): string[] {
+  return normalizarTexto(texto)
+    .split(' ')
+    .filter((t) => t.length > 1 && !PALABRAS_IGNORADAS.has(t));
+}
+
+// Proporción de palabras del archivo que aparecen en el nombre del producto,
+// sobre el más corto de los dos (para no penalizar nombres de producto largos).
+function puntajeCoincidencia(tokensArchivo: string[], tokensProducto: string[]): number {
+  if (!tokensArchivo.length || !tokensProducto.length) return 0;
+  const set = new Set(tokensProducto);
+  const coincidentes = tokensArchivo.filter((t) => set.has(t)).length;
+  return coincidentes / Math.min(tokensArchivo.length, tokensProducto.length);
+}
 
 const SINONIMOS_COLUMNAS: Record<string, string[]> = {
   nombre: ['nombre', 'producto', 'nombre del producto', 'articulo'],
@@ -153,6 +183,65 @@ export class CatalogoService {
     }
 
     return { creados, totalFilas: filas.length, errores };
+  }
+
+  // Recibe varias imágenes sueltas (ej. exportadas con el nombre del
+  // producto) y las empareja con el catálogo por similitud de nombre, sin
+  // que el admin tenga que asignarlas una por una. Si el nombre del archivo
+  // no se parece lo suficiente a ningún producto, o se parece por igual a
+  // más de uno, se deja fuera para que se asigne a mano desde "Editar".
+  async importarImagenes(archivos: Express.Multer.File[], empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    const items = await this.prisma.catalogoProducto.findMany({
+      where: { empresaId },
+      select: { id: true, nombre: true, presentacion: true },
+    });
+    const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const asignados: { archivo: string; producto: string }[] = [];
+    const sinCoincidencia: { archivo: string; motivo: string }[] = [];
+
+    for (const archivo of archivos) {
+      try {
+        const reducido = await sharp(archivo.path)
+          .rotate()
+          .resize({ width: 900, height: 900, fit: 'inside', withoutEnlargement: true })
+          .toBuffer();
+        await fs.writeFile(archivo.path, reducido);
+      } catch {
+        // Si sharp no puede procesarla (formato raro, etc.) se deja la original.
+      }
+
+      const tokensArchivo = tokensDeNombre(archivo.originalname);
+      let mejor: { item: (typeof items)[number]; score: number } | null = null;
+      let empatados = 0;
+      for (const item of items) {
+        const score = puntajeCoincidencia(tokensArchivo, tokensDeNombre(`${item.nombre} ${item.presentacion || ''}`));
+        if (score <= 0) continue;
+        if (!mejor || score > mejor.score) {
+          mejor = { item, score };
+          empatados = 1;
+        } else if (score === mejor.score) {
+          empatados++;
+        }
+      }
+
+      if (!mejor || mejor.score < 0.5) {
+        sinCoincidencia.push({ archivo: archivo.originalname, motivo: 'No se encontró un producto con nombre parecido' });
+        await fs.unlink(archivo.path).catch(() => undefined);
+        continue;
+      }
+      if (empatados > 1) {
+        sinCoincidencia.push({ archivo: archivo.originalname, motivo: 'El nombre coincide con más de un producto; asígnala manualmente' });
+        await fs.unlink(archivo.path).catch(() => undefined);
+        continue;
+      }
+
+      const imagen = `${baseUrl}/uploads/catalogo/${archivo.filename}`;
+      await this.prisma.catalogoProducto.update({ where: { id: mejor.item.id }, data: { imagen } });
+      asignados.push({ archivo: archivo.originalname, producto: mejor.item.nombre });
+    }
+
+    return { asignados, sinCoincidencia, total: archivos.length };
   }
 
   private async empresaPorSlug(slug: string) {
