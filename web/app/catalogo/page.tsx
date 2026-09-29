@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
-  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon,
+  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search,
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -36,6 +36,8 @@ export default function CatalogoPage() {
   const [errorImportar, setErrorImportar] = useState('');
   const [descargandoPdf, setDescargandoPdf] = useState(false);
   const [slugTienda, setSlugTienda] = useState('');
+  const [categoria, setCategoria] = useState('Todos');
+  const [busqueda, setBusqueda] = useState('');
 
   useEffect(() => {
     cargarDatos();
@@ -158,6 +160,13 @@ export default function CatalogoPage() {
     }
   };
 
+  const categorias = ['Todos', ...Array.from(new Set(items.map((i) => i.categoria).filter(Boolean) as string[]))];
+  const visibles = items.filter(
+    (i) =>
+      (categoria === 'Todos' || i.categoria === categoria) &&
+      i.nombre.toLowerCase().includes(busqueda.toLowerCase()),
+  );
+
   const urlCatalogoWeb = slugTienda
     ? (typeof window !== 'undefined' && window.location.hostname.endsWith(ROOT_DOMAIN)
         ? `https://app.${ROOT_DOMAIN}/catalogo/${slugTienda}`
@@ -218,8 +227,41 @@ export default function CatalogoPage() {
               Aún no hay productos en el catálogo. Agrégalos uno por uno o impórtalos desde Excel.
             </div>
           ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-3 mt-4">
+                <div className="flex flex-wrap gap-1.5">
+                  {categorias.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCategoria(c)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        categoria === c
+                          ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30'
+                          : 'bg-gray-800 text-gray-400 border border-transparent hover:text-white'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 ml-auto">
+                  <Search size={14} className="text-gray-500" />
+                  <input
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Buscar producto..."
+                    className="bg-transparent text-white text-sm focus:outline-none w-40"
+                  />
+                </div>
+              </div>
+
+              {visibles.length === 0 ? (
+                <div className="text-center text-gray-500 py-20">
+                  No hay productos que coincidan con ese filtro.
+                </div>
+              ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
-              {items.map((item) => (
+              {visibles.map((item) => (
                 <div key={item.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                   <div className="h-32 bg-gray-800 flex items-center justify-center">
                     {item.imagen ? (
@@ -251,6 +293,8 @@ export default function CatalogoPage() {
                 </div>
               ))}
             </div>
+              )}
+            </>
           )}
         </div>
 
