@@ -463,6 +463,57 @@ export class CajaService {
     };
   }
 
+  // Corrige el conteo de una caja YA cerrada (ej. el cajero contó mal o
+  // marcó $0 sin contar). Solo admin/gerente, y siempre queda un evento en
+  // el historial con el motivo y el valor anterior para no perder el rastro.
+  async corregirCierre(
+    cajaId: number,
+    montoFinalNuevo: any,
+    motivo: string,
+    usuarioId: number,
+    empresaId: number,
+  ) {
+    const monto = Number(montoFinalNuevo);
+    if (!Number.isFinite(monto) || monto < 0)
+      throw new BadRequestException('El monto contado es inválido');
+    if (!motivo || !motivo.trim())
+      throw new BadRequestException('Escribe el motivo de la corrección');
+
+    const caja = await this.prisma.caja.findFirst({
+      where: { id: cajaId, sucursal: { empresaId } },
+      include: {
+        pedidos: { where: { estado: { not: 'ANULADO' } }, include: { pagos: true } },
+        sucursal: { select: { nombre: true, empresaId: true } },
+      },
+    });
+    if (!caja) throw new NotFoundException('Caja no encontrada');
+    if (caja.estado !== 'CERRADA')
+      throw new BadRequestException('Solo se puede corregir una caja ya cerrada');
+
+    // El `where` de arriba ya excluye anuladas; se vuelve a filtrar aquí por
+    // seguridad (defensivo, igual que en cerrarCaja/obtenerCajaAbierta).
+    const pedidosValidos = caja.pedidos.filter((p) => p.estado !== 'ANULADO');
+    const totalEfectivo = this.sumarEfectivo(pedidosValidos);
+    const montoEsperado = Number(caja.montoInicial) + totalEfectivo;
+    const montoAnterior = caja.montoFinal !== null ? Number(caja.montoFinal) : null;
+    const diferencia = monto - montoEsperado;
+
+    const actualizada = await this.prisma.caja.update({
+      where: { id: cajaId },
+      data: { montoFinal: monto, diferencia },
+    });
+
+    await this.registrarEvento({
+      cajaId,
+      tipo: 'CORRECCION',
+      descripcion: `Corrección de cierre: contado pasó de ${montoAnterior !== null ? `$${montoAnterior.toLocaleString()}` : 'sin dato'} a $${monto.toLocaleString()}. Motivo: ${motivo.trim()}`,
+      usuarioId,
+      esAlerta: Math.abs(diferencia) > 1000,
+    });
+
+    return { ...actualizada, montoEsperado, diferencia };
+  }
+
   async registrarAperturaIrregular(
     cajaId: number,
     usuarioId: number,

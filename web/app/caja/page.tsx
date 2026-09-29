@@ -20,6 +20,7 @@ type CajaCerrada = {
 
 type Resumen = {
   id: number;
+  estado: string;
   cajeroNombre: string;
   sucursalNombre: string;
   abiertaEn: string;
@@ -44,22 +45,53 @@ export default function CajaHistorialPage() {
   const [error, setError] = useState('');
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cargandoResumen, setCargandoResumen] = useState(false);
+  const [corrigiendo, setCorrigiendo] = useState(false);
+  const [montoCorregido, setMontoCorregido] = useState('');
+  const [motivoCorreccion, setMotivoCorreccion] = useState('');
+  const [enviandoCorreccion, setEnviandoCorreccion] = useState(false);
+  const [errorCorreccion, setErrorCorreccion] = useState('');
 
   useEffect(() => {
+    cargarHistorial();
+  }, []);
+
+  const cargarHistorial = () => {
     api.get('/caja/historial')
       .then((r) => setCajas(r.data))
       .catch(() => setError('No se pudo cargar el historial de cajas.'))
       .finally(() => setLoading(false));
-  }, []);
+  };
 
   const verDetalle = async (id: number) => {
-    setCargandoResumen(true); setError('');
+    setCargandoResumen(true); setError(''); setCorrigiendo(false);
     try {
       const { data } = await api.get(`/caja/${id}/resumen`);
       setResumen(data);
     } catch {
       setError('No se pudo cargar el detalle de esa caja.');
     } finally { setCargandoResumen(false); }
+  };
+
+  const abrirCorreccion = () => {
+    if (!resumen) return;
+    setMontoCorregido(resumen.montoFinal !== null ? String(resumen.montoFinal) : '');
+    setMotivoCorreccion('');
+    setErrorCorreccion('');
+    setCorrigiendo(true);
+  };
+
+  const enviarCorreccion = async () => {
+    if (!resumen) return;
+    setEnviandoCorreccion(true); setErrorCorreccion('');
+    try {
+      await api.patch(`/caja/${resumen.id}/corregir`, { montoFinal: Number(montoCorregido), motivo: motivoCorreccion });
+      const { data } = await api.get(`/caja/${resumen.id}/resumen`);
+      setResumen(data);
+      setCorrigiendo(false);
+      cargarHistorial();
+    } catch (e: any) {
+      setErrorCorreccion(e?.response?.data?.message || 'No se pudo guardar la corrección.');
+    } finally { setEnviandoCorreccion(false); }
   };
 
   return (
@@ -148,6 +180,28 @@ export default function CajaHistorialPage() {
                   {resumen.diferencia !== null && (
                     <div className={`mt-1 flex justify-between rounded-lg px-2 py-1 font-bold ${Math.abs(resumen.diferencia) > 1000 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
                       <span>Diferencia</span><span>{moneda(resumen.diferencia)}</span>
+                    </div>
+                  )}
+                  {resumen.estado === 'CERRADA' && !corrigiendo && (
+                    <button type="button" onClick={abrirCorreccion} className="mt-3 w-full rounded-lg border border-gray-700 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-white">
+                      Corregir conteo (el cajero se equivocó)
+                    </button>
+                  )}
+                  {corrigiendo && (
+                    <div className="mt-3 space-y-2 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+                      <label className="block text-xs text-gray-400">Efectivo realmente contado
+                        <input type="number" min={0} value={montoCorregido} onChange={(e) => setMontoCorregido(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-white" />
+                      </label>
+                      <label className="block text-xs text-gray-400">Motivo
+                        <input type="text" value={motivoCorreccion} onChange={(e) => setMotivoCorreccion(e.target.value)} placeholder="Ej: se contó mal, faltaba sumar un billete…" className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-white" />
+                      </label>
+                      {errorCorreccion && <p className="text-xs text-red-400">{errorCorreccion}</p>}
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setCorrigiendo(false)} className="flex-1 rounded-lg bg-gray-800 py-2 text-xs text-white hover:bg-gray-700">Cancelar</button>
+                        <button type="button" onClick={enviarCorreccion} disabled={enviandoCorreccion || montoCorregido === '' || !motivoCorreccion.trim()} className="flex-1 rounded-lg bg-orange-500 py-2 text-xs font-bold text-white hover:bg-orange-600 disabled:opacity-50">
+                          {enviandoCorreccion ? 'Guardando…' : 'Guardar corrección'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

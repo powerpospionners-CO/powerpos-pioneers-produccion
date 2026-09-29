@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { CajaService } from './caja.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -50,5 +50,11 @@ export class CajaController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   resumen(@Param('id') id: string, @Request() req: any) {
     return this.cajaService.obtenerResumenCaja(+id, req.user.empresaId);
+  }
+
+  @Patch(':id/corregir')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  corregir(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.cajaService.corregirCierre(+id, body.montoFinal, body.motivo, req.user.id, req.user.empresaId);
   }
 }

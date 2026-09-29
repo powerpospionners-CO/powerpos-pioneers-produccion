@@ -587,6 +587,7 @@ enum TipoEventoCaja {
   MOVIMIENTO
   EDICION_PAGO
   ANULACION
+  CORRECCION
 }
 
 model EventoCaja {

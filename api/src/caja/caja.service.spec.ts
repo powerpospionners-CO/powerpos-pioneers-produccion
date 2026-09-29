@@ -136,3 +136,40 @@ describe('Conciliación de caja', () => {
     }
   });
 });
+
+describe('Corrección de cierre de caja', () => {
+  it('recalcula la diferencia y deja un evento con el motivo', async () => {
+    const { service, db, caja } = escenario();
+    db.caja.findFirst.mockResolvedValue({ ...caja, estado: 'CERRADA', montoFinal: 0 });
+    const resultado = await service.corregirCierre(1, 300, 'Se había contado mal', 3, 4);
+    expect(resultado).toMatchObject({ montoFinal: 300, montoEsperado: 300, diferencia: 0 });
+    expect(db.caja.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { montoFinal: 300, diferencia: 0 },
+    });
+    expect(db.eventoCaja.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: 'CORRECCION',
+          descripcion: expect.stringContaining('Se había contado mal'),
+        }),
+      }),
+    );
+  });
+
+  it('rechaza corregir una caja que sigue abierta', async () => {
+    const { service, db } = escenario();
+    await expect(
+      service.corregirCierre(1, 300, 'motivo', 3, 4),
+    ).rejects.toThrow('ya cerrada');
+    expect(db.caja.update).not.toHaveBeenCalled();
+  });
+
+  it('exige un motivo', async () => {
+    const { service, db, caja } = escenario();
+    db.caja.findFirst.mockResolvedValue({ ...caja, estado: 'CERRADA', montoFinal: 0 });
+    await expect(
+      service.corregirCierre(1, 300, '  ', 3, 4),
+    ).rejects.toThrow('motivo');
+  });
+});
