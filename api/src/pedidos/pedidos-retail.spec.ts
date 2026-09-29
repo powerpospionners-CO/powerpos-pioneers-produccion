@@ -12,7 +12,10 @@ function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado
       findFirst: jest.fn().mockResolvedValue({ id: 5, nombre: 'Arroz', precio: 10000, disponible: true, activo: true, controlaStock: true, ingredientes: [], adicionales: [] }),
       updateMany: jest.fn().mockResolvedValue({ count: stockActualizado }),
     },
-    pedido: { create: jest.fn().mockImplementation(async ({ data }) => ({ id: 8, numero: data.numero, estado: data.estado, total: data.total, sucursalId: 2 })) },
+    pedido: {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockImplementation(async ({ data }) => ({ id: 8, numero: data.numero, estado: data.estado, total: data.total, sucursalId: 2 })),
+    },
     movimientoFinanciero: { create: jest.fn().mockResolvedValue({ id: 1 }) },
   };
   const service = new PedidosService({} as any, { emitir: jest.fn() } as any, { enviarAlerta: jest.fn() } as any);

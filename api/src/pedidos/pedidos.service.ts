@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { calcularPuntos, puntosConfig, monto } from '../tienda/reglas';
 import {
@@ -258,7 +257,7 @@ export class PedidosService {
       if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}${item.presentacionNombre ? ` (${item.presentacionNombre})` : ''}`);
     }
 
-    const numero = await this.generarNumeroPedido(sucursalId);
+    const numero = await this.generarNumeroPedido(sucursalId, db);
 
     const pedido = await db.pedido.create({
       data: {
@@ -749,5 +748,16 @@ export class PedidosService {
     };
   }
 
-  private async generarNumeroPedido(sucursalId: number): Promise<string> { return 'PED-' + sucursalId + '-' + randomUUID(); }
+  // "PED-{sucursal}-{fecha Bogotá}-{consecutivo del día}", ej. PED-2-20260928-0007.
+  // El consecutivo se cuenta dentro de la misma transacción, ya serializada por
+  // bloquearCajaSucursal (llamado antes en crearEnTransaccion), así que no hay
+  // riesgo de dos pedidos de la misma sucursal calculando el mismo número a la vez.
+  private async generarNumeroPedido(sucursalId: number, db: Prisma.TransactionClient): Promise<string> {
+    const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(new Date())
+      .replace(/-/g, '');
+    const prefijo = `PED-${sucursalId}-${fecha}-`;
+    const delDia = await db.pedido.count({ where: { sucursalId, numero: { startsWith: prefijo } } });
+    return `${prefijo}${String(delDia + 1).padStart(4, '0')}`;
+  }
 }
