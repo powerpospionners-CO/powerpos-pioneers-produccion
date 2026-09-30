@@ -1,5 +1,5 @@
 import { Body, Controller, Post, Request, Sse, UseGuards } from '@nestjs/common';
-import { Observable, map } from 'rxjs';
+import { Observable, interval, map, merge } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ImpresionService } from './impresion.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
@@ -38,7 +38,14 @@ export class ImpresionAgenteController {
   @Sse('stream')
   @UseGuards(AgenteImpresionGuard)
   stream(@Request() req: any): Observable<MessageEvent> {
-    return this.eventos.paraEmpresa(req.empresaId).pipe(map((trabajo) => ({ data: trabajo }) as MessageEvent));
+    const trabajos$ = this.eventos.paraEmpresa(req.empresaId).pipe(map((trabajo) => ({ data: trabajo }) as MessageEvent));
+    // Sin esto, Railway (u otro proxy intermedio) corta la conexión SSE por
+    // inactividad cuando pasa un rato sin ventas; el agente se reconecta
+    // solo, pero cualquier trabajo que llegue justo en ese hueco se pierde
+    // (no hay cómo reintentarlo). Un latido cada 20s mantiene la conexión
+    // viva; el agente lo identifica por tipo 'PING' y lo ignora.
+    const latido$ = interval(20000).pipe(map(() => ({ data: { tipo: 'PING' } }) as MessageEvent));
+    return merge(trabajos$, latido$);
   }
 
   @Post('confirmar')

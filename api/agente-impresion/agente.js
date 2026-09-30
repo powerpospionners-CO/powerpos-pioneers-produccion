@@ -171,6 +171,7 @@ function conectar(config) {
         if (!linea) continue;
         try {
           const trabajo = JSON.parse(linea.slice(5).trim());
+          if (trabajo.tipo === 'PING') continue; // latido de conexión, no es un trabajo real
           manejarTrabajo(config, trabajo);
         } catch (error) {
           console.error('No se pudo interpretar el trabajo recibido:', error.message);
