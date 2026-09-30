@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Boxes, History, Package, Search, X } from 'lucide-react';
+import { AlertTriangle, Boxes, CalendarClock, History, Package, Search, Trash2, X } from 'lucide-react';
 import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -25,8 +25,28 @@ type Movimiento = {
   stockAnterior: string;
   stockNuevo: string;
   descripcion?: string | null;
+  motivoMerma?: string | null;
   creadoEn: string;
   usuario?: { nombre: string };
+};
+
+type LotePorVencer = {
+  id: number;
+  cantidadRestante: number;
+  fechaVencimiento: string;
+  producto: { id: number; nombre: string; categoria?: { icono?: string } };
+};
+
+type ResumenMerma = {
+  productoId: number;
+  nombre: string;
+  cantidad: number;
+  costoEstimado: number;
+  motivos: Record<string, number>;
+};
+
+const ETIQUETAS_MOTIVO_MERMA: Record<string, string> = {
+  DANADO: 'Dañado', DONADO: 'Donado', CONSUMO_PROPIO: 'Consumo propio', OTRO: 'Otro',
 };
 
 export default function RetailInventario() {
@@ -38,19 +58,28 @@ export default function RetailInventario() {
   const [aviso, setAviso] = useState('');
 
   const [modalAjuste, setModalAjuste] = useState<Producto | null>(null);
-  const [formAjuste, setFormAjuste] = useState({ tipo: 'ENTRADA', cantidad: '', descripcion: '' });
+  const [formAjuste, setFormAjuste] = useState({ tipo: 'ENTRADA', cantidad: '', descripcion: '', motivoMerma: '' });
   const [guardando, setGuardando] = useState(false);
 
   const [modalHistorial, setModalHistorial] = useState<Producto | null>(null);
   const [historial, setHistorial] = useState<Movimiento[]>([]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
 
+  const [porVencer, setPorVencer] = useState<LotePorVencer[]>([]);
+  const [modalMerma, setModalMerma] = useState(false);
+  const [reporteMerma, setReporteMerma] = useState<ResumenMerma[] | null>(null);
+  const [cargandoMerma, setCargandoMerma] = useState(false);
+
   const cargar = async () => {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get('/productos');
-      setProductos(data);
+      const [prods, vencer] = await Promise.all([
+        api.get('/productos'),
+        api.get('/productos/lotes/por-vencer', { params: { dias: 7 } }),
+      ]);
+      setProductos(prods.data);
+      setPorVencer(vencer.data);
     } catch {
       setError('No fue posible cargar el catálogo de productos.');
     } finally {
@@ -59,6 +88,19 @@ export default function RetailInventario() {
   };
 
   useEffect(() => { void cargar(); }, []);
+
+  const abrirMerma = async () => {
+    setModalMerma(true);
+    setCargandoMerma(true);
+    try {
+      const { data } = await api.get('/productos/reportes/merma');
+      setReporteMerma(data.resumenPorProducto);
+    } catch {
+      setReporteMerma([]);
+    } finally {
+      setCargandoMerma(false);
+    }
+  };
 
   const controlados = useMemo(() => productos.filter((p) => p.controlaStock), [productos]);
   const sinControl = useMemo(() => productos.filter((p) => !p.controlaStock), [productos]);
@@ -71,7 +113,7 @@ export default function RetailInventario() {
 
   const abrirAjuste = (producto: Producto) => {
     setModalAjuste(producto);
-    setFormAjuste({ tipo: 'ENTRADA', cantidad: '', descripcion: '' });
+    setFormAjuste({ tipo: 'ENTRADA', cantidad: '', descripcion: '', motivoMerma: '' });
   };
 
   const guardarAjuste = async (e: React.FormEvent) => {
@@ -84,6 +126,7 @@ export default function RetailInventario() {
         tipo: formAjuste.tipo,
         cantidad: Number(formAjuste.cantidad),
         descripcion: formAjuste.descripcion || undefined,
+        motivoMerma: formAjuste.tipo === 'SALIDA' && formAjuste.motivoMerma ? formAjuste.motivoMerma : undefined,
       });
       setAviso(`Existencias de ${modalAjuste.nombre} actualizadas.`);
       setModalAjuste(null);
@@ -123,14 +166,23 @@ export default function RetailInventario() {
               <h1 className="mt-1 text-3xl font-bold">{titulo}</h1>
               <p className="mt-1 text-sm text-gray-400">Controla las existencias por producto y registra entradas, salidas y ajustes.</p>
             </div>
-            <div className="relative w-full max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar producto o código..."
-                className="w-full rounded-lg border border-gray-700 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white focus:outline-none focus:border-orange-500"
-              />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={abrirMerma}
+                className="flex items-center gap-2 rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:text-white"
+              >
+                <Trash2 size={15} /> Reporte de merma
+              </button>
+              <div className="relative w-full max-w-xs">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar producto o código..."
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white focus:outline-none focus:border-orange-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -153,6 +205,25 @@ export default function RetailInventario() {
                     {p.nombre} · {p.stockActual} u.
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {porVencer.length > 0 && (
+            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+              <div className="flex items-center gap-2 text-red-400 font-semibold">
+                <CalendarClock size={17} />
+                {porVencer.length} lote(s) por vencer en los próximos 7 días
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {porVencer.map((l) => {
+                  const dias = Math.ceil((new Date(l.fechaVencimiento).getTime() - Date.now()) / 86400000);
+                  return (
+                    <span key={l.id} className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs text-red-300">
+                      {l.producto.categoria?.icono} {l.producto.nombre} · {l.cantidadRestante} u. · {dias < 0 ? 'vencido' : `${dias} día(s)`}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -239,7 +310,7 @@ export default function RetailInventario() {
                 Tipo de movimiento
                 <select
                   value={formAjuste.tipo}
-                  onChange={(e) => setFormAjuste({ ...formAjuste, tipo: e.target.value })}
+                  onChange={(e) => setFormAjuste({ ...formAjuste, tipo: e.target.value, motivoMerma: '' })}
                   className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
                 >
                   <option value="ENTRADA">Entrada (recibí mercancía)</option>
@@ -247,6 +318,24 @@ export default function RetailInventario() {
                   <option value="AJUSTE">Ajuste (dejar en esta cantidad exacta)</option>
                 </select>
               </label>
+
+              {formAjuste.tipo === 'SALIDA' && (
+                <label className="mb-3 block text-sm text-gray-400">
+                  ¿Es merma? (opcional)
+                  <select
+                    value={formAjuste.motivoMerma}
+                    onChange={(e) => setFormAjuste({ ...formAjuste, motivoMerma: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
+                  >
+                    <option value="">No, es otro tipo de salida</option>
+                    <option value="DANADO">Se dañó / venció</option>
+                    <option value="DONADO">Se donó</option>
+                    <option value="CONSUMO_PROPIO">Consumo del negocio</option>
+                    <option value="OTRO">Otro motivo de merma</option>
+                  </select>
+                  <span className="mt-1 block text-xs text-gray-500">Márcalo para que quede separado de las ventas en el reporte de merma.</span>
+                </label>
+              )}
 
               <label className="mb-3 block text-sm text-gray-400">
                 {formAjuste.tipo === 'AJUSTE' ? 'Cantidad final' : 'Cantidad'}
@@ -302,8 +391,42 @@ export default function RetailInventario() {
                         <span className="text-gray-500 text-xs">{new Date(m.creadoEn).toLocaleString('es-CO')}</span>
                       </div>
                       <div className="mt-1 text-gray-300">{Number(m.stockAnterior)} → {Number(m.stockNuevo)} unidades</div>
+                      {m.motivoMerma && <div className="mt-1 inline-block rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-300">Merma · {ETIQUETAS_MOTIVO_MERMA[m.motivoMerma] || m.motivoMerma}</div>}
                       {m.descripcion && <div className="mt-1 text-gray-500 text-xs">{m.descripcion}</div>}
                       <div className="mt-1 text-gray-600 text-xs">Por {m.usuario?.nombre || 'Usuario'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {modalMerma && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white">Reporte de merma</h3>
+                <button type="button" onClick={() => setModalMerma(false)} className="text-gray-500 hover:text-white"><X size={18} /></button>
+              </div>
+              <p className="mb-4 text-xs text-gray-500">Salidas marcadas como merma (dañado, donado, consumo propio), separadas de las ventas.</p>
+              {cargandoMerma ? (
+                <div className="py-8 text-center text-gray-500">Cargando...</div>
+              ) : !reporteMerma?.length ? (
+                <div className="py-8 text-center text-gray-500 text-sm">No hay merma registrada todavía.</div>
+              ) : (
+                <div className="space-y-2">
+                  {reporteMerma.map((r) => (
+                    <div key={r.productoId} className="rounded-lg bg-gray-800 p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-white">{r.nombre}</span>
+                        <span className="text-red-400 font-semibold">{r.cantidad} u.{r.costoEstimado > 0 ? ` · $${Math.round(r.costoEstimado).toLocaleString()}` : ''}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {Object.entries(r.motivos).map(([motivo, cantidad]) => (
+                          <span key={motivo} className="rounded-full bg-gray-900 px-2 py-0.5 text-xs text-gray-400">{ETIQUETAS_MOTIVO_MERMA[motivo] || motivo}: {cantidad}</span>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>

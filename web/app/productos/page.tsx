@@ -34,6 +34,22 @@ interface Adicional {
   ingrediente?: { id: number; nombre: string; unidad: string } | null;
 }
 
+interface ComboComponente {
+  id: number;
+  productoId: number;
+  cantidad: number;
+  producto: { id: number; nombre: string; costo?: string | null };
+}
+
+interface Lote {
+  id: number;
+  cantidad: number;
+  cantidadRestante: number;
+  fechaVencimiento: string | null;
+  notas: string | null;
+  activo: boolean;
+}
+
 interface Presentacion {
   id: number;
   nombre: string;
@@ -57,6 +73,8 @@ interface Producto {
   stockActual: number;
   stockMinimo: number;
   ventaGranel?: boolean;
+  esCombo?: boolean;
+  componentesCombo?: ComboComponente[];
   categoria: Categoria;
   ingredientes: { ingrediente: { id: number; nombre: string; unidad: string }; cantidad: string }[];
   adicionales: { adicional: { id: number; nombre: string; precio: string } }[];
@@ -157,6 +175,159 @@ function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onC
   );
 }
 
+function SeccionComboComponentes({ producto, productosDisponibles, onCambio }: { producto: Producto; productosDisponibles: Producto[]; onCambio: (producto: Producto) => void }) {
+  const [productoIdNuevo, setProductoIdNuevo] = useState('');
+  const [cantidadNueva, setCantidadNueva] = useState('');
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const componentes = producto.componentesCombo || [];
+  const idsUsados = new Set(componentes.map((c) => c.productoId));
+  const disponibles = productosDisponibles.filter((p) => !idsUsados.has(p.id));
+
+  const recargar = async () => {
+    const { data } = await api.get(`/productos/${producto.id}`);
+    onCambio(data);
+  };
+
+  const guardar = async () => {
+    if (!cantidadNueva || (!editandoId && !productoIdNuevo)) return;
+    setOcupado(true); setError('');
+    try {
+      if (editandoId) await api.patch(`/productos/${producto.id}/combo-componentes/${editandoId}`, { cantidad: Number(cantidadNueva) });
+      else await api.post(`/productos/${producto.id}/combo-componentes`, { productoId: Number(productoIdNuevo), cantidad: Number(cantidadNueva) });
+      setProductoIdNuevo(''); setCantidadNueva(''); setEditandoId(null);
+      await recargar();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'No se pudo guardar el componente.');
+    } finally { setOcupado(false); }
+  };
+
+  const editar = (c: ComboComponente) => { setEditandoId(c.id); setCantidadNueva(String(c.cantidad)); };
+
+  const eliminar = async (id: number) => {
+    if (!window.confirm('¿Quitar este componente de la canasta?')) return;
+    setError('');
+    try { await api.delete(`/productos/${producto.id}/combo-componentes/${id}`); await recargar(); }
+    catch (e: any) { setError(e?.response?.data?.message || 'No se pudo quitar el componente.'); }
+  };
+
+  const costoSugerido = componentes.reduce((s, c) => s + (c.producto.costo ? Number(c.producto.costo) : 0) * c.cantidad, 0);
+
+  return (
+    <div className="space-y-3 rounded-xl border border-gray-800 p-3">
+      <div>
+        <p className="text-sm font-semibold text-gray-300">Componentes de la canasta/combo</p>
+        <p className="text-xs text-gray-500">Productos que la componen (ej. "Canasta básica" = 2 lb tomate + 1 lb cebolla). Al vender la canasta se descuenta el inventario de cada uno por separado.</p>
+      </div>
+      {componentes.length > 0 && (
+        <div className="space-y-2">
+          {componentes.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm">
+              <div className="min-w-0 truncate font-medium text-white">{c.cantidad} × {c.producto.nombre}</div>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" onClick={() => editar(c)} className="text-gray-400 hover:text-orange-400"><Edit size={14} /></button>
+                <button type="button" onClick={() => eliminar(c.id)} className="text-gray-400 hover:text-red-400"><Trash2 size={14} /></button>
+              </div>
+            </div>
+          ))}
+          {costoSugerido > 0 && <p className="text-xs text-gray-500">Costo sugerido de la canasta (suma de componentes): ${costoSugerido.toLocaleString()}</p>}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        {!editandoId && (
+          <select value={productoIdNuevo} onChange={(e) => setProductoIdNuevo(e.target.value)} className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white">
+            <option value="">Selecciona un producto...</option>
+            {disponibles.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        )}
+        <input type="number" min="1" step="1" value={cantidadNueva} onChange={(e) => setCantidadNueva(e.target.value)} placeholder="Cantidad" className={`rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white ${editandoId ? 'col-span-2' : ''}`} />
+      </div>
+      <div className="flex gap-2">
+        <button type="button" disabled={ocupado} onClick={guardar} className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">{editandoId ? 'Guardar cambios' : 'Agregar componente'}</button>
+        {editandoId && <button type="button" onClick={() => { setEditandoId(null); setCantidadNueva(''); }} className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-300">Cancelar</button>}
+      </div>
+    </div>
+  );
+}
+
+function SeccionLotes({ productoId }: { productoId: number }) {
+  const [lotes, setLotes] = useState<Lote[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [cantidad, setCantidad] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
+  const [notas, setNotas] = useState('');
+  const [error, setError] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+
+  const cargar = async () => {
+    setCargando(true);
+    try { const { data } = await api.get(`/productos/${productoId}/lotes`); setLotes(data); }
+    catch { setLotes([]); }
+    finally { setCargando(false); }
+  };
+  useEffect(() => { void cargar(); }, [productoId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const agregar = async () => {
+    if (!cantidad) return;
+    setOcupado(true); setError('');
+    try {
+      await api.post(`/productos/${productoId}/lotes`, { cantidad: Number(cantidad), fechaVencimiento: fechaVencimiento || undefined, notas: notas || undefined });
+      setCantidad(''); setFechaVencimiento(''); setNotas('');
+      await cargar();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'No se pudo registrar el lote.');
+    } finally { setOcupado(false); }
+  };
+
+  const marcarAgotado = async (lote: Lote) => {
+    setError('');
+    try { await api.patch(`/productos/${productoId}/lotes/${lote.id}`, { cantidadRestante: 0, activo: false }); await cargar(); }
+    catch (e: any) { setError(e?.response?.data?.message || 'No se pudo actualizar el lote.'); }
+  };
+
+  const ahora = Date.now();
+  const diasPara = (fecha: string) => Math.ceil((new Date(fecha).getTime() - ahora) / 86400000);
+  const lotesActivos = lotes.filter((l) => l.activo);
+
+  return (
+    <div className="space-y-3 rounded-xl border border-gray-800 p-3">
+      <div>
+        <p className="text-sm font-semibold text-gray-300">Lotes y vencimiento (opcional)</p>
+        <p className="text-xs text-gray-500">Para productos perecederos: registra cada compra con su fecha de vencimiento y el sistema avisa antes de que se dañe. No cambia las existencias que usa el POS.</p>
+      </div>
+      {cargando ? <p className="text-xs text-gray-500">Cargando...</p> : lotesActivos.length > 0 && (
+        <div className="space-y-2">
+          {lotesActivos.map((l) => {
+            const dias = l.fechaVencimiento ? diasPara(l.fechaVencimiento) : null;
+            return (
+              <div key={l.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-white">{l.cantidadRestante} de {l.cantidad}{l.notas ? ` · ${l.notas}` : ''}</div>
+                  {l.fechaVencimiento && (
+                    <div className={`text-xs ${dias !== null && dias <= 3 ? 'text-red-400' : dias !== null && dias <= 7 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                      Vence {new Date(l.fechaVencimiento).toLocaleDateString('es-CO')}{dias !== null ? ` (${dias < 0 ? 'vencido' : `${dias} días`})` : ''}
+                    </div>
+                  )}
+                </div>
+                <button type="button" onClick={() => marcarAgotado(l)} className="shrink-0 rounded-lg border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:text-white">Marcar agotado</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <div className="grid grid-cols-3 gap-2">
+        <input type="number" min="1" step="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Cantidad recibida" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Notas (opcional)" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+      </div>
+      <button type="button" disabled={ocupado || !cantidad} onClick={agregar} className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">Registrar lote</button>
+    </div>
+  );
+}
+
 export default function ProductosPage() {
   const tipoNegocio = useAuthStore((state) => state.usuario?.tipoNegocio);
   const esRestaurante = !tipoNegocio || tipoNegocio === 'RESTAURANTE';
@@ -199,6 +370,7 @@ export default function ProductosPage() {
     stockActual: '0',
     stockMinimo: '0',
     ventaGranel: false,
+    esCombo: false,
   });
   const [archivoImagenProducto, setArchivoImagenProducto] = useState<File | null>(null);
   const [previewImagenProducto, setPreviewImagenProducto] = useState('');
@@ -256,6 +428,7 @@ export default function ProductosPage() {
         stockActual: String(producto.stockActual ?? 0),
         stockMinimo: String(producto.stockMinimo ?? 0),
         ventaGranel: producto.ventaGranel ?? false,
+        esCombo: producto.esCombo ?? false,
       });
       setRecetaTemp(
         producto.ingredientes.map((pi) => ({
@@ -269,7 +442,7 @@ export default function ProductosPage() {
       setPreviewImagenProducto(producto.imagen || '');
     } else {
       setEditando(null);
-      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0', ventaGranel: false });
+      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0', ventaGranel: false, esCombo: false });
       setRecetaTemp([]);
       setAdicionalIdsTemp([]);
       setPreviewImagenProducto('');
@@ -412,7 +585,7 @@ export default function ProductosPage() {
         disponible: form.disponible,
         aceptaAdicionales: form.aceptaAdicionales,
         adicionalIds: adicionalIdsTemp,
-        ...(!esRestaurante ? { costo: form.costo ? Number(form.costo) : null, codigoBarras: form.codigoBarras, controlaStock: form.controlaStock, stockActual: Number(form.stockActual), stockMinimo: Number(form.stockMinimo), aceptaAdicionales: false, ventaGranel: form.ventaGranel } : {}),
+        ...(!esRestaurante ? { costo: form.costo ? Number(form.costo) : null, codigoBarras: form.codigoBarras, controlaStock: form.controlaStock, stockActual: Number(form.stockActual), stockMinimo: Number(form.stockMinimo), aceptaAdicionales: false, ventaGranel: form.ventaGranel, esCombo: form.esCombo } : {}),
       };
       if (ingredientesPayload.length > 0) {
         payload.ingredientes = ingredientesPayload;
@@ -894,12 +1067,30 @@ export default function ProductosPage() {
                         <span className="block text-xs text-gray-500">El cajero pesa la cantidad exacta que pide el cliente. El precio de arriba pasa a ser por gramo y las existencias se cuentan en gramos. Puede combinarse con presentaciones empacadas (ej. bolsas de 250 g).</span>
                       </span>
                     </label>
+                    <label className="flex items-start gap-2 rounded-lg border border-gray-700 bg-gray-800/50 p-3 text-sm text-gray-300">
+                      <input type="checkbox" checked={form.esCombo} onChange={(e) => setForm({ ...form, esCombo: e.target.checked, controlaStock: e.target.checked ? false : form.controlaStock })} className="mt-0.5" />
+                      <span>Es una canasta/combo (agrupa varios productos)
+                        <span className="block text-xs text-gray-500">Se vende como un solo producto, pero está armado con otros de tu catálogo (ej. una canasta de verduras). Al venderla se descuenta el inventario de cada uno — no necesita existencias propias.</span>
+                      </span>
+                    </label>
                   </div>
                 );
               })()}
 
-              {!esRestaurante && editando && (
+              {!esRestaurante && editando && !form.esCombo && (
                 <SeccionPresentaciones producto={editando} onCambio={(actualizado) => { setEditando(actualizado); setProductos((prev) => prev.map((p) => p.id === actualizado.id ? actualizado : p)); }} />
+              )}
+
+              {!esRestaurante && editando && form.esCombo && (
+                <SeccionComboComponentes
+                  producto={editando}
+                  productosDisponibles={productos.filter((p) => p.id !== editando.id && !p.esCombo)}
+                  onCambio={(actualizado) => { setEditando(actualizado); setProductos((prev) => prev.map((p) => p.id === actualizado.id ? actualizado : p)); }}
+                />
+              )}
+
+              {!esRestaurante && editando && form.controlaStock && !form.esCombo && (
+                <SeccionLotes productoId={editando.id} />
               )}
 
               <div className="flex items-center gap-3">

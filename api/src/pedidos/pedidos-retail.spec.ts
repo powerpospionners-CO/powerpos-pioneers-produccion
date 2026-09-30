@@ -48,3 +48,47 @@ describe('Pedidos comerciales', () => {
     expect(resultado.estado).toBe('PENDIENTE');
   });
 });
+
+describe('Combos/canastas', () => {
+  it('vender un combo descuenta el stock de cada componente, no el del combo', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    db.producto.findFirst.mockResolvedValue({
+      id: 9, nombre: 'Canasta básica', precio: 25000, disponible: true, activo: true,
+      controlaStock: false, esCombo: true, ingredientes: [], adicionales: [],
+    });
+    db.comboComponente = {
+      findMany: jest.fn().mockResolvedValue([
+        { productoId: 10, cantidad: 2, producto: { id: 10, nombre: 'Tomate', controlaStock: true } },
+        { productoId: 11, cantidad: 1, producto: { id: 11, nombre: 'Cebolla', controlaStock: true } },
+      ]),
+    };
+    const ventaCombo = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 9, cantidad: 3 }] };
+    await service.crearEnTransaccion(ventaCombo, 3, 1, db);
+    expect(db.comboComponente.findMany).toHaveBeenCalledWith({ where: { comboId: 9 }, include: { producto: true } });
+    // 3 canastas × 2 tomates cada una = 6; 3 canastas × 1 cebolla cada una = 3
+    expect(db.producto.updateMany).toHaveBeenCalledWith({
+      where: { id: 10, empresaId: 1, stockActual: { gte: 6 } },
+      data: { stockActual: { decrement: 6 } },
+    });
+    expect(db.producto.updateMany).toHaveBeenCalledWith({
+      where: { id: 11, empresaId: 1, stockActual: { gte: 3 } },
+      data: { stockActual: { decrement: 3 } },
+    });
+    expect(db.producto.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 9 }) }));
+  });
+
+  it('rechaza la venta si un componente del combo no tiene existencias', async () => {
+    const { db, service } = escenario('SUPERMERCADO', 0);
+    db.producto.findFirst.mockResolvedValue({
+      id: 9, nombre: 'Canasta básica', precio: 25000, disponible: true, activo: true,
+      controlaStock: false, esCombo: true, ingredientes: [], adicionales: [],
+    });
+    db.comboComponente = {
+      findMany: jest.fn().mockResolvedValue([
+        { productoId: 10, cantidad: 2, producto: { id: 10, nombre: 'Tomate', controlaStock: true } },
+      ]),
+    };
+    const ventaCombo = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 9, cantidad: 1 }] };
+    await expect(service.crearEnTransaccion(ventaCombo, 3, 1, db)).rejects.toThrow('Tomate');
+  });
+});

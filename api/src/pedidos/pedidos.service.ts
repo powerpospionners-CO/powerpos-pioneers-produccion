@@ -248,6 +248,22 @@ export class PedidosService {
     const { metodoPago, pagos } = this.normalizarPagos(datos, Math.round(total * 100) / 100);
 
     for (const item of itemsValidados) {
+      // Un combo/canasta no tiene stock propio: vender uno descuenta el de
+      // cada producto que lo compone (ej. vender 1 "Canasta básica" baja
+      // tomate, cebolla y huevos por separado, según lo que se armó).
+      if (item.producto.esCombo) {
+        const componentes = await db.comboComponente.findMany({ where: { comboId: item.producto.id }, include: { producto: true } });
+        for (const componente of componentes) {
+          if (!componente.producto.controlaStock) continue;
+          const unidadesBase = componente.cantidad * item.cantidad;
+          const actualizado = await db.producto.updateMany({
+            where: { id: componente.productoId, empresaId, stockActual: { gte: unidadesBase } },
+            data: { stockActual: { decrement: unidadesBase } },
+          });
+          if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${componente.producto.nombre} (para ${item.producto.nombre})`);
+        }
+        continue;
+      }
       if (!item.producto.controlaStock) continue;
       const unidadesBase = item.cantidad * item.factorUnidades;
       const actualizado = await db.producto.updateMany({
@@ -555,10 +571,18 @@ export class PedidosService {
         const caja = pedido.cajaId ? await tx.caja.findUnique({ where: { id: pedido.cajaId } }) : null;
         if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja está cerrada. Esta venta requiere conciliación antes de anular.');
 
-        // Reponer existencias: stockActual directo (comercio) y, si la venta
-        // usó receta, los ingredientes descontados en la venta original.
+        // Reponer existencias: stockActual directo (comercio), los
+        // componentes de un combo si la venta fue de una canasta, y si la
+        // venta usó receta, los ingredientes descontados en la venta original.
         for (const detalle of (pedido as any).detalles || []) {
-          if (detalle.producto.controlaStock) {
+          if (detalle.producto.esCombo) {
+            const componentes = await tx.comboComponente.findMany({ where: { comboId: detalle.productoId }, include: { producto: true } });
+            for (const componente of componentes) {
+              if (!componente.producto.controlaStock) continue;
+              const unidadesBase = componente.cantidad * detalle.cantidad;
+              await tx.producto.update({ where: { id: componente.productoId }, data: { stockActual: { increment: unidadesBase } } });
+            }
+          } else if (detalle.producto.controlaStock) {
             const unidadesBase = detalle.cantidad * (detalle.factorUnidades || 1);
             await tx.producto.update({ where: { id: detalle.productoId }, data: { stockActual: { increment: unidadesBase } } });
           }

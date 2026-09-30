@@ -270,6 +270,7 @@ export class ProductosService {
         },
         preparaciones: { include: { preparacion: true } },
         presentaciones: { where: { activo: true }, orderBy: { orden: 'asc' } },
+        componentesCombo: { include: { producto: { select: { id: true, nombre: true, costo: true } } } },
       },
       orderBy: { nombre: 'asc' },
     });
@@ -286,6 +287,7 @@ export class ProductosService {
         },
         preparaciones: { include: { preparacion: true } },
         presentaciones: { where: { activo: true }, orderBy: { orden: 'asc' } },
+        componentesCombo: { include: { producto: { select: { id: true, nombre: true, costo: true } } } },
       },
     });
     if (!producto) throw new NotFoundException('Producto no encontrado');
@@ -421,6 +423,11 @@ export class ProductosService {
     if (!Number.isInteger(cantidad) || cantidad < 0) {
       throw new BadRequestException('La cantidad debe ser un entero no negativo');
     }
+    const MOTIVOS_MERMA = ['DANADO', 'DONADO', 'CONSUMO_PROPIO', 'OTRO'];
+    if (datos.motivoMerma !== undefined && datos.motivoMerma !== null && datos.motivoMerma !== '') {
+      if (datos.tipo !== 'SALIDA') throw new BadRequestException('El motivo de merma solo aplica a salidas');
+      if (!MOTIVOS_MERMA.includes(datos.motivoMerma)) throw new BadRequestException('Motivo de merma inválido');
+    }
 
     const stockAnterior = producto.stockActual;
     let stockNuevo: number;
@@ -447,6 +454,7 @@ export class ProductosService {
         stockAnterior,
         stockNuevo,
         descripcion: datos.descripcion || null,
+        motivoMerma: datos.motivoMerma || null,
       },
     });
 
@@ -532,5 +540,145 @@ export class ProductosService {
     const presentacion = await this.prisma.productoPresentacion.findFirst({ where: { id: presentacionId, productoId } });
     if (!presentacion) throw new NotFoundException('Presentación no encontrada');
     return this.prisma.productoPresentacion.update({ where: { id: presentacionId }, data: { activo: false } });
+  }
+
+  // Componentes de un combo/canasta (ej. "Canasta básica" = 2 lb tomate + 1
+  // lb cebolla). Un combo no puede contener otro combo: eso mantiene el
+  // descuento de stock al vender siempre a un solo nivel, sin recursión.
+  async agregarComponenteCombo(comboId: number, datos: any, empresaId: number) {
+    const combo = await this.obtener(comboId, empresaId);
+    if (!combo.esCombo) throw new BadRequestException('Este producto no está marcado como canasta/combo');
+    const productoId = Number(datos.productoId);
+    if (productoId === comboId) throw new BadRequestException('Un combo no puede tenerse a sí mismo como componente');
+    const cantidad = Number(datos.cantidad);
+    if (!Number.isInteger(cantidad) || cantidad < 1) throw new BadRequestException('La cantidad del componente debe ser un entero mayor o igual a 1');
+    const componenteProducto = await this.prisma.producto.findFirst({ where: { id: productoId, empresaId, activo: true } });
+    if (!componenteProducto) throw new NotFoundException('El producto componente no existe en esta empresa');
+    if (componenteProducto.esCombo) throw new BadRequestException('Un combo no puede tener otro combo como componente');
+    try {
+      return await this.prisma.comboComponente.create({ data: { comboId, productoId, cantidad }, include: { producto: true } });
+    } catch (e: any) {
+      if (e?.code === 'P2002') throw new ConflictException('Ese producto ya es un componente de este combo');
+      throw e;
+    }
+  }
+
+  async actualizarComponenteCombo(comboId: number, componenteId: number, datos: any, empresaId: number) {
+    await this.obtener(comboId, empresaId);
+    const componente = await this.prisma.comboComponente.findFirst({ where: { id: componenteId, comboId } });
+    if (!componente) throw new NotFoundException('Componente no encontrado');
+    const cantidad = Number(datos.cantidad);
+    if (!Number.isInteger(cantidad) || cantidad < 1) throw new BadRequestException('La cantidad del componente debe ser un entero mayor o igual a 1');
+    return this.prisma.comboComponente.update({ where: { id: componenteId }, data: { cantidad }, include: { producto: true } });
+  }
+
+  async eliminarComponenteCombo(comboId: number, componenteId: number, empresaId: number) {
+    await this.obtener(comboId, empresaId);
+    const componente = await this.prisma.comboComponente.findFirst({ where: { id: componenteId, comboId } });
+    if (!componente) throw new NotFoundException('Componente no encontrado');
+    await this.prisma.comboComponente.delete({ where: { id: componenteId } });
+    return { ok: true };
+  }
+
+  // Lotes de un producto perecedero: informativos (no tocan stockActual, que
+  // sigue siendo el número que usa el POS sin cambios). Sirven para avisar
+  // qué está por vencer y llevar cuánto se recibió de cada compra.
+  async crearLote(productoId: number, datos: any, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const cantidad = Number(datos.cantidad);
+    if (!Number.isInteger(cantidad) || cantidad < 1) throw new BadRequestException('La cantidad del lote debe ser un entero mayor o igual a 1');
+    let fechaVencimiento: Date | null = null;
+    if (datos.fechaVencimiento) {
+      fechaVencimiento = new Date(datos.fechaVencimiento);
+      if (Number.isNaN(fechaVencimiento.getTime())) throw new BadRequestException('Fecha de vencimiento inválida');
+    }
+    const costo = datos.costo !== undefined && datos.costo !== null && datos.costo !== '' ? Number(datos.costo) : null;
+    if (costo !== null && (!Number.isFinite(costo) || costo < 0)) throw new BadRequestException('El costo del lote debe ser un número no negativo');
+    return this.prisma.loteProducto.create({
+      data: {
+        productoId,
+        cantidad,
+        cantidadRestante: cantidad,
+        fechaVencimiento,
+        costo,
+        notas: datos.notas ? String(datos.notas).trim() || null : null,
+      },
+    });
+  }
+
+  async listarLotes(productoId: number, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    return this.prisma.loteProducto.findMany({ where: { productoId }, orderBy: [{ activo: 'desc' }, { fechaVencimiento: 'asc' }] });
+  }
+
+  async actualizarLote(productoId: number, loteId: number, datos: any, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const lote = await this.prisma.loteProducto.findFirst({ where: { id: loteId, productoId } });
+    if (!lote) throw new NotFoundException('Lote no encontrado');
+    const data: any = {};
+    if (datos.cantidadRestante !== undefined) {
+      const cantidadRestante = Number(datos.cantidadRestante);
+      if (!Number.isInteger(cantidadRestante) || cantidadRestante < 0) throw new BadRequestException('La cantidad restante debe ser un entero no negativo');
+      data.cantidadRestante = cantidadRestante;
+    }
+    if (datos.activo !== undefined) data.activo = !!datos.activo;
+    if (datos.notas !== undefined) data.notas = datos.notas ? String(datos.notas).trim() || null : null;
+    return this.prisma.loteProducto.update({ where: { id: loteId }, data });
+  }
+
+  // Lotes activos con existencias que vencen dentro de `dias` (o ya
+  // vencieron). Ordenado por urgencia (FEFO: lo que vence primero, primero).
+  async listarPorVencer(empresaId: number, dias: number) {
+    const limite = new Date();
+    limite.setDate(limite.getDate() + dias);
+    return this.prisma.loteProducto.findMany({
+      where: {
+        activo: true,
+        cantidadRestante: { gt: 0 },
+        fechaVencimiento: { not: null, lte: limite },
+        producto: { empresaId, activo: true },
+      },
+      include: { producto: { select: { id: true, nombre: true, categoria: { select: { nombre: true, icono: true } } } } },
+      orderBy: { fechaVencimiento: 'asc' },
+    });
+  }
+
+  // Reporte de merma: salidas de stock marcadas con un motivo de merma
+  // (dañado/donado/consumo propio/otro), agrupadas por producto — separado
+  // de las ventas para que el dueño sepa cuánto está perdiendo y por qué.
+  async reporteMerma(empresaId: number, desde?: string, hasta?: string) {
+    const where: any = {
+      motivoMerma: { not: null },
+      producto: { empresaId },
+    };
+    if (desde || hasta) {
+      where.creadoEn = {};
+      if (desde) where.creadoEn.gte = new Date(`${desde}T00:00:00-05:00`);
+      if (hasta) {
+        const fin = new Date(`${hasta}T00:00:00-05:00`);
+        fin.setUTCDate(fin.getUTCDate() + 1);
+        where.creadoEn.lt = fin;
+      }
+    }
+    const movimientos = await this.prisma.movimientoInventario.findMany({
+      where,
+      include: { producto: { select: { id: true, nombre: true, costo: true } }, usuario: { select: { nombre: true } } },
+      orderBy: { creadoEn: 'desc' },
+    });
+    const porProducto = new Map<number, { productoId: number; nombre: string; cantidad: number; costoEstimado: number; motivos: Record<string, number> }>();
+    for (const m of movimientos) {
+      if (!m.producto) continue;
+      const actual = porProducto.get(m.producto.id) || { productoId: m.producto.id, nombre: m.producto.nombre, cantidad: 0, costoEstimado: 0, motivos: {} };
+      const cantidad = Number(m.cantidadMovida);
+      actual.cantidad += cantidad;
+      actual.costoEstimado += cantidad * (m.producto.costo ? Number(m.producto.costo) : 0);
+      const motivo = m.motivoMerma || 'OTRO';
+      actual.motivos[motivo] = (actual.motivos[motivo] || 0) + cantidad;
+      porProducto.set(m.producto.id, actual);
+    }
+    return {
+      movimientos,
+      resumenPorProducto: Array.from(porProducto.values()).sort((a, b) => b.costoEstimado - a.costoEstimado),
+    };
   }
 }

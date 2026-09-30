@@ -74,6 +74,17 @@ export class ProductosController {
     return this.productosService.obtenerAlertasStock(req.user.empresaId);
   }
 
+  @Get('lotes/por-vencer')
+  lotesPorVencer(@Request() req: any, @Query('dias') dias?: string) {
+    return this.productosService.listarPorVencer(req.user.empresaId, dias ? +dias : 7);
+  }
+
+  @Get('reportes/merma')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  reporteMerma(@Request() req: any, @Query('desde') desde?: string, @Query('hasta') hasta?: string) {
+    return this.productosService.reporteMerma(req.user.empresaId, desde, hasta);
+  }
+
   @Get(':id')
   obtener(@Param('id') id: string, @Request() req: any) {
     return this.productosService.obtener(+id, req.user.empresaId);
@@ -118,5 +129,41 @@ export class ProductosController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   eliminarPresentacion(@Param('id') id: string, @Param('presentacionId') presentacionId: string, @Request() req: any) {
     return this.productosService.eliminarPresentacion(+id, +presentacionId, req.user.empresaId);
+  }
+
+  @Post(':id/combo-componentes')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  agregarComponenteCombo(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.agregarComponenteCombo(+id, body, req.user.empresaId);
+  }
+
+  @Patch(':id/combo-componentes/:componenteId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  actualizarComponenteCombo(@Param('id') id: string, @Param('componenteId') componenteId: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.actualizarComponenteCombo(+id, +componenteId, body, req.user.empresaId);
+  }
+
+  @Delete(':id/combo-componentes/:componenteId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  eliminarComponenteCombo(@Param('id') id: string, @Param('componenteId') componenteId: string, @Request() req: any) {
+    return this.productosService.eliminarComponenteCombo(+id, +componenteId, req.user.empresaId);
+  }
+
+  @Post(':id/lotes')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  crearLote(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.crearLote(+id, body, req.user.empresaId);
+  }
+
+  @Get(':id/lotes')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  listarLotes(@Param('id') id: string, @Request() req: any) {
+    return this.productosService.listarLotes(+id, req.user.empresaId);
+  }
+
+  @Patch(':id/lotes/:loteId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  actualizarLote(@Param('id') id: string, @Param('loteId') loteId: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.actualizarLote(+id, +loteId, body, req.user.empresaId);
   }
 }

@@ -199,6 +199,11 @@ model Producto {
   // las presentaciones — el cajero simplemente escribe los gramos en el
   // campo de cantidad del POS.
   ventaGranel   Boolean  @default(false)
+  // Es una canasta/combo: se vende como un solo producto pero está armado
+  // con otros productos existentes (ver ComboComponente). Al venderla se
+  // descuenta el stock de cada componente, no el de este producto — por eso
+  // un combo normalmente no necesita `controlaStock` propio.
+  esCombo       Boolean  @default(false)
   imagen        String?
   disponible    Boolean  @default(true)
   aceptaAdicionales Boolean @default(true)
@@ -215,10 +220,54 @@ model Producto {
   consumoEmpleadoItems ConsumoEmpleadoItem[]
   movimientosInventario MovimientoInventario[]
   presentaciones      ProductoPresentacion[]
+  lotes               LoteProducto[]
+  componentesCombo    ComboComponente[]     @relation("ComboPadre")
+  usadoEnCombos       ComboComponente[]     @relation("ComboComponente")
 
   @@unique([empresaId, codigoBarras])
 
   @@map("productos")
+}
+
+// Un producto de un combo/canasta (ej. "Canasta básica" = 2 lb tomate + 1 lb
+// cebolla + 1 docena huevos). `cantidad` es cuánto de ese componente lleva
+// una unidad del combo. Un combo no puede contener otro combo (se valida en
+// el servicio), así que descontar sus componentes al venderlo es siempre un
+// solo nivel, sin recursión.
+model ComboComponente {
+  id         Int @id @default(autoincrement())
+  comboId    Int
+  productoId Int
+  cantidad   Int
+
+  combo    Producto @relation("ComboPadre", fields: [comboId], references: [id])
+  producto Producto @relation("ComboComponente", fields: [productoId], references: [id])
+
+  @@unique([comboId, productoId])
+  @@map("combo_componentes")
+}
+
+// Lote de un producto perecedero (ej. el tomate que llegó el lunes vence
+// distinto al que llegó el jueves). Es informativo: no descuenta
+// automáticamente `Producto.stockActual` en cada venta — ese sigue siendo
+// el número real que usa el POS, sin cambios. Los lotes solo sirven para
+// avisar qué está por vencer y llevar cuánto se recibió de cada compra.
+model LoteProducto {
+  id               Int       @id @default(autoincrement())
+  productoId       Int
+  cantidad         Int
+  cantidadRestante Int
+  fechaVencimiento DateTime?
+  costo            Decimal?  @db.Decimal(10, 2)
+  notas            String?
+  activo           Boolean   @default(true)
+  creadoEn         DateTime  @default(now())
+  actualizadoEn    DateTime  @updatedAt
+
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([productoId, fechaVencimiento])
+  @@map("lotes_producto")
 }
 
 // Formas alternativas de vender el mismo producto (ej. "Tarro" x 50 unidades
@@ -282,6 +331,9 @@ model MovimientoInventario {
   stockAnterior   Decimal  @db.Decimal(10, 3)
   stockNuevo      Decimal  @db.Decimal(10, 3)
   descripcion     String?
+  // Solo se llena en salidas por merma (no es una venta): DANADO, DONADO,
+  // CONSUMO_PROPIO u OTRO. Permite reportar la merma aparte de las ventas.
+  motivoMerma     String?
   creadoEn        DateTime @default(now())
 
   ingrediente Ingrediente? @relation(fields: [ingredienteId], references: [id])
