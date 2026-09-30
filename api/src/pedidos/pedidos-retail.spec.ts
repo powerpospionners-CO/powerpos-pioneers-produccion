@@ -14,6 +14,7 @@ function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado
     },
     pedido: {
       count: jest.fn().mockResolvedValue(0),
+      findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(async ({ data }) => ({ id: 8, numero: data.numero, estado: data.estado, total: data.total, sucursalId: 2 })),
     },
     movimientoFinanciero: { create: jest.fn().mockResolvedValue({ id: 1 }) },
@@ -46,6 +47,26 @@ describe('Pedidos comerciales', () => {
     const { db, service } = escenario('RESTAURANTE');
     const resultado = await service.crearEnTransaccion(venta, 3, 1, db);
     expect(resultado.estado).toBe('PENDIENTE');
+  });
+});
+
+describe('Idempotencia (reintento de venta guardada offline)', () => {
+  it('devuelve la venta ya existente sin crear otra ni volver a descontar stock', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    const yaExistente = { id: 8, numero: 'PED-2-existente', claveIdempotencia: 'abc-123' };
+    db.pedido.findUnique.mockResolvedValue(yaExistente);
+    const ventaConClave = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 5, cantidad: 2 }], claveIdempotencia: 'abc-123' };
+    const resultado = await service.crearEnTransaccion(ventaConClave, 3, 1, db);
+    expect(resultado).toBe(yaExistente);
+    expect(db.pedido.create).not.toHaveBeenCalled();
+    expect(db.producto.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('crea la venta normalmente la primera vez, guardando la clave', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    const ventaConClave = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 5, cantidad: 2 }], claveIdempotencia: 'nueva-456' };
+    await service.crearEnTransaccion(ventaConClave, 3, 1, db);
+    expect(db.pedido.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ claveIdempotencia: 'nueva-456' }) }));
   });
 });
 

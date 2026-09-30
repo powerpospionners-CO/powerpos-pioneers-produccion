@@ -11,6 +11,7 @@ import VentasTurno from '@/components/VentasTurno';
 import VentasPendientes from '@/components/VentasPendientes';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
+import { encolarVentaPendiente, generarClaveVenta, listarVentasFallidas, listarVentasPendientes, quitarVentaFallida, sincronizarVentasPendientes } from '@/lib/colaOfflineVentas';
 
 type Presentacion = { id: number; nombre: string; factorUnidades: number; precio: string; codigoBarras?: string | null };
 type Producto = {
@@ -50,6 +51,11 @@ export default function RetailPOS() {
   const [aviso, setAviso] = useState('');
   const [ultimoRecibo, setUltimoRecibo] = useState<any>(null);
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
+  // Ventas guardadas en este dispositivo porque no había conexión al
+  // cobrarlas. Se reintentan solas al volver la señal (evento 'online' +
+  // reintento periódico, por si ese evento no dispara en algunos navegadores).
+  const [pendientesSync, setPendientesSync] = useState(0);
+  const [fallidasSync, setFallidasSync] = useState<ReturnType<typeof listarVentasFallidas>>([]);
   const buscarRef = useRef<HTMLInputElement>(null);
   const solicitudProductos = useRef(0);
   const cargarProductos = useCallback(async (signal?: AbortSignal) => {
@@ -93,6 +99,42 @@ export default function RetailPOS() {
       document.removeEventListener('visibilitychange', actualizar);
     };
   }, [cargarProductos]);
+
+  const refrescarContadoresSync = useCallback(() => {
+    if (!usuario?.empresaId || !usuario?.sucursalId) return;
+    setPendientesSync(listarVentasPendientes(usuario.empresaId, usuario.sucursalId).length);
+    setFallidasSync(listarVentasFallidas(usuario.empresaId, usuario.sucursalId));
+  }, [usuario?.empresaId, usuario?.sucursalId]);
+
+  // Reintenta las ventas guardadas offline al volver la conexión. También
+  // reintenta cada 20s por si el evento 'online' no dispara (pasa en
+  // algunos navegadores/redes), y una vez al montar por si ya había
+  // ventas pendientes de una sesión anterior.
+  useEffect(() => {
+    if (!usuario?.empresaId || !usuario?.sucursalId) return;
+    const empresaId = usuario.empresaId;
+    const sucursalId = usuario.sucursalId;
+    let sincronizando = false;
+    const sincronizar = async () => {
+      if (sincronizando) return;
+      sincronizando = true;
+      try {
+        const { sincronizadas } = await sincronizarVentasPendientes(empresaId, sucursalId);
+        if (sincronizadas > 0) {
+          setAviso(`${sincronizadas} venta(s) guardada(s) sin conexión ya se sincronizaron.`);
+          void cargarProductos();
+        }
+      } finally {
+        sincronizando = false;
+        refrescarContadoresSync();
+      }
+    };
+    refrescarContadoresSync();
+    void sincronizar();
+    const intervalo = window.setInterval(sincronizar, 20000);
+    window.addEventListener('online', sincronizar);
+    return () => { window.clearInterval(intervalo); window.removeEventListener('online', sincronizar); };
+  }, [usuario?.empresaId, usuario?.sucursalId, cargarProductos, refrescarContadoresSync]);
 
   // Cada producto se convierte en uno o varios ítems vendibles: si vende al
   // granel se agrega un ítem "al granel" (precio por gramo, cantidad =
@@ -226,13 +268,15 @@ export default function RetailPOS() {
   const vender = async (pago: PagoConfirmado) => {
     if (!carrito.length || !caja || cajaDeOtro || procesando) return;
     setProcesando(true); setError(''); setAviso('');
+    const payload = {
+      sucursalId: usuario?.sucursalId,
+      metodoPago: pago.metodoPago,
+      pagos: pago.pagos,
+      items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, cantidad })),
+      claveIdempotencia: generarClaveVenta(),
+    };
     try {
-      const { data } = await api.post('/pedidos', {
-        sucursalId: usuario?.sucursalId,
-        metodoPago: pago.metodoPago,
-        pagos: pago.pagos,
-        items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, cantidad })),
-      });
+      const { data } = await api.post('/pedidos', payload);
       setCarrito([]);
       setUltimoRecibo(data);
       setModalCobroAbierto(false);
@@ -248,7 +292,20 @@ export default function RetailPOS() {
       } catch { await imprimirRecibo(data); }
       if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
     } catch (e: any) {
-      setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
+      if (!e?.response && usuario?.empresaId && usuario?.sucursalId) {
+        // Sin respuesta del servidor: es un corte de conexión, no un rechazo
+        // real de la venta (stock, caja cerrada, etc.). Se guarda para
+        // reintentar sola y se cierra el cobro como si hubiera salido bien,
+        // porque para el cajero la venta ya ocurrió — el cliente ya se fue.
+        encolarVentaPendiente(usuario.empresaId, usuario.sucursalId, payload.claveIdempotencia, payload);
+        refrescarContadoresSync();
+        setCarrito([]);
+        setModalCobroAbierto(false);
+        setAviso('Sin conexión: la venta quedó guardada en este equipo y se enviará sola cuando vuelva la señal.');
+        if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
+      } else {
+        setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
+      }
     } finally { setProcesando(false); buscarRef.current?.focus(); }
   };
 
@@ -280,6 +337,20 @@ export default function RetailPOS() {
       </div>
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
       {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={() => imprimirRecibo()} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
+      {pendientesSync > 0 && <div role="status" className="mb-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-300">📡 {pendientesSync} venta(s) sin conexión, esperando para sincronizar. No cierres esta pestaña.</div>}
+      {fallidasSync.length > 0 && (
+        <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          <p className="font-semibold">{fallidasSync.length} venta(s) guardada(s) sin conexión no se pudieron confirmar al sincronizar:</p>
+          <ul className="mt-1 space-y-1">
+            {fallidasSync.map((v) => (
+              <li key={v.clave} className="flex items-center justify-between gap-2">
+                <span>{v.motivo}</span>
+                <button type="button" onClick={() => { if (usuario?.empresaId && usuario?.sucursalId) { quitarVentaFallida(usuario.empresaId, usuario.sucursalId, v.clave); refrescarContadoresSync(); } }} className="shrink-0 rounded border border-red-500/40 px-2 py-0.5 text-xs">Descartar</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div className="lg:col-span-2"><VentasPendientes
           clave={usuario ? `pos-pendientes:comercio:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}

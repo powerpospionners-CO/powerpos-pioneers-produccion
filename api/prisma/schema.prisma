@@ -538,6 +538,11 @@ model Pedido {
   puntosCanjeados Int @default(0)
   valorPuntoAplicado Decimal @db.Decimal(10, 2) @default(0)
   costoDomicilio Decimal @db.Decimal(10, 2) @default(0)
+  // Solo la usan las ventas que el POS guardó localmente por falta de
+  // conexión: si al reconectar reintenta una venta que en realidad sí
+  // había llegado al servidor (se perdió la respuesta, no la petición),
+  // esta clave evita crear el pedido dos veces.
+  claveIdempotencia String? @unique
   pedidoWeb PedidoWeb?
 
   sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])

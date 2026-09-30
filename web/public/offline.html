@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sin conexión · PowerPOS</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #030712; color: #e5e7eb; font-family: system-ui, sans-serif; padding: 24px; text-align: center; }
+  .card { max-width: 360px; }
+  img { width: 56px; height: 56px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { color: #9ca3af; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+  button { background: #f97316; color: white; border: none; border-radius: 10px; padding: 12px 20px; font-weight: 600; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="/icons/icon-192.png" alt="" />
+    <h1>Sin conexión a internet</h1>
+    <p>Esta pantalla necesita conexión para cargar. Si ya tenías el POS abierto en otra pestaña, puedes seguir vendiendo ahí — las ventas se guardan y se envían solas cuando vuelva la señal.</p>
+    <button onclick="location.reload()">Reintentar</button>
+  </div>
+</body>
+</html>

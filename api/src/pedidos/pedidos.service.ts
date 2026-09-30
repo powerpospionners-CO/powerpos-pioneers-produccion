@@ -76,6 +76,24 @@ export class PedidosService {
     const { items, clienteId, observacion, sucursalId, cajaId } =
       datos;
 
+    // Reintento de una venta guardada offline: si ya se procesó (se perdió
+    // la respuesta, no la petición), se devuelve la misma venta en vez de
+    // volver a validar todo — el stock ya pudo cambiar desde entonces y no
+    // tendría sentido rechazar un reintento de algo que ya se vendió.
+    const claveIdempotencia = datos.claveIdempotencia ? String(datos.claveIdempotencia).slice(0, 100) : null;
+    if (claveIdempotencia) {
+      const existente = await db.pedido.findUnique({
+        where: { claveIdempotencia },
+        include: {
+          detalles: { include: { producto: true, adicionales: { include: { adicional: true } } } },
+          pagos: true,
+          usuario: { select: { nombre: true } },
+          cliente: { select: { nombre: true, telefono: true } },
+        },
+      });
+      if (existente) return existente;
+    }
+
     if (!Array.isArray(items) || items.length < 1 || items.length > 100 || items.some(i => !Number.isInteger(i.cantidad) || i.cantidad < 1 || i.cantidad > 999 || !Number.isInteger(i.productoId))) throw new BadRequestException('Productos o cantidades no válidos');
     const empresa = await db.empresa.findFirst({ where: { id: empresaId, activo: true } });
     if (!empresa) throw new NotFoundException('Empresa no disponible');
@@ -289,6 +307,7 @@ export class PedidosService {
         total,
         observacion: observacion || null,
         estado: esRestaurante ? 'PENDIENTE' : 'ENTREGADO',
+        claveIdempotencia,
         pagos: {
           create: pagos.map((p) => ({ metodoPago: p.metodoPago as any, monto: p.monto })),
         },
