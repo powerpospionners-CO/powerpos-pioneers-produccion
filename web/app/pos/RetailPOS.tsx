@@ -263,7 +263,17 @@ export default function RetailPOS() {
     else if (codigo) setError('No se encontró un producto con ese código. Puedes buscarlo por nombre.');
   };
 
-  const total = carrito.reduce((suma, linea) => suma + linea.item.precio * linea.cantidad, 0);
+  const subtotal = carrito.reduce((suma, linea) => suma + linea.item.precio * linea.cantidad, 0);
+  // Enchila Market Pereira negocia el descuento como un monto fijo en pesos
+  // (ej. "le descuento $15.000"); el resto de empresas lo maneja por
+  // porcentaje sobre el subtotal — el backend siempre recibe el resultado
+  // ya convertido a pesos, así que no necesita saber cuál de los dos se usó.
+  const esEnchilaMarket = usuario?.empresaId === 2;
+  const [descuentoInput, setDescuentoInput] = useState('');
+  const descuento = esEnchilaMarket
+    ? Math.round(Math.min(subtotal, Math.max(0, Number(descuentoInput) || 0)) * 100) / 100
+    : Math.round(subtotal * (Math.min(100, Math.max(0, Number(descuentoInput) || 0)) / 100) * 100) / 100;
+  const total = subtotal - descuento;
   const cajaDeOtro = !!caja && !!usuario && caja.usuarioId !== usuario.id && !['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol);
   const vender = async (pago: PagoConfirmado) => {
     if (!carrito.length || !caja || cajaDeOtro || procesando) return;
@@ -273,11 +283,13 @@ export default function RetailPOS() {
       metodoPago: pago.metodoPago,
       pagos: pago.pagos,
       items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, cantidad })),
+      descuento,
       claveIdempotencia: generarClaveVenta(),
     };
     try {
       const { data } = await api.post('/pedidos', payload);
       setCarrito([]);
+      setDescuentoInput('');
       setUltimoRecibo(data);
       setModalCobroAbierto(false);
       setAviso(`Venta ${data.numero} registrada · ${moneda(Number(data.total))}`);
@@ -300,6 +312,7 @@ export default function RetailPOS() {
         encolarVentaPendiente(usuario.empresaId, usuario.sucursalId, payload.claveIdempotencia, payload);
         refrescarContadoresSync();
         setCarrito([]);
+        setDescuentoInput('');
         setModalCobroAbierto(false);
         setAviso('Sin conexión: la venta quedó guardada en este equipo y se enviará sola cuando vuelva la señal.');
         if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
@@ -355,7 +368,7 @@ export default function RetailPOS() {
         <div className="lg:col-span-2"><VentasPendientes
           clave={usuario ? `pos-pendientes:comercio:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
           datos={{ carrito }} total={total} vacia={!carrito.length} bloqueado={procesando || !caja || cajaDeOtro}
-          onGuardar={() => { setCarrito([]); setBusqueda(''); setAviso('Venta guardada. Ya puedes atender a otro cliente.'); buscarRef.current?.focus(); }}
+          onGuardar={() => { setCarrito([]); setDescuentoInput(''); setBusqueda(''); setAviso('Venta guardada. Ya puedes atender a otro cliente.'); buscarRef.current?.focus(); }}
           onRestaurar={(venta) => { setCarrito(venta.carrito); setError(''); setAviso('Venta recuperada. Revisa los productos y pulsa Cobrar.'); }}
         /></div>
         <section className="min-w-0 rounded-2xl border border-gray-800 bg-gray-900 p-4">
@@ -420,7 +433,34 @@ export default function RetailPOS() {
         </section>
         <aside className="flex h-fit flex-col rounded-2xl border border-gray-800 bg-gray-900 p-4 lg:sticky lg:top-4">
           <div className="flex items-center justify-between border-b border-gray-800 pb-4"><div className="flex items-center gap-2"><ShoppingBasket className="text-orange-500" size={21} /><h2 className="text-lg font-bold">Venta actual</h2></div><span className="text-sm text-gray-400">{carrito.reduce((s,l) => s+l.cantidad, 0)} artículos</span></div>
-          <div className="mt-4 space-y-4"><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div><button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button></div>
+          <div className="mt-4 space-y-4">
+            {carrito.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-gray-800 p-3">
+                <label className="flex items-center justify-between gap-3 text-sm text-gray-300">
+                  Descuento {esEnchilaMarket ? '($)' : '(%)'}
+                  <input
+                    type="number" min={0} max={esEnchilaMarket ? subtotal : 100} step={esEnchilaMarket ? 1000 : 1}
+                    value={descuentoInput}
+                    onChange={(e) => setDescuentoInput(e.target.value)}
+                    placeholder="0"
+                    className="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-right text-white"
+                  />
+                </label>
+                {descuento > 0 && (
+                  <div className="flex items-center justify-between text-sm text-gray-400">
+                    <span>Subtotal</span><span>{moneda(subtotal)}</span>
+                  </div>
+                )}
+                {descuento > 0 && (
+                  <div className="flex items-center justify-between text-sm text-red-400">
+                    <span>Descuento</span><span>-{moneda(descuento)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div>
+            <button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button>
+          </div>
         </aside>
       </div>
     </div>
