@@ -15,18 +15,20 @@ import { useAuthStore } from '@/store/authStore';
 type Presentacion = { id: number; nombre: string; factorUnidades: number; precio: string; codigoBarras?: string | null };
 type Producto = {
   id: number; nombre: string; precio: string; codigoBarras?: string | null;
-  disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number;
+  disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number; ventaGranel?: boolean;
   categoria: { id: number; nombre: string; icono?: string; parentId?: number | null };
   presentaciones?: Presentacion[];
 };
-// Una forma concreta de vender un producto: el producto tal cual, o una de
-// sus presentaciones (ej. "Tarro" vs "Unidad"). Todas comparten el mismo
-// `stockBase` del producto — factorUnidades es cuántas unidades base
-// consume una venta de este ítem.
+// Una forma concreta de vender un producto: el producto tal cual, una de
+// sus presentaciones (ej. "Tarro" vs "Unidad"), o su versión al granel
+// (el cajero pesa la cantidad exacta, ej. gelatina o ají sueltos). Todas
+// comparten el mismo `stockBase` del producto — factorUnidades es cuántas
+// unidades base consume una venta de este ítem. Un producto al granel
+// puede además tener presentaciones empacadas: no son excluyentes.
 type ItemVendible = {
   key: string; productoId: number; presentacionId: number | null;
   nombre: string; precio: number; codigoBarras: string | null;
-  controlaStock: boolean; factorUnidades: number; stockBase: number;
+  controlaStock: boolean; factorUnidades: number; stockBase: number; porGramo: boolean;
   categoria: { icono?: string; nombre?: string };
 };
 type Linea = { item: ItemVendible; cantidad: number };
@@ -92,12 +94,34 @@ export default function RetailPOS() {
     };
   }, [cargarProductos]);
 
-  // Cada producto se convierte en uno o varios ítems vendibles: si no tiene
-  // presentaciones, es el producto tal cual (factor 1); si tiene, cada
-  // presentación es su propio ítem, todos con el mismo stockBase.
+  // Cada producto se convierte en uno o varios ítems vendibles: si vende al
+  // granel se agrega un ítem "al granel" (precio por gramo, cantidad =
+  // gramos pesados); si tiene presentaciones empacadas, cada una es su
+  // propio ítem; si no tiene ninguna de las dos, es el producto tal cual
+  // (factor 1). Granel y presentaciones pueden coexistir en el mismo
+  // producto — todos comparten el mismo stockBase.
   const itemsVendibles = useMemo<ItemVendible[]>(() => productos.filter((producto) => producto.disponible).flatMap((producto): ItemVendible[] => {
-    if (producto.presentaciones && producto.presentaciones.length > 0) {
-      return producto.presentaciones.map((p) => ({
+    const items: ItemVendible[] = [];
+    const tienePresentaciones = producto.presentaciones && producto.presentaciones.length > 0;
+
+    if (producto.ventaGranel) {
+      items.push({
+        key: `${producto.id}:granel`,
+        productoId: producto.id,
+        presentacionId: null,
+        nombre: tienePresentaciones ? `${producto.nombre} (al granel)` : producto.nombre,
+        precio: Number(producto.precio),
+        codigoBarras: producto.codigoBarras || null,
+        controlaStock: producto.controlaStock,
+        factorUnidades: 1,
+        stockBase: producto.stockActual,
+        porGramo: true,
+        categoria: producto.categoria,
+      });
+    }
+
+    if (tienePresentaciones) {
+      items.push(...producto.presentaciones!.map((p) => ({
         key: `${producto.id}:${p.id}`,
         productoId: producto.id,
         presentacionId: p.id,
@@ -107,21 +131,28 @@ export default function RetailPOS() {
         controlaStock: producto.controlaStock,
         factorUnidades: p.factorUnidades,
         stockBase: producto.stockActual,
+        porGramo: false,
         categoria: producto.categoria,
-      }));
+      })));
     }
-    return [{
-      key: `${producto.id}`,
-      productoId: producto.id,
-      presentacionId: null,
-      nombre: producto.nombre,
-      precio: Number(producto.precio),
-      codigoBarras: producto.codigoBarras || null,
-      controlaStock: producto.controlaStock,
-      factorUnidades: 1,
-      stockBase: producto.stockActual,
-      categoria: producto.categoria,
-    }];
+
+    if (!producto.ventaGranel && !tienePresentaciones) {
+      items.push({
+        key: `${producto.id}`,
+        productoId: producto.id,
+        presentacionId: null,
+        nombre: producto.nombre,
+        precio: Number(producto.precio),
+        codigoBarras: producto.codigoBarras || null,
+        controlaStock: producto.controlaStock,
+        factorUnidades: 1,
+        stockBase: producto.stockActual,
+        porGramo: false,
+        categoria: producto.categoria,
+      });
+    }
+
+    return items;
   }), [productos]);
 
   // Con menos existencias base que las que necesita esta presentación, no
@@ -270,9 +301,9 @@ export default function RetailPOS() {
                   <div className="text-2xl">{item.categoria?.icono || '📦'}</div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-white">{item.nombre}</div>
-                    <div className="text-xs text-gray-500">{item.codigoBarras || item.categoria?.nombre}{item.controlaStock ? ` · Existencias: ${Math.floor(item.stockBase / item.factorUnidades)}` : ''}</div>
+                    <div className="text-xs text-gray-500">{item.codigoBarras || item.categoria?.nombre}{item.controlaStock ? ` · Existencias: ${Math.floor(item.stockBase / item.factorUnidades)}${item.porGramo ? ' g' : ''}` : ''}</div>
                   </div>
-                  <div className="font-bold text-orange-500">{moneda(item.precio)}</div>
+                  <div className="font-bold text-orange-500">{moneda(item.precio)}{item.porGramo ? '/g' : ''}</div>
                 </button>
               ))}
               {!visible.length && <div className="py-14 text-center text-gray-400">No hay productos con existencias que coincidan.</div>}
@@ -285,7 +316,7 @@ export default function RetailPOS() {
                   <div className="flex justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-white">{item.nombre}</div>
-                      <div className="text-xs text-gray-400">{moneda(item.precio)} por unidad</div>
+                      <div className="text-xs text-gray-400">{moneda(item.precio)} {item.porGramo ? 'por gramo' : 'por unidad'}</div>
                     </div>
                     <button aria-label={`Quitar ${item.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.item.key !== item.key))} className="shrink-0 text-gray-400 hover:text-red-400"><Trash2 size={16} /></button>
                   </div>
@@ -306,6 +337,7 @@ export default function RetailPOS() {
                         onFocus={(e) => e.target.select()}
                         className="w-14 rounded bg-gray-900 border border-gray-700 py-1 text-center text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
+                      {item.porGramo && <span className="text-xs text-gray-400">g</span>}
                       <button aria-label={`Aumentar ${item.nombre}`} onClick={() => cambiarCantidad(item, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button>
                     </div>
                     <strong>{moneda(item.precio * cantidad)}</strong>

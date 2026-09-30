@@ -56,6 +56,7 @@ interface Producto {
   controlaStock: boolean;
   stockActual: number;
   stockMinimo: number;
+  ventaGranel?: boolean;
   categoria: Categoria;
   ingredientes: { ingrediente: { id: number; nombre: string; unidad: string }; cantidad: string }[];
   adicionales: { adicional: { id: number; nombre: string; precio: string } }[];
@@ -197,6 +198,7 @@ export default function ProductosPage() {
     controlaStock: false,
     stockActual: '0',
     stockMinimo: '0',
+    ventaGranel: false,
   });
   const [archivoImagenProducto, setArchivoImagenProducto] = useState<File | null>(null);
   const [previewImagenProducto, setPreviewImagenProducto] = useState('');
@@ -253,6 +255,7 @@ export default function ProductosPage() {
         controlaStock: producto.controlaStock ?? false,
         stockActual: String(producto.stockActual ?? 0),
         stockMinimo: String(producto.stockMinimo ?? 0),
+        ventaGranel: producto.ventaGranel ?? false,
       });
       setRecetaTemp(
         producto.ingredientes.map((pi) => ({
@@ -266,7 +269,7 @@ export default function ProductosPage() {
       setPreviewImagenProducto(producto.imagen || '');
     } else {
       setEditando(null);
-      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0' });
+      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0', ventaGranel: false });
       setRecetaTemp([]);
       setAdicionalIdsTemp([]);
       setPreviewImagenProducto('');
@@ -409,7 +412,7 @@ export default function ProductosPage() {
         disponible: form.disponible,
         aceptaAdicionales: form.aceptaAdicionales,
         adicionalIds: adicionalIdsTemp,
-        ...(!esRestaurante ? { costo: form.costo ? Number(form.costo) : null, codigoBarras: form.codigoBarras, controlaStock: form.controlaStock, stockActual: Number(form.stockActual), stockMinimo: Number(form.stockMinimo), aceptaAdicionales: false } : {}),
+        ...(!esRestaurante ? { costo: form.costo ? Number(form.costo) : null, codigoBarras: form.codigoBarras, controlaStock: form.controlaStock, stockActual: Number(form.stockActual), stockMinimo: Number(form.stockMinimo), aceptaAdicionales: false, ventaGranel: form.ventaGranel } : {}),
       };
       if (ingredientesPayload.length > 0) {
         payload.ingredientes = ingredientesPayload;
@@ -681,7 +684,7 @@ export default function ProductosPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-gray-500 text-xs">
-                      {esRestaurante ? `${producto.ingredientes?.length || 0} ingredientes` : `${producto.codigoBarras || 'Sin código'} · ${producto.controlaStock ? `${producto.stockActual} unidades` : 'Sin control'}`}
+                      {esRestaurante ? `${producto.ingredientes?.length || 0} ingredientes` : `${producto.codigoBarras || 'Sin código'} · ${producto.controlaStock ? `${producto.stockActual} ${producto.ventaGranel ? 'g' : 'unidades'}` : 'Sin control'}`}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -803,7 +806,7 @@ export default function ProductosPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Precio</label>
+                  <label className="block text-sm text-gray-400 mb-1">{form.ventaGranel ? 'Precio por gramo' : 'Precio'}</label>
                   <input
                     type="number"
                     value={form.precio}
@@ -881,10 +884,16 @@ export default function ProductosPage() {
                     <label className="block text-sm text-gray-400">Código de barras o SKU<input value={form.codigoBarras} onChange={(e) => setForm({ ...form, codigoBarras: e.target.value })} placeholder="Escanea o escribe el código" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
                     <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={form.controlaStock} onChange={(e) => setForm({ ...form, controlaStock: e.target.checked })} /> Controlar existencias</label>
                     <div className="grid grid-cols-2 gap-3">
-                      <label className="text-sm text-gray-400">Existencias actuales<input type="number" min="0" step="1" value={form.stockActual} onChange={(e) => setForm({ ...form, stockActual: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
-                      <label className="text-sm text-gray-400">Mínimo para alerta<input type="number" min="0" step="1" value={form.stockMinimo} onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
+                      <label className="text-sm text-gray-400">Existencias actuales{form.ventaGranel ? ' (gramos)' : ''}<input type="number" min="0" step="1" value={form.stockActual} onChange={(e) => setForm({ ...form, stockActual: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
+                      <label className="text-sm text-gray-400">Mínimo para alerta{form.ventaGranel ? ' (gramos)' : ''}<input type="number" min="0" step="1" value={form.stockMinimo} onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
                     </div>
                     <p className="text-xs text-gray-500">Las existencias se reducen al registrar la venta. Edita este valor al recibir mercancía.</p>
+                    <label className="flex items-start gap-2 rounded-lg border border-gray-700 bg-gray-800/50 p-3 text-sm text-gray-300">
+                      <input type="checkbox" checked={form.ventaGranel} onChange={(e) => setForm({ ...form, ventaGranel: e.target.checked })} className="mt-0.5" />
+                      <span>Se vende al granel (por gramos)
+                        <span className="block text-xs text-gray-500">El cajero pesa la cantidad exacta que pide el cliente. El precio de arriba pasa a ser por gramo y las existencias se cuentan en gramos. Puede combinarse con presentaciones empacadas (ej. bolsas de 250 g).</span>
+                      </span>
+                    </label>
                   </div>
                 );
               })()}

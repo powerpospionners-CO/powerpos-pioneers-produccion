@@ -193,6 +193,12 @@ model Producto {
   controlaStock Boolean  @default(false)
   stockActual   Int      @default(0)
   stockMinimo   Int      @default(0)
+  // Se vende al granel: el cajero pesa la cantidad exacta que pide el
+  // cliente (ej. "10 g de gelatina"), no una presentación fija. `precio` es
+  // el precio por gramo y `stockActual` se cuenta en gramos, igual que con
+  // las presentaciones — el cajero simplemente escribe los gramos en el
+  // campo de cantidad del POS.
+  ventaGranel   Boolean  @default(false)
   imagen        String?
   disponible    Boolean  @default(true)
   aceptaAdicionales Boolean @default(true)
