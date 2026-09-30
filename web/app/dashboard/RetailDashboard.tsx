@@ -14,6 +14,15 @@ type Producto = { id: number; nombre: string; codigoBarras?: string; controlaSto
 type Venta = { id: number; numero: string; total: string; metodoPago: string; creadoEn: string; estado: string; pagos?: { metodoPago: string; monto: string }[] };
 type Cajero = { id: number; nombre: string; rol: string };
 
+// YYYY-MM-DD en hora local (no UTC, para que cerca de medianoche no se
+// corra al día siguiente/anterior como pasaría con toISOString()).
+const fechaLocalISO = (fecha: Date) => {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export default function RetailDashboard() {
   const usuario = useAuthStore((s) => s.usuario);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -26,6 +35,10 @@ export default function RetailDashboard() {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
+  // "Ventas recientes" se puede consultar por cualquier día, no solo hoy.
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(() => fechaLocalISO(new Date()));
+  const [ventasFecha, setVentasFecha] = useState<Venta[]>([]);
+  const [cargandoVentasFecha, setCargandoVentasFecha] = useState(false);
 
   const cargar = async () => {
     const [p, v, c, u] = await Promise.allSettled([api.get('/productos'), api.get('/pedidos'), api.get('/caja/abierta'), api.get('/usuarios')]);
@@ -39,6 +52,16 @@ export default function RetailDashboard() {
     }
   };
   useEffect(() => { void cargar(); }, []);
+
+  const cargarVentasFecha = async (fecha: string) => {
+    setCargandoVentasFecha(true);
+    try {
+      const { data } = await api.get('/pedidos', { params: { fecha } });
+      setVentasFecha(data);
+    } catch { /* silencioso: panel informativo */ }
+    finally { setCargandoVentasFecha(false); }
+  };
+  useEffect(() => { void cargarVentasFecha(fechaSeleccionada); }, [fechaSeleccionada]);
 
   const abrirCaja = async () => {
     if (!cajeroId || base === '' || Number(base) < 0) return;
@@ -58,14 +81,14 @@ export default function RetailDashboard() {
   const anular = async (venta: Venta) => {
     if (!window.confirm(`¿Anular la venta ${venta.numero} por ${moneda(Number(venta.total))}? Esto repone existencias y elimina sus movimientos financieros.`)) return;
     setError('');
-    try { await api.patch(`/pedidos/${venta.id}/estado`, { estado: 'ANULADO' }); await cargar(); }
+    try { await api.patch(`/pedidos/${venta.id}/estado`, { estado: 'ANULADO' }); await cargar(); await cargarVentasFecha(fechaSeleccionada); }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo anular la venta.'); }
   };
 
   const guardarPago = async (pago: PagoConfirmado) => {
     if (!ventaEditar) return;
     setError('');
-    try { await api.patch(`/pedidos/${ventaEditar.id}/pago`, pago); setVentaEditar(null); await cargar(); }
+    try { await api.patch(`/pedidos/${ventaEditar.id}/pago`, pago); setVentaEditar(null); await cargar(); await cargarVentasFecha(fechaSeleccionada); }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo actualizar el pago.'); }
   };
 
@@ -84,7 +107,25 @@ export default function RetailDashboard() {
     ].map(({ icon: Icon, title, value, detail }) => <div key={title} className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><Icon size={21} className="text-orange-500" /><p className="mt-4 text-sm text-gray-400">{title}</p><p className="mt-1 text-2xl font-bold text-white">{value}</p><p className="mt-1 text-xs text-gray-500">{detail}</p></div>)}</div>
     <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><h2 className="text-lg font-bold">Caja de la sucursal</h2>{caja ? <div className="mt-4 space-y-4"><p className="text-sm text-green-400">Abierta · asignada a {caja.usuario?.nombre || 'cajero'}</p><p className="text-sm text-gray-400">Base inicial: {moneda(Number(caja.montoInicial))}</p><label className="block text-sm text-gray-400">Dinero contado al cerrar<input type="number" min="0" value={contado} onChange={(e) => setContado(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white" /></label><button onClick={cerrarCaja} disabled={ocupado || contado === ''} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white disabled:opacity-50">Cerrar caja</button></div> : <div className="mt-4 space-y-4"><p className="text-sm text-gray-400">Abre la caja antes de registrar ventas.</p><label className="block text-sm text-gray-400">Asignar a<select value={cajeroId} onChange={(e) => setCajeroId(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white">{cajeros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></label><label className="block text-sm text-gray-400">Base de efectivo<input type="number" min="0" value={base} onChange={(e) => setBase(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white" /></label><button onClick={abrirCaja} disabled={ocupado || !cajeroId || base === ''} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white disabled:opacity-50">Abrir caja</button></div>}</section>
       <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><h2 className="text-lg font-bold">Productos por reponer</h2><div className="mt-4 max-h-72 space-y-2 overflow-y-auto">{bajos.length ? bajos.map((p) => <div key={p.id} className="flex justify-between gap-3 rounded-lg bg-gray-800 p-3 text-sm"><div><strong>{p.nombre}</strong><p className="text-xs text-gray-500">{p.codigoBarras || 'Sin código de barras'}</p></div><span className="text-yellow-400">{p.stockActual} / mín. {p.stockMinimo}</span></div>) : <p className="text-sm text-gray-400">No hay productos en el nivel mínimo.</p>}</div></section></div>
-    <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><h2 className="text-lg font-bold">Ventas recientes</h2><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-800 text-gray-400"><tr><th className="pb-3">Venta</th><th className="pb-3">Fecha</th><th className="pb-3">Pago</th><th className="pb-3 text-right">Total</th><th className="pb-3 text-right">Acciones</th></tr></thead><tbody>{ventas.slice(0, 10).map((v) => <tr key={v.id} className={`border-b border-gray-800 ${v.estado === 'ANULADO' ? 'opacity-40' : ''}`}><td className="py-3">{v.numero}</td><td>{new Date(v.creadoEn).toLocaleString('es-CO')}</td><td>{v.estado === 'ANULADO' ? 'ANULADO' : v.metodoPago}</td><td className="text-right font-semibold">{moneda(Number(v.total))}</td><td className="text-right">{v.estado !== 'ANULADO' && <span className="inline-flex gap-2"><button type="button" title="Editar medio de pago" onClick={() => setVentaEditar(v)} className="text-gray-500 hover:text-orange-400"><Pencil size={15} /></button><button type="button" title="Anular venta" onClick={() => anular(v)} className="text-gray-500 hover:text-red-400"><Ban size={15} /></button></span>}</td></tr>)}</tbody></table>{!ventas.length && <p className="py-8 text-center text-gray-400">Aún no hay ventas registradas.</p>}</div></section>
+    <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-bold">Ventas recientes</h2>
+        <div className="flex items-center gap-2">
+          <input type="date" value={fechaSeleccionada} max={fechaLocalISO(new Date())} onChange={(e) => setFechaSeleccionada(e.target.value)} className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white" />
+          {fechaSeleccionada !== fechaLocalISO(new Date()) && (
+            <button type="button" onClick={() => setFechaSeleccionada(fechaLocalISO(new Date()))} className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:text-white">Hoy</button>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 max-h-[28rem] overflow-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-gray-800 text-gray-400"><tr><th className="pb-3">Venta</th><th className="pb-3">Fecha</th><th className="pb-3">Pago</th><th className="pb-3 text-right">Total</th><th className="pb-3 text-right">Acciones</th></tr></thead>
+          <tbody>{ventasFecha.map((v) => <tr key={v.id} className={`border-b border-gray-800 ${v.estado === 'ANULADO' ? 'opacity-40' : ''}`}><td className="py-3">{v.numero}</td><td>{new Date(v.creadoEn).toLocaleString('es-CO')}</td><td>{v.estado === 'ANULADO' ? 'ANULADO' : v.metodoPago}</td><td className="text-right font-semibold">{moneda(Number(v.total))}</td><td className="text-right">{v.estado !== 'ANULADO' && <span className="inline-flex gap-2"><button type="button" title="Editar medio de pago" onClick={() => setVentaEditar(v)} className="text-gray-500 hover:text-orange-400"><Pencil size={15} /></button><button type="button" title="Anular venta" onClick={() => anular(v)} className="text-gray-500 hover:text-red-400"><Ban size={15} /></button></span>}</td></tr>)}</tbody>
+        </table>
+        {!cargandoVentasFecha && !ventasFecha.length && <p className="py-8 text-center text-gray-400">No hay ventas ese día.</p>}
+        {cargandoVentasFecha && <p className="py-8 text-center text-gray-500">Cargando…</p>}
+      </div>
+    </section>
   </div>
   {ventaEditar && (
     <ModalCobro total={Number(ventaEditar.total)} titulo={`Editar pago · ${ventaEditar.numero}`} textoConfirmar="Guardar pago" metodoInicial={ventaEditar.metodoPago} pagosIniciales={ventaEditar.pagos} onConfirmar={guardarPago} onCancelar={() => setVentaEditar(null)} />

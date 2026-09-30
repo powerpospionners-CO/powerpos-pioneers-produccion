@@ -28,11 +28,12 @@ export class PedidosController {
 
   @Get()
   @Roles('CAJERO', 'COCINERO', 'ADMIN_EMPRESA', 'GERENTE', 'DOMICILIARIO')
-  listar(@Request() req: any, @Query('sucursalId') sucursalId?: string, @Query('cajaId') cajaId?: string) {
+  listar(@Request() req: any, @Query('sucursalId') sucursalId?: string, @Query('cajaId') cajaId?: string, @Query('fecha') fecha?: string) {
     return this.pedidosService.listarPedidos(
       req.user.empresaId,
       sucursalId ? +sucursalId : undefined,
       cajaId ? +cajaId : undefined,
+      fecha,
     );
   }
 

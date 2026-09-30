@@ -424,12 +424,22 @@ export class PedidosService {
     }
   }
 
-  async listarPedidos(empresaId: number, sucursalId?: number, cajaId?: number) {
+  async listarPedidos(empresaId: number, sucursalId?: number, cajaId?: number, fecha?: string) {
+    // Colombia no tiene horario de verano, así que un offset fijo de -05:00
+    // alcanza para delimitar "todo el día" de `fecha` sin necesitar Intl.
+    let rangoFecha: { gte: Date; lt: Date } | undefined;
+    if (fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      const inicio = new Date(`${fecha}T00:00:00-05:00`);
+      const fin = new Date(`${fecha}T00:00:00-05:00`);
+      fin.setUTCDate(fin.getUTCDate() + 1);
+      rangoFecha = { gte: inicio, lt: fin };
+    }
     return this.prisma.pedido.findMany({
       where: {
         sucursal: { empresaId },
         ...(sucursalId && { sucursalId }),
         ...(cajaId && { cajaId }),
+        ...(rangoFecha && { creadoEn: rangoFecha }),
       },
       include: {
         detalles: {
@@ -443,10 +453,11 @@ export class PedidosService {
         cliente: { select: { nombre: true, telefono: true } },
       },
       orderBy: { creadoEn: 'desc' },
-      // Sin filtro por caja el límite evita listas enormes; filtrando por una
-      // sola caja (el turno actual) todas sus ventas deben verse, así no se
-      // "pierdan" ventas viejas del turno cuando la sucursal ya tiene +50.
-      take: cajaId ? undefined : 50,
+      // Sin filtro por caja ni por fecha el límite evita listas enormes;
+      // filtrando por una sola caja o por un día concreto deben verse todas
+      // sus ventas, así no se "pierdan" ventas viejas cuando la sucursal ya
+      // tiene +50 pedidos recientes.
+      take: cajaId || rangoFecha ? undefined : 50,
     });
   }
 
