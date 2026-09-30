@@ -51,6 +51,13 @@ export default function RetailPOS() {
   const [aviso, setAviso] = useState('');
   const [ultimoRecibo, setUltimoRecibo] = useState<any>(null);
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
+  // La última venta no se pudo imprimir sola (agente caído, o la impresora
+  // ya no está instalada como USB en Windows). Nunca se abre la ventana de
+  // impresión del navegador automáticamente — se ofrece reintentar o
+  // imprimir a mano, para no sorprender al cajero con un diálogo sin
+  // impresora que elegir.
+  const [fallaImpresion, setFallaImpresion] = useState(false);
+  const [reintentandoImpresion, setReintentandoImpresion] = useState(false);
   // Ventas guardadas en este dispositivo porque no había conexión al
   // cobrarlas. Se reintentan solas al volver la señal (evento 'online' +
   // reintento periódico, por si ese evento no dispara en algunos navegadores).
@@ -292,16 +299,25 @@ export default function RetailPOS() {
       setDescuentoInput('');
       setUltimoRecibo(data);
       setModalCobroAbierto(false);
-      setAviso(`Venta ${data.numero} registrada · ${moneda(Number(data.total))}`);
+      setFallaImpresion(false);
       await cargar();
       try {
         const impresion = await api.post('/impresion/ticket', data);
         if (!impresion.data?.impreso) {
-          if (impresion.data?.fallbackBrowser) await imprimirRecibo(data);
-          else setAviso(`Venta ${data.numero} registrada. Puedes imprimir el recibo desde esta pantalla.`);
+          // No se abre la ventana del navegador sola: si la impresora ya no
+          // está instalada como USB en Windows (ej. ahora es de red), ese
+          // diálogo no tiene a quién imprimirle y solo confunde al cajero.
+          // Se avisa y se deja reintentar o imprimir a mano, a su criterio.
+          setFallaImpresion(true);
+          setAviso(`Venta ${data.numero} registrada, pero no se pudo imprimir automáticamente.`);
+        } else {
+          setAviso(`Venta ${data.numero} registrada · ${moneda(Number(data.total))}`);
         }
         if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) void api.post('/impresion/abrir-cajon').catch(() => undefined);
-      } catch { await imprimirRecibo(data); }
+      } catch {
+        setFallaImpresion(true);
+        setAviso(`Venta ${data.numero} registrada, pero no se pudo conectar para imprimir.`);
+      }
       if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
     } catch (e: any) {
       if (!e?.response && usuario?.empresaId && usuario?.sucursalId) {
@@ -320,6 +336,24 @@ export default function RetailPOS() {
         setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
       }
     } finally { setProcesando(false); buscarRef.current?.focus(); }
+  };
+
+  const reintentarImpresion = async () => {
+    if (!ultimoRecibo || reintentandoImpresion) return;
+    setReintentandoImpresion(true);
+    try {
+      const impresion = await api.post('/impresion/ticket', ultimoRecibo);
+      if (impresion.data?.impreso) {
+        setFallaImpresion(false);
+        setAviso(`Venta ${ultimoRecibo.numero} impresa correctamente.`);
+      } else {
+        setAviso('Sigue sin poder imprimir sola. Puedes intentarlo de nuevo en un momento, o imprimir desde el navegador.');
+      }
+    } catch {
+      setAviso('No se pudo conectar para reintentar la impresión.');
+    } finally {
+      setReintentandoImpresion(false);
+    }
   };
 
   const imprimirRecibo = (recibo?: any) => {
@@ -349,7 +383,15 @@ export default function RetailPOS() {
         <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Escanea el código de barras para agregar de una, o escribe el nombre y selecciona el producto.</p></div>
       </div>
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
-      {aviso && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400"><span>{aviso}</span>{ultimoRecibo && <button type="button" onClick={() => imprimirRecibo()} className="rounded-lg border border-green-500/40 px-3 py-1 text-sm">Imprimir último recibo</button>}</div>}
+      {aviso && (
+        <div role="status" className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${fallaImpresion ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300' : 'border-green-500/30 bg-green-500/10 text-green-400'}`}>
+          <span>{aviso}</span>
+          <span className="flex flex-wrap gap-2">
+            {fallaImpresion && <button type="button" disabled={reintentandoImpresion} onClick={reintentarImpresion} className="rounded-lg border border-yellow-500/40 px-3 py-1 text-sm disabled:opacity-50">{reintentandoImpresion ? 'Reintentando…' : 'Reintentar impresión'}</button>}
+            {ultimoRecibo && <button type="button" onClick={() => imprimirRecibo()} className="rounded-lg border border-gray-600 px-3 py-1 text-sm">Imprimir desde el navegador</button>}
+          </span>
+        </div>
+      )}
       {pendientesSync > 0 && <div role="status" className="mb-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-300">📡 {pendientesSync} venta(s) sin conexión, esperando para sincronizar. No cierres esta pestaña.</div>}
       {fallidasSync.length > 0 && (
         <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
