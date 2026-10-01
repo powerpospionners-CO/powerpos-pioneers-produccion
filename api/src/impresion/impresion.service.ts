@@ -207,6 +207,41 @@ export class ImpresionService {
     return String(texto ?? '').slice(0, ancho).padEnd(ancho, ' ');
   }
 
+  // 'es-CO' solo define el formato (DD/MM/AAAA), no la zona horaria — sin
+  // esto, en un servidor que corre en UTC la tirilla sale con la hora 5
+  // horas adelantada a la hora real de Colombia.
+  private fechaBogota(fecha: Date) {
+    return fecha.toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+  }
+
+  private moneda(valor: number) {
+    return `$${Math.round(valor).toLocaleString('es-CO')}`;
+  }
+
+  // La tirilla se manda en ASCII puro: una tilde o "ñ" no se descarta sola,
+  // se corrompe en otra letra (ej. "Postobón" sale "Postobsn"). Quitar los
+  // acentos antes da un texto más feo pero siempre legible, sin depender de
+  // qué tabla de caracteres tenga activa esa impresora en particular.
+  private quitarAcentos(texto: string) {
+    return texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  private aBufferAscii(lineas: Array<string | Buffer>): Buffer {
+    return Buffer.concat(
+      lineas.map((segmento) =>
+        Buffer.isBuffer(segmento) ? segmento : Buffer.from(this.quitarAcentos(String(segmento)), 'ascii'),
+      ),
+    );
+  }
+
+  // Monto alineado a la derecha, como una columna de precios — si la
+  // etiqueta ya ocupa todo el ancho, el monto simplemente sigue a continuación.
+  private lineaMonto(etiqueta: string, valor: number, ancho = 32) {
+    const monto = this.moneda(valor);
+    const espacio = Math.max(1, ancho - etiqueta.length - monto.length);
+    return `${etiqueta}${' '.repeat(espacio)}${monto}`;
+  }
+
   private async generarLogoEscPos(empresa: any): Promise<Buffer> {
     if (!empresa?.logo) {
       return Buffer.from('');
@@ -325,7 +360,7 @@ export class ImpresionService {
       `${this.recortarTexto(telefono, 32)}\n`,
       `${this.recortarTexto(nombreCliente, 32)}\n`,
       `${this.recortarTexto(telefonoCliente, 32)}\n`,
-      `${new Date().toLocaleString('es-CO')}\n`,
+      `${this.fechaBogota(new Date())}\n`,
       '--------------------------------\n',
     );
 
@@ -358,21 +393,13 @@ export class ImpresionService {
     lineas.push('--------------------------------\n');
     lineas.push('\n');
 
-    return Buffer.concat(
-      lineas.map((segmento) =>
-        Buffer.isBuffer(segmento) ? segmento : Buffer.from(String(segmento), 'ascii'),
-      ),
-    );
+    return this.aBufferAscii(lineas);
   }
 
   private async formatearRecibo(pedido: any, empresaId: number) {
     const empresa = await this.obtenerEmpresa(empresaId);
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
-    const nit = empresa?.nit ? `NIT: ${empresa.nit}` : 'NIT: N/A';
-    const direccion = empresa?.direccion ? `DIR: ${empresa.direccion}` : 'DIR: N/A';
-    const telefono = empresa?.telefono ? `TEL: ${empresa.telefono}` : 'TEL: N/A';
-    const nombreCliente = pedido?.cliente?.nombre ? `CLIENTE: ${pedido.cliente.nombre}` : 'CLIENTE: GENERAL';
-    const telefonoCliente = pedido?.cliente?.telefono ? `TEL: ${pedido.cliente.telefono}` : 'TEL: NO REGISTRADO';
+    const esRestaurante = empresa?.tipoNegocio === 'RESTAURANTE';
     const logo = await this.generarLogoEscPos(empresa);
 
     const lineas: Array<string | Buffer> = ['\n'];
@@ -382,28 +409,36 @@ export class ImpresionService {
       lineas.push(Buffer.from('\n'));
     }
 
+    // Encabezado: solo se imprimen los datos de contacto que la empresa
+    // realmente tiene cargados — una tirilla con "NIT: N/A" en cada venta
+    // se ve descuidada, mejor omitir la línea directamente.
     lineas.push(
       `${this.centrarTexto(nombre, 32)}\n`,
-      `${this.centrarTexto('RECIBO DE PAGO', 32)}\n`,
-      `${this.centrarTexto(`${empresa?.tipoNegocio === 'RESTAURANTE' ? 'PEDIDO' : 'VENTA'} ${pedido.numero}`, 32)}\n`,
-      '--------------------------------\n',
-      `${this.recortarTexto(nit, 32)}\n`,
-      `${this.recortarTexto(direccion, 32)}\n`,
-      `${this.recortarTexto(telefono, 32)}\n`,
-      `${this.recortarTexto(nombreCliente, 32)}\n`,
-      `${this.recortarTexto(telefonoCliente, 32)}\n`,
-      `${new Date().toLocaleString('es-CO')}\n`,
-      '--------------------------------\n',
+      `${this.centrarTexto(esRestaurante ? 'PEDIDO' : 'VENTA', 32)}\n`,
+      `${this.centrarTexto(pedido.numero, 32)}\n`,
     );
+    if (empresa?.nit) lineas.push(`${this.centrarTexto(`NIT ${empresa.nit}`, 32)}\n`);
+    if (empresa?.direccion) lineas.push(`${this.centrarTexto(empresa.direccion, 32)}\n`);
+    if (empresa?.telefono) lineas.push(`${this.centrarTexto(`Tel ${empresa.telefono}`, 32)}\n`);
+    lineas.push('================================\n');
+    lineas.push(`Fecha: ${this.fechaBogota(new Date())}\n`);
+    if (pedido.usuario?.nombre) lineas.push(`Cajero: ${this.recortarTexto(pedido.usuario.nombre, 25)}\n`);
+    if (pedido.cliente?.nombre) lineas.push(`Cliente: ${this.recortarTexto(pedido.cliente.nombre, 24)}\n`);
+    lineas.push('--------------------------------\n');
 
-    let total = Number(pedido.total ?? 0);
+    // Cada producto en dos líneas (nombre, luego el precio alineado a la
+    // derecha) para que el precio quede siempre en la misma columna, sin
+    // importar qué tan largo sea el nombre del producto.
+    const subtotal = Number(pedido.subtotal ?? pedido.total ?? 0);
+    const descuento = Number(pedido.descuento ?? 0);
+    const total = Number(pedido.total ?? 0);
     for (const detalle of pedido.detalles || []) {
-      const subtotal = Number(detalle.subtotal ?? (Number(detalle.precioUnitario ?? detalle.precio ?? 0) * Number(detalle.cantidad ?? 1)));
-      lineas.push(
-        `${detalle.cantidad}x ${detalle.producto?.nombre || 'Producto'} ${subtotal.toFixed(0)}\n`,
-      );
+      const subtotalItem = Number(detalle.subtotal ?? (Number(detalle.precioUnitario ?? detalle.precio ?? 0) * Number(detalle.cantidad ?? 1)));
+      const nombreItem = detalle.presentacionNombre ? `${detalle.producto?.nombre || 'Producto'} (${detalle.presentacionNombre})` : (detalle.producto?.nombre || 'Producto');
+      lineas.push(`${detalle.cantidad}x ${this.recortarTexto(nombreItem, 29)}\n`);
+      lineas.push(`${this.moneda(subtotalItem).padStart(32, ' ')}\n`);
       if (detalle.exclusiones?.length) {
-        lineas.push(`   SIN: ${detalle.exclusiones.join(', ')}\n`);
+        lineas.push(`   Sin: ${detalle.exclusiones.join(', ')}\n`);
       }
       if (detalle.adicionales?.length) {
         const extras = detalle.adicionales
@@ -411,33 +446,34 @@ export class ImpresionService {
             a.cantidad > 1 ? `${a.nombre} x${a.cantidad}` : a.nombre,
           )
           .join(', ');
-        lineas.push(`   ADIC: ${extras}\n`);
+        lineas.push(`   Adic: ${extras}\n`);
       }
       if (detalle.observacion) {
-        lineas.push(`   NOTA: ${detalle.observacion}\n`);
+        lineas.push(`   Nota: ${detalle.observacion}\n`);
       }
     }
 
     lineas.push('--------------------------------\n');
     if (pedido.observacion) {
-      lineas.push(`NOTA: ${pedido.observacion}\n`);
+      lineas.push(`Nota: ${pedido.observacion}\n`, '--------------------------------\n');
     }
-    lineas.push(`TOTAL: ${total.toFixed(0)}\n`);
+    if (descuento > 0) {
+      lineas.push(`${this.lineaMonto('Subtotal', subtotal)}\n`);
+      lineas.push(`${this.lineaMonto('Descuento', -descuento)}\n`);
+    }
+    lineas.push(`${this.lineaMonto('TOTAL', total)}\n`);
+    lineas.push('--------------------------------\n');
     if (Array.isArray(pedido.pagos) && pedido.pagos.length > 1) {
       for (const pago of pedido.pagos) {
-        lineas.push(`PAGO ${pago.metodoPago}: ${Number(pago.monto).toFixed(0)}\n`);
+        lineas.push(`${this.lineaMonto(pago.metodoPago, Number(pago.monto))}\n`);
       }
     } else if (pedido.metodoPago) {
-      lineas.push(`PAGO: ${pedido.metodoPago}\n`);
+      lineas.push(`Pago: ${pedido.metodoPago}\n`);
     }
-    lineas.push('--------------------------------\n');
-    lineas.push('\nGracias por su compra\n\n');
+    lineas.push('================================\n');
+    lineas.push(`${this.centrarTexto('Gracias por su compra', 32)}\n\n`);
 
-    return Buffer.concat(
-      lineas.map((segmento) =>
-        Buffer.isBuffer(segmento) ? segmento : Buffer.from(String(segmento), 'ascii'),
-      ),
-    );
+    return this.aBufferAscii(lineas);
   }
 
   private async formatearCierreCaja(resumen: any, empresaId: number) {
@@ -456,8 +492,8 @@ export class ImpresionService {
       '--------------------------------\n',
       `${this.recortarTexto(`CAJERO: ${resumen.cajeroNombre || ''}`, 32)}\n`,
       `${this.recortarTexto(`SUCURSAL: ${resumen.sucursalNombre || ''}`, 32)}\n`,
-      `${this.recortarTexto(`APERTURA: ${new Date(resumen.abiertaEn).toLocaleString('es-CO')}`, 32)}\n`,
-      `${this.recortarTexto(`CIERRE: ${new Date(resumen.cerradaEn).toLocaleString('es-CO')}`, 32)}\n`,
+      `${this.recortarTexto(`APERTURA: ${this.fechaBogota(new Date(resumen.abiertaEn))}`, 32)}\n`,
+      `${this.recortarTexto(`CIERRE: ${this.fechaBogota(new Date(resumen.cerradaEn))}`, 32)}\n`,
       '--------------------------------\n',
       `${this.recortarTexto(`VENTAS DEL TURNO: ${resumen.cantidadVentas}`, 32)}\n`,
       `TOTAL VENDIDO: ${Number(resumen.totalVentas).toFixed(0)}\n`,
@@ -485,10 +521,6 @@ export class ImpresionService {
     }
     lineas.push('--------------------------------\n', '\n\n');
 
-    return Buffer.concat(
-      lineas.map((segmento) =>
-        Buffer.isBuffer(segmento) ? segmento : Buffer.from(String(segmento), 'ascii'),
-      ),
-    );
+    return this.aBufferAscii(lineas);
   }
 }
