@@ -60,6 +60,26 @@ function extraerMedida(texto: string): { numero: string; unidad: string } | null
   return { numero: match[1].replace(',', '.'), unidad: UNIDADES_CANONICAS[match[2]] };
 }
 
+// Cuando una foto no coincide con ningún producto existente del catálogo,
+// se usa su nombre de archivo para crear el producto nuevo (ej. "Sal
+// Himalaya 500g.jpg" -> nombre "Sal Himalaya", presentación "500 g").
+function extraerNombreYPresentacionDeArchivo(nombreArchivo: string): { nombre: string; presentacion: string | null } {
+  const limpio = String(nombreArchivo || '')
+    .replace(/\.[a-zA-Z0-9]+$/, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const patronMedida = new RegExp(`\\b(\\d+(?:[.,]\\d+)?)\\s*(${Object.keys(UNIDADES_CANONICAS).join('|')})\\b`, 'i');
+  const match = limpio.match(patronMedida);
+  if (!match || match.index === undefined) return { nombre: limpio, presentacion: null };
+  const unidad = UNIDADES_CANONICAS[match[2].toLowerCase()];
+  const presentacion = `${match[1].replace(',', '.')} ${unidad}`;
+  const nombre = (limpio.slice(0, match.index) + limpio.slice(match.index + match[0].length))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { nombre: nombre || limpio, presentacion };
+}
+
 const SINONIMOS_COLUMNAS: Record<string, string[]> = {
   nombre: ['nombre', 'producto', 'nombre del producto', 'articulo'],
   categoria: ['categoria', 'linea', 'familia', '#producto'],
@@ -211,17 +231,27 @@ export class CatalogoService {
   // Recibe varias imágenes sueltas (ej. exportadas con el nombre del
   // producto) y las empareja con el catálogo por similitud de nombre, sin
   // que el admin tenga que asignarlas una por una. Si el nombre del archivo
-  // no se parece lo suficiente a ningún producto, o se parece por igual a
-  // más de uno, se deja fuera para que se asigne a mano desde "Editar".
+  // se parece por igual a más de un producto existente, se deja fuera para
+  // que se asigne a mano desde "Editar" (ambigüedad real). Si no se parece a
+  // ninguno, se asume que es un producto nuevo (ej. una etiqueta que no
+  // estaba en el Excel original) y se crea en el catálogo con el nombre y la
+  // medida que trae el nombre del archivo.
   async importarImagenes(archivos: Express.Multer.File[], empresaId: number) {
     await this.verificarHabilitado(empresaId);
-    const items = await this.prisma.catalogoProducto.findMany({
+    const itemsExistentes = await this.prisma.catalogoProducto.findMany({
       where: { empresaId },
       select: { id: true, nombre: true, presentacion: true },
     });
     const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
     const asignados: { archivo: string; producto: string }[] = [];
+    const creados: { archivo: string; producto: string }[] = [];
     const sinCoincidencia: { archivo: string; motivo: string }[] = [];
+
+    // Lista viva de productos del catálogo contra la que se compara cada
+    // foto — incluye los recién creados en esta misma tanda, para que dos
+    // fotos del mismo producto nuevo no terminen creando dos productos.
+    const disponibles: { id: number; nombre: string; presentacion: string | null }[] = [...itemsExistentes];
+    let creadosEnLote = 0;
 
     for (const archivo of archivos) {
       try {
@@ -236,9 +266,9 @@ export class CatalogoService {
 
       const tokensArchivo = tokensDeNombre(archivo.originalname);
       const medidaArchivo = extraerMedida(archivo.originalname);
-      let mejor: { item: (typeof items)[number]; score: number } | null = null;
+      let mejor: { item: (typeof disponibles)[number]; score: number } | null = null;
       let empatados = 0;
-      for (const item of items) {
+      for (const item of disponibles) {
         const textoProducto = `${item.nombre} ${item.presentacion || ''}`;
         let score = puntajeCoincidencia(tokensArchivo, tokensDeNombre(textoProducto));
         if (score <= 0) continue;
@@ -262,23 +292,36 @@ export class CatalogoService {
         }
       }
 
-      if (!mejor || mejor.score < 0.5) {
-        sinCoincidencia.push({ archivo: archivo.originalname, motivo: 'No se encontró un producto con nombre parecido' });
-        await fs.unlink(archivo.path).catch(() => undefined);
+      const imagen = `${baseUrl}/uploads/catalogo/${archivo.filename}`;
+
+      if (mejor && mejor.score >= 0.5 && empatados === 1) {
+        await this.prisma.catalogoProducto.update({ where: { id: mejor.item.id }, data: { imagen } });
+        asignados.push({ archivo: archivo.originalname, producto: mejor.item.nombre });
         continue;
       }
-      if (empatados > 1) {
+
+      if (mejor && mejor.score >= 0.5 && empatados > 1) {
         sinCoincidencia.push({ archivo: archivo.originalname, motivo: 'El nombre coincide con más de un producto; asígnala manualmente' });
         await fs.unlink(archivo.path).catch(() => undefined);
         continue;
       }
 
-      const imagen = `${baseUrl}/uploads/catalogo/${archivo.filename}`;
-      await this.prisma.catalogoProducto.update({ where: { id: mejor.item.id }, data: { imagen } });
-      asignados.push({ archivo: archivo.originalname, producto: mejor.item.nombre });
+      const { nombre, presentacion } = extraerNombreYPresentacionDeArchivo(archivo.originalname);
+      const nuevo = await this.prisma.catalogoProducto.create({
+        data: {
+          empresaId,
+          nombre: nombre.slice(0, 150),
+          presentacion: presentacion ? presentacion.slice(0, 60) : null,
+          imagen,
+          orden: itemsExistentes.length + creadosEnLote,
+        },
+      });
+      creadosEnLote++;
+      disponibles.push({ id: nuevo.id, nombre: nuevo.nombre, presentacion: nuevo.presentacion });
+      creados.push({ archivo: archivo.originalname, producto: nuevo.presentacion ? `${nuevo.nombre} ${nuevo.presentacion}` : nuevo.nombre });
     }
 
-    return { asignados, sinCoincidencia, total: archivos.length };
+    return { asignados, creados, sinCoincidencia, total: archivos.length };
   }
 
   // Copia las imágenes que ya existen en el catálogo (el folleto) hacia los
@@ -340,6 +383,67 @@ export class CatalogoService {
       // catálogo no le asigne una imagen distinta encima en la misma pasada.
       const indice = productos.findIndex((p) => p.id === mejor!.producto.id);
       if (indice >= 0) productos.splice(indice, 1);
+    }
+
+    return { actualizados, sinCoincidencia, total: itemsCatalogo.length };
+  }
+
+  // Actualiza el precio de cada producto del catálogo para que sea igual al
+  // precio real que tiene en el inventario (Producto) — el catálogo se pudo
+  // llenar con precios de una lista vieja (Excel) y esto los deja al día.
+  // A diferencia de las imágenes, el precio SIEMPRE se sobrescribe cuando
+  // hay una coincidencia única, aunque el catálogo ya tuviera uno puesto.
+  async sincronizarPreciosDesdeProductos(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    const itemsCatalogo = await this.prisma.catalogoProducto.findMany({
+      where: { empresaId },
+      select: { id: true, nombre: true, presentacion: true },
+    });
+    if (!itemsCatalogo.length) return { actualizados: [], sinCoincidencia: [], total: 0 };
+
+    const productos = await this.prisma.producto.findMany({
+      where: { empresaId, activo: true },
+      select: { id: true, nombre: true, precio: true },
+    });
+
+    const actualizados: { catalogo: string; producto: string; precio: number }[] = [];
+    const sinCoincidencia: { catalogo: string; motivo: string }[] = [];
+
+    for (const item of itemsCatalogo) {
+      const textoCatalogo = `${item.nombre} ${item.presentacion || ''}`;
+      const tokensCatalogo = tokensDeNombre(textoCatalogo);
+      const medidaCatalogo = extraerMedida(textoCatalogo);
+      let mejor: { producto: (typeof productos)[number]; score: number } | null = null;
+      let empatados = 0;
+      for (const producto of productos) {
+        let score = puntajeCoincidencia(tokensCatalogo, tokensDeNombre(producto.nombre));
+        if (score <= 0) continue;
+        const medidaProducto = extraerMedida(producto.nombre);
+        if (medidaCatalogo && medidaProducto) {
+          const coincideMedida = medidaCatalogo.numero === medidaProducto.numero && medidaCatalogo.unidad === medidaProducto.unidad;
+          if (!coincideMedida) continue;
+          score += 1;
+        }
+        if (!mejor || score > mejor.score) {
+          mejor = { producto, score };
+          empatados = 1;
+        } else if (score === mejor.score) {
+          empatados++;
+        }
+      }
+
+      if (!mejor || mejor.score < 0.5) {
+        sinCoincidencia.push({ catalogo: item.nombre, motivo: 'No se encontró un producto con nombre parecido' });
+        continue;
+      }
+      if (empatados > 1) {
+        sinCoincidencia.push({ catalogo: item.nombre, motivo: 'El nombre coincide con más de un producto; asígnalo manualmente' });
+        continue;
+      }
+
+      const precioNuevo = Number(mejor.producto.precio);
+      await this.prisma.catalogoProducto.update({ where: { id: item.id }, data: { precio: precioNuevo } });
+      actualizados.push({ catalogo: item.nombre, producto: mejor.producto.nombre, precio: precioNuevo });
     }
 
     return { actualizados, sinCoincidencia, total: itemsCatalogo.length };

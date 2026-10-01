@@ -76,6 +76,12 @@ export class CatalogoController {
     return this.catalogoService.sincronizarImagenesAProductos(req.user.empresaId);
   }
 
+  @Post('sincronizar-precios-productos')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  sincronizarPreciosDesdeProductos(@Request() req: any) {
+    return this.catalogoService.sincronizarPreciosDesdeProductos(req.user.empresaId);
+  }
+
   @Get('pdf')
   async pdf(@Request() req: any, @Res() res: Response) {
     const buffer = await this.catalogoService.generarPDF(req.user.empresaId);

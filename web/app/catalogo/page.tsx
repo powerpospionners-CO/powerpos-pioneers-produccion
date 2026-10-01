@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
-  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images,
+  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images, DollarSign,
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -42,13 +42,18 @@ export default function CatalogoPage() {
   const [modalImagenes, setModalImagenes] = useState(false);
   const [archivosImagenes, setArchivosImagenes] = useState<File[]>([]);
   const [subiendoImagenes, setSubiendoImagenes] = useState(false);
-  const [resultadoImagenes, setResultadoImagenes] = useState<{ asignados: { archivo: string; producto: string }[]; sinCoincidencia: { archivo: string; motivo: string }[]; total: number } | null>(null);
+  const [resultadoImagenes, setResultadoImagenes] = useState<{ asignados: { archivo: string; producto: string }[]; creados: { archivo: string; producto: string }[]; sinCoincidencia: { archivo: string; motivo: string }[]; total: number } | null>(null);
   const [errorImagenes, setErrorImagenes] = useState('');
 
   const [modalSincronizar, setModalSincronizar] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [resultadoSincronizar, setResultadoSincronizar] = useState<{ actualizados: { catalogo: string; producto: string }[]; sinCoincidencia: { catalogo: string; motivo: string }[]; total: number } | null>(null);
   const [errorSincronizar, setErrorSincronizar] = useState('');
+
+  const [modalPrecios, setModalPrecios] = useState(false);
+  const [sincronizandoPrecios, setSincronizandoPrecios] = useState(false);
+  const [resultadoPrecios, setResultadoPrecios] = useState<{ actualizados: { catalogo: string; producto: string; precio: number }[]; sinCoincidencia: { catalogo: string; motivo: string }[]; total: number } | null>(null);
+  const [errorPrecios, setErrorPrecios] = useState('');
 
   useEffect(() => {
     cargarDatos();
@@ -191,7 +196,7 @@ export default function CatalogoPage() {
       });
       setResultadoImagenes(data);
       setArchivosImagenes([]);
-      if (data.asignados.length > 0) cargarDatos();
+      if (data.asignados.length > 0 || data.creados.length > 0) cargarDatos();
     } catch (e: any) {
       setErrorImagenes(e?.response?.data?.message || 'No se pudieron subir las imágenes');
     } finally {
@@ -211,6 +216,22 @@ export default function CatalogoPage() {
       setErrorSincronizar(e?.response?.data?.message || 'No se pudo sincronizar las imágenes.');
     } finally {
       setSincronizando(false);
+    }
+  };
+
+  const sincronizarPreciosDesdeProductos = async () => {
+    setModalPrecios(true);
+    setSincronizandoPrecios(true);
+    setErrorPrecios('');
+    setResultadoPrecios(null);
+    try {
+      const { data } = await api.post('/catalogo/sincronizar-precios-productos');
+      setResultadoPrecios(data);
+      if (data.actualizados?.length > 0) cargarDatos();
+    } catch (e: any) {
+      setErrorPrecios(e?.response?.data?.message || 'No se pudieron actualizar los precios.');
+    } finally {
+      setSincronizandoPrecios(false);
     }
   };
 
@@ -279,6 +300,13 @@ export default function CatalogoPage() {
               >
                 <Upload size={16} />
                 Copiar imágenes a Productos
+              </button>
+              <button
+                onClick={sincronizarPreciosDesdeProductos}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+              >
+                <DollarSign size={16} />
+                Actualizar precios
               </button>
               <button
                 onClick={() => abrirModal()}
@@ -556,7 +584,7 @@ export default function CatalogoPage() {
                 </button>
               </div>
               <p className="text-gray-500 text-sm mb-4">
-                Selecciona varias fotos a la vez. El nombre de cada archivo se compara con el nombre de los productos del catálogo para asignarla automáticamente — ej. &quot;banderillas-azucaradas-40-uni.png&quot; se asigna sola a &quot;BANDERILLAS AZUCARADAS 40 UNI&quot;.
+                Selecciona varias fotos a la vez. El nombre de cada archivo se compara con el nombre de los productos del catálogo para asignarla automáticamente — ej. &quot;banderillas-azucaradas-40-uni.png&quot; se asigna sola a &quot;BANDERILLAS AZUCARADAS 40 UNI&quot;. Si una foto no coincide con ningún producto existente (ej. &quot;sal himalaya 500g.jpg&quot;), se crea como producto nuevo del catálogo con ese nombre y esa presentación, sin precio — lo completas después con &quot;Editar&quot;.
               </p>
 
               <div className="mb-4">
@@ -587,6 +615,16 @@ export default function CatalogoPage() {
                       <ul className="space-y-0.5">
                         {resultadoImagenes.asignados.map((a, i) => (
                           <li key={i}>{a.archivo} → {a.producto}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {resultadoImagenes.creados.length > 0 && (
+                    <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                      <p className="font-medium mb-1">🆕 {resultadoImagenes.creados.length} producto(s) nuevo(s) creado(s) (sin precio, complétalo con &quot;Editar&quot;):</p>
+                      <ul className="space-y-0.5">
+                        {resultadoImagenes.creados.map((c, i) => (
+                          <li key={i}>{c.archivo} → {c.producto}</li>
                         ))}
                       </ul>
                     </div>
@@ -694,6 +732,87 @@ export default function CatalogoPage() {
                     className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg py-3 transition-colors"
                   >
                     <Upload size={16} />
+                    Volver a intentar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal actualizar precios del catálogo desde Productos */}
+        {modalPrecios && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                  <DollarSign size={20} className="text-orange-500" />
+                  Actualizar precios
+                </h3>
+                <button onClick={() => setModalPrecios(false)} className="text-gray-500 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-gray-500 text-sm mb-4">
+                Busca cada producto del catálogo y le pone el precio real que tiene en tu inventario, aunque ya tuviera uno puesto desde el Excel. Si no se encuentra un producto con nombre parecido, se deja igual.
+              </p>
+
+              {sincronizandoPrecios && <div className="py-8 text-center text-gray-500">Buscando coincidencias...</div>}
+
+              {errorPrecios && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-3 mb-4 text-sm">
+                  {errorPrecios}
+                </div>
+              )}
+
+              {resultadoPrecios && !sincronizandoPrecios && (
+                <div className="mb-4 space-y-2">
+                  {resultadoPrecios.total === 0 ? (
+                    <div className="bg-gray-800 text-gray-400 rounded-lg p-3 text-sm">
+                      El catálogo todavía no tiene productos.
+                    </div>
+                  ) : (
+                    <>
+                      {resultadoPrecios.actualizados.length > 0 && (
+                        <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                          <p className="font-medium mb-1">✅ {resultadoPrecios.actualizados.length} precio(s) actualizado(s):</p>
+                          <ul className="space-y-0.5">
+                            {resultadoPrecios.actualizados.map((a, i) => (
+                              <li key={i}>{a.catalogo} → ${a.precio.toLocaleString('es-CO')}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {resultadoPrecios.sinCoincidencia.length > 0 && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                          <p className="font-medium mb-1">{resultadoPrecios.sinCoincidencia.length} sin actualizar:</p>
+                          <ul className="space-y-0.5">
+                            {resultadoPrecios.sinCoincidencia.map((s, i) => (
+                              <li key={i}>{s.catalogo}: {s.motivo}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {resultadoPrecios.actualizados.length === 0 && resultadoPrecios.sinCoincidencia.length === 0 && (
+                        <div className="bg-gray-800 text-gray-400 rounded-lg p-3 text-sm">
+                          No hubo nada para actualizar.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button onClick={() => setModalPrecios(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors">
+                  Cerrar
+                </button>
+                {resultadoPrecios && !sincronizandoPrecios && (
+                  <button
+                    onClick={sincronizarPreciosDesdeProductos}
+                    className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg py-3 transition-colors"
+                  >
+                    <DollarSign size={16} />
                     Volver a intentar
                   </button>
                 )}
