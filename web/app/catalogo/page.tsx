@@ -32,7 +32,7 @@ export default function CatalogoPage() {
   const [modalImportar, setModalImportar] = useState(false);
   const [archivoImportar, setArchivoImportar] = useState<File | null>(null);
   const [importando, setImportando] = useState(false);
-  const [resultadoImportar, setResultadoImportar] = useState<{ creados: number; totalFilas: number; errores: { fila: number; motivo: string }[] } | null>(null);
+  const [resultadoImportar, setResultadoImportar] = useState<{ creados: number; actualizados: number; totalFilas: number; errores: { fila: number; motivo: string }[] } | null>(null);
   const [errorImportar, setErrorImportar] = useState('');
   const [descargandoPdf, setDescargandoPdf] = useState(false);
   const [slugTienda, setSlugTienda] = useState('');
@@ -149,7 +149,7 @@ export default function CatalogoPage() {
       });
       setResultadoImportar(data);
       setArchivoImportar(null);
-      if (data.creados > 0) cargarDatos();
+      if (data.creados > 0 || data.actualizados > 0) cargarDatos();
     } catch (e: any) {
       setErrorImportar(e?.response?.data?.message || 'No se pudo importar el archivo');
     } finally {
@@ -507,7 +507,7 @@ export default function CatalogoPage() {
                 </button>
               </div>
               <p className="text-gray-500 text-sm mb-4">
-                Sube un archivo .xlsx con tus productos. Cada fila debe tener al menos el nombre.
+                Sube un archivo .xlsx con tus productos. Cada fila debe tener al menos el nombre. Si un producto (nombre + presentación) ya existe en el catálogo, se actualiza en vez de duplicarse.
               </p>
 
               <a
@@ -538,7 +538,7 @@ export default function CatalogoPage() {
               {resultadoImportar && (
                 <div className="mb-4 space-y-2">
                   <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg p-3 text-sm">
-                    ✅ {resultadoImportar.creados} de {resultadoImportar.totalFilas} producto(s) importado(s) correctamente.
+                    ✅ {resultadoImportar.creados} producto(s) nuevo(s) creado(s), {resultadoImportar.actualizados} ya existente(s) actualizado(s) (sin duplicar), de {resultadoImportar.totalFilas} fila(s).
                   </div>
                   {resultadoImportar.errores.length > 0 && (
                     <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">

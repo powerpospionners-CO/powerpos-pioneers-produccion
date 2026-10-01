@@ -195,8 +195,22 @@ export class CatalogoService {
     }
 
     let creados = 0;
+    let actualizados = 0;
     const errores: { fila: number; motivo: string }[] = [];
-    const existentes = await this.prisma.catalogoProducto.count({ where: { empresaId } });
+
+    // Para que volver a subir el mismo Excel no duplique productos: se
+    // empareja por nombre + presentación (sin importar mayúsculas, acentos
+    // o espacios) contra lo que ya hay en el catálogo. Si ya existe, se
+    // actualiza en vez de crear uno nuevo; si no, se crea.
+    const existentes = await this.prisma.catalogoProducto.findMany({
+      where: { empresaId },
+      select: { id: true, nombre: true, presentacion: true },
+    });
+    const claveDe = (nombre: string, presentacion: string | null) =>
+      `${normalizarTexto(nombre)}|${normalizarTexto(presentacion || '')}`;
+    const indice = new Map<string, number>();
+    for (const item of existentes) indice.set(claveDe(item.nombre, item.presentacion), item.id);
+    const totalExistentes = existentes.length;
 
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i];
@@ -216,16 +230,30 @@ export class CatalogoService {
         const presentacion = mapaCampos.presentacion ? String(fila[mapaCampos.presentacion] ?? '').trim() || null : null;
         const descripcion = mapaCampos.descripcion ? String(fila[mapaCampos.descripcion] ?? '').trim() || null : null;
 
-        await this.prisma.catalogoProducto.create({
-          data: { empresaId, nombre, precio, categoria, presentacion, descripcion, orden: existentes + creados },
+        const clave = claveDe(nombre, presentacion);
+        const idExistente = indice.get(clave);
+
+        if (idExistente) {
+          const data: Record<string, unknown> = {};
+          if (mapaCampos.precio) data.precio = precio;
+          if (mapaCampos.categoria) data.categoria = categoria;
+          if (mapaCampos.descripcion) data.descripcion = descripcion;
+          await this.prisma.catalogoProducto.update({ where: { id: idExistente }, data });
+          actualizados++;
+          continue;
+        }
+
+        const nuevo = await this.prisma.catalogoProducto.create({
+          data: { empresaId, nombre, precio, categoria, presentacion, descripcion, orden: totalExistentes + creados },
         });
         creados++;
+        indice.set(clave, nuevo.id);
       } catch (e) {
         errores.push({ fila: numeroFila, motivo: e instanceof Error ? e.message : 'Error al crear el producto' });
       }
     }
 
-    return { creados, totalFilas: filas.length, errores };
+    return { creados, actualizados, totalFilas: filas.length, errores };
   }
 
   // Recibe varias imágenes sueltas (ej. exportadas con el nombre del
