@@ -45,6 +45,11 @@ export default function CatalogoPage() {
   const [resultadoImagenes, setResultadoImagenes] = useState<{ asignados: { archivo: string; producto: string }[]; sinCoincidencia: { archivo: string; motivo: string }[]; total: number } | null>(null);
   const [errorImagenes, setErrorImagenes] = useState('');
 
+  const [modalSincronizar, setModalSincronizar] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [resultadoSincronizar, setResultadoSincronizar] = useState<{ actualizados: { catalogo: string; producto: string }[]; sinCoincidencia: { catalogo: string; motivo: string }[]; total: number } | null>(null);
+  const [errorSincronizar, setErrorSincronizar] = useState('');
+
   useEffect(() => {
     cargarDatos();
     api.get('/empresa').then(({ data }) => setSlugTienda(data.tiendaSlug)).catch(() => {});
@@ -194,6 +199,21 @@ export default function CatalogoPage() {
     }
   };
 
+  const sincronizarImagenesAProductos = async () => {
+    setModalSincronizar(true);
+    setSincronizando(true);
+    setErrorSincronizar('');
+    setResultadoSincronizar(null);
+    try {
+      const { data } = await api.post('/catalogo/sincronizar-imagenes-productos');
+      setResultadoSincronizar(data);
+    } catch (e: any) {
+      setErrorSincronizar(e?.response?.data?.message || 'No se pudo sincronizar las imágenes.');
+    } finally {
+      setSincronizando(false);
+    }
+  };
+
   const categorias = ['Todos', ...Array.from(new Set(items.map((i) => i.categoria).filter(Boolean) as string[]))];
   const visibles = items.filter(
     (i) =>
@@ -252,6 +272,13 @@ export default function CatalogoPage() {
               >
                 <Images size={16} />
                 Subir imágenes
+              </button>
+              <button
+                onClick={sincronizarImagenesAProductos}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+              >
+                <Upload size={16} />
+                Copiar imágenes a Productos
               </button>
               <button
                 onClick={() => abrirModal()}
@@ -589,6 +616,87 @@ export default function CatalogoPage() {
                   <Upload size={16} />
                   {subiendoImagenes ? 'Subiendo...' : 'Subir'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal copiar imágenes del catálogo a Productos */}
+        {modalSincronizar && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                  <Upload size={20} className="text-orange-500" />
+                  Copiar imágenes a Productos
+                </h3>
+                <button onClick={() => setModalSincronizar(false)} className="text-gray-500 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-gray-500 text-sm mb-4">
+                Busca cada producto del catálogo que ya tiene foto y se la copia al producto real del mismo nombre en tu inventario — así también se ve en tu tienda en línea. Solo completa productos que todavía no tienen imagen propia.
+              </p>
+
+              {sincronizando && <div className="py-8 text-center text-gray-500">Buscando coincidencias...</div>}
+
+              {errorSincronizar && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-3 mb-4 text-sm">
+                  {errorSincronizar}
+                </div>
+              )}
+
+              {resultadoSincronizar && !sincronizando && (
+                <div className="mb-4 space-y-2">
+                  {resultadoSincronizar.total === 0 ? (
+                    <div className="bg-gray-800 text-gray-400 rounded-lg p-3 text-sm">
+                      Ningún producto del catálogo tiene imagen todavía. Sube imágenes al catálogo primero.
+                    </div>
+                  ) : (
+                    <>
+                      {resultadoSincronizar.actualizados.length > 0 && (
+                        <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                          <p className="font-medium mb-1">✅ {resultadoSincronizar.actualizados.length} producto(s) actualizado(s):</p>
+                          <ul className="space-y-0.5">
+                            {resultadoSincronizar.actualizados.map((a, i) => (
+                              <li key={i}>{a.catalogo} → {a.producto}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {resultadoSincronizar.sinCoincidencia.length > 0 && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-lg p-3 text-sm max-h-40 overflow-y-auto">
+                          <p className="font-medium mb-1">{resultadoSincronizar.sinCoincidencia.length} sin copiar:</p>
+                          <ul className="space-y-0.5">
+                            {resultadoSincronizar.sinCoincidencia.map((s, i) => (
+                              <li key={i}>{s.catalogo}: {s.motivo}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {resultadoSincronizar.actualizados.length === 0 && resultadoSincronizar.sinCoincidencia.length === 0 && (
+                        <div className="bg-gray-800 text-gray-400 rounded-lg p-3 text-sm">
+                          Todos los productos que coinciden ya tienen imagen propia.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button onClick={() => setModalSincronizar(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors">
+                  Cerrar
+                </button>
+                {resultadoSincronizar && !sincronizando && (
+                  <button
+                    onClick={sincronizarImagenesAProductos}
+                    className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg py-3 transition-colors"
+                  >
+                    <Upload size={16} />
+                    Volver a intentar
+                  </button>
+                )}
               </div>
             </div>
           </div>

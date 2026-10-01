@@ -70,6 +70,12 @@ export class CatalogoController {
     return this.catalogoService.importarImagenes(files, req.user.empresaId);
   }
 
+  @Post('sincronizar-imagenes-productos')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  sincronizarImagenesAProductos(@Request() req: any) {
+    return this.catalogoService.sincronizarImagenesAProductos(req.user.empresaId);
+  }
+
   @Get('pdf')
   async pdf(@Request() req: any, @Res() res: Response) {
     const buffer = await this.catalogoService.generarPDF(req.user.empresaId);

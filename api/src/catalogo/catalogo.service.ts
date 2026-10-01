@@ -281,6 +281,70 @@ export class CatalogoService {
     return { asignados, sinCoincidencia, total: archivos.length };
   }
 
+  // Copia las imágenes que ya existen en el catálogo (el folleto) hacia los
+  // productos reales que coincidan por nombre — la tienda pública usa la
+  // imagen del producto, no la del catálogo, que son dos tablas separadas.
+  // Solo completa productos que todavía no tienen imagen propia, para no
+  // reemplazar una foto que el admin ya haya puesto a mano.
+  async sincronizarImagenesAProductos(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    const itemsCatalogo = await this.prisma.catalogoProducto.findMany({
+      where: { empresaId, imagen: { not: null } },
+      select: { nombre: true, presentacion: true, imagen: true },
+    });
+    if (!itemsCatalogo.length) return { actualizados: [], sinCoincidencia: [], total: 0 };
+
+    const productos = await this.prisma.producto.findMany({
+      where: { empresaId, activo: true, imagen: null },
+      select: { id: true, nombre: true },
+    });
+
+    const actualizados: { catalogo: string; producto: string }[] = [];
+    const sinCoincidencia: { catalogo: string; motivo: string }[] = [];
+
+    for (const item of itemsCatalogo) {
+      const textoCatalogo = `${item.nombre} ${item.presentacion || ''}`;
+      const tokensCatalogo = tokensDeNombre(textoCatalogo);
+      const medidaCatalogo = extraerMedida(textoCatalogo);
+      let mejor: { producto: (typeof productos)[number]; score: number } | null = null;
+      let empatados = 0;
+      for (const producto of productos) {
+        let score = puntajeCoincidencia(tokensCatalogo, tokensDeNombre(producto.nombre));
+        if (score <= 0) continue;
+        const medidaProducto = extraerMedida(producto.nombre);
+        if (medidaCatalogo && medidaProducto) {
+          const coincideMedida = medidaCatalogo.numero === medidaProducto.numero && medidaCatalogo.unidad === medidaProducto.unidad;
+          if (!coincideMedida) continue;
+          score += 1;
+        }
+        if (!mejor || score > mejor.score) {
+          mejor = { producto, score };
+          empatados = 1;
+        } else if (score === mejor.score) {
+          empatados++;
+        }
+      }
+
+      if (!mejor || mejor.score < 0.5) {
+        sinCoincidencia.push({ catalogo: item.nombre, motivo: 'No se encontró un producto sin imagen con nombre parecido' });
+        continue;
+      }
+      if (empatados > 1) {
+        sinCoincidencia.push({ catalogo: item.nombre, motivo: 'El nombre coincide con más de un producto; asígnala manualmente' });
+        continue;
+      }
+
+      await this.prisma.producto.update({ where: { id: mejor.producto.id }, data: { imagen: item.imagen } });
+      actualizados.push({ catalogo: item.nombre, producto: mejor.producto.nombre });
+      // Saca ese producto de la lista disponible para que otro item del
+      // catálogo no le asigne una imagen distinta encima en la misma pasada.
+      const indice = productos.findIndex((p) => p.id === mejor!.producto.id);
+      if (indice >= 0) productos.splice(indice, 1);
+    }
+
+    return { actualizados, sinCoincidencia, total: itemsCatalogo.length };
+  }
+
   private async empresaPorSlug(slug: string) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { tiendaSlug: slug },
