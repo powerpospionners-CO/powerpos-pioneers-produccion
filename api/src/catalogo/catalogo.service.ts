@@ -470,8 +470,16 @@ export class CatalogoService {
       logo: empresa.logo,
       telefono: empresa.telefono,
       color,
-      productos: items,
+      productos: this.ocultarFotosSiAplica(empresa.id, items),
     };
+  }
+
+  // Enchila Market pidió que las fotos del catálogo no se vean en la página
+  // pública (folleto web ni PDF descargable) aunque sigan guardadas y
+  // visibles en el panel interno de /catalogo.
+  private ocultarFotosSiAplica<T extends { imagen: string | null }>(empresaId: number, items: T[]): T[] {
+    if (empresaId !== 2) return items;
+    return items.map((item) => ({ ...item, imagen: null }));
   }
 
   async generarPDF(empresaId: number) {
@@ -493,7 +501,7 @@ export class CatalogoService {
       orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
     });
     const color = (empresa.tiendaConfig as any)?.color || '#0f766e';
-    return this.construirPDF(empresa.nombre, color, items);
+    return this.construirPDF(empresa.nombre, color, this.ocultarFotosSiAplica(empresa.id, items));
   }
 
   private async descargarImagen(url: string): Promise<Buffer | null> {
