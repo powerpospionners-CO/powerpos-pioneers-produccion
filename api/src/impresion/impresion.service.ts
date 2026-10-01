@@ -7,6 +7,11 @@ import { ImpresionEventosService } from './impresion-eventos.service';
 const INICIO = Buffer.from([0x1b, 0x40]);
 const CORTE = Buffer.from([0x1d, 0x56, 0x41, 0x03]);
 const CAJON = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+// ESC E 1/0: negrita on/off. Es el comando ESC/POS más universal que
+// existe — lo soporta cualquier impresora térmica, a diferencia de ancho
+// doble (que rompería el cálculo de centrado basado en caracteres).
+const NEGRITA_ON = Buffer.from([0x1b, 0x45, 0x01]);
+const NEGRITA_OFF = Buffer.from([0x1b, 0x45, 0x00]);
 const TIMEOUT_MS = 3000;
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -226,6 +231,13 @@ export class ImpresionService {
     return texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
 
+  // Envuelve un texto en negrita — se usa para lo que de verdad debe
+  // resaltar en el recibo (nombre del negocio, el total), en vez de que
+  // todo el texto se vea con el mismo peso visual.
+  private negrita(texto: string): Array<string | Buffer> {
+    return [NEGRITA_ON, texto, NEGRITA_OFF];
+  }
+
   private aBufferAscii(lineas: Array<string | Buffer>): Buffer {
     return Buffer.concat(
       lineas.map((segmento) =>
@@ -413,7 +425,7 @@ export class ImpresionService {
     // realmente tiene cargados — una tirilla con "NIT: N/A" en cada venta
     // se ve descuidada, mejor omitir la línea directamente.
     lineas.push(
-      `${this.centrarTexto(nombre, 32)}\n`,
+      ...this.negrita(`${this.centrarTexto(nombre, 32)}\n`),
       `${this.centrarTexto(esRestaurante ? 'PEDIDO' : 'VENTA', 32)}\n`,
       `${this.centrarTexto(pedido.numero, 32)}\n`,
     );
@@ -461,7 +473,7 @@ export class ImpresionService {
       lineas.push(`${this.lineaMonto('Subtotal', subtotal)}\n`);
       lineas.push(`${this.lineaMonto('Descuento', -descuento)}\n`);
     }
-    lineas.push(`${this.lineaMonto('TOTAL', total)}\n`);
+    lineas.push(...this.negrita(`${this.lineaMonto('TOTAL', total)}\n`));
     lineas.push('--------------------------------\n');
     if (Array.isArray(pedido.pagos) && pedido.pagos.length > 1) {
       for (const pago of pedido.pagos) {
@@ -471,7 +483,8 @@ export class ImpresionService {
       lineas.push(`Pago: ${pedido.metodoPago}\n`);
     }
     lineas.push('================================\n');
-    lineas.push(`${this.centrarTexto('Gracias por su compra', 32)}\n\n`);
+    lineas.push(...this.negrita(`${this.centrarTexto('GRACIAS POR SU COMPRA', 32)}\n`));
+    lineas.push(`${this.centrarTexto('Vuelva pronto', 32)}\n\n`);
 
     return this.aBufferAscii(lineas);
   }
