@@ -538,6 +538,11 @@ model Pedido {
   puntosCanjeados Int @default(0)
   valorPuntoAplicado Decimal @db.Decimal(10, 2) @default(0)
   costoDomicilio Decimal @db.Decimal(10, 2) @default(0)
+  // Cuánto devolvió el cajero en pagos de contado con billete más grande
+  // (ej. pagaron con $50.000 una venta de $45.000 → cambio = $5.000). Antes
+  // solo se calculaba en pantalla para el cajero y se perdía; se guarda
+  // para poder imprimirlo en la tirilla.
+  cambio Decimal @db.Decimal(10, 2) @default(0)
   // Solo la usan las ventas que el POS guardó localmente por falta de
   // conexión: si al reconectar reintenta una venta que en realidad sí
   // había llegado al servidor (se perdió la respuesta, no la petición),

@@ -291,6 +291,7 @@ export default function RetailPOS() {
       pagos: pago.pagos,
       items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, cantidad })),
       descuento,
+      cambio: pago.cambio,
       claveIdempotencia: generarClaveVenta(),
     };
     try {

@@ -15,6 +15,19 @@ const NEGRITA_OFF = Buffer.from([0x1b, 0x45, 0x00]);
 const TIMEOUT_MS = 3000;
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
+// Mensaje de fe al pie de la tirilla, a pedido puntual de Enchila Market
+// Pereira (empresaId 2) — no se activa para ninguna otra empresa.
+const MENSAJES_FE: { texto: string; cita: string }[] = [
+  { texto: 'Todo lo puedo en Cristo', cita: 'Filipenses 4:13' },
+  { texto: 'El Señor es mi pastor', cita: 'Salmo 23:1' },
+  { texto: 'Con Dios todo es posible', cita: 'Mateo 19:26' },
+  { texto: 'Confía en el Señor', cita: 'Proverbios 3:5' },
+  { texto: 'El gozo del Señor es tu fuerza', cita: 'Nehemías 8:10' },
+  { texto: 'Da gracias, el Señor es bueno', cita: 'Salmo 107:1' },
+  { texto: 'Dios es nuestro refugio', cita: 'Salmo 46:1' },
+  { texto: 'Encomienda al Señor tu camino', cita: 'Salmo 37:5' },
+];
+
 @Injectable()
 export class ImpresionService {
   private readonly logger = new Logger(ImpresionService.name);
@@ -482,9 +495,30 @@ export class ImpresionService {
     } else if (pedido.metodoPago) {
       lineas.push(`Pago: ${pedido.metodoPago}\n`);
     }
+
+    // Cuánto pagó en efectivo y cuánto se le devolvió — solo aplica si hubo
+    // vuelto (pago con un billete más grande que el total en efectivo).
+    const cambio = Number(pedido.cambio ?? 0);
+    if (cambio > 0) {
+      const efectivoAtribuido = Number(
+        (Array.isArray(pedido.pagos) ? pedido.pagos.find((p: any) => p.metodoPago === 'EFECTIVO')?.monto : undefined) ?? total,
+      );
+      lineas.push('--------------------------------\n');
+      lineas.push(`${this.lineaMonto('Recibido', efectivoAtribuido + cambio)}\n`);
+      lineas.push(`${this.lineaMonto('Cambio', cambio)}\n`);
+    }
+
     lineas.push('================================\n');
     lineas.push(...this.negrita(`${this.centrarTexto('GRACIAS POR SU COMPRA', 32)}\n`));
-    lineas.push(`${this.centrarTexto('Vuelva pronto', 32)}\n\n`);
+    lineas.push(`${this.centrarTexto('Vuelva pronto', 32)}\n`);
+
+    if (empresaId === 2) {
+      const mensaje = MENSAJES_FE[Math.floor(Math.random() * MENSAJES_FE.length)];
+      lineas.push('\n');
+      lineas.push(`${this.centrarTexto(mensaje.texto, 32)}\n`);
+      lineas.push(`${this.centrarTexto(mensaje.cita, 32)}\n`);
+    }
+    lineas.push('\n');
 
     return this.aBufferAscii(lineas);
   }

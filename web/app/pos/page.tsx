@@ -814,6 +814,7 @@ function RestaurantePOS() {
         pagos: pago.pagos,
         clienteId: clienteSeleccionado?.id || null,
         puntosCanjeados: canjeAplicado,
+        cambio: pago.cambio,
         items: carrito.map((item) => ({
           productoId: item.producto.id,
           cantidad: item.cantidad,

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "pedidos" ADD COLUMN "cambio" DECIMAL(10,2) NOT NULL DEFAULT 0;

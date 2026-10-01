@@ -263,6 +263,7 @@ export class PedidosService {
     const total = subtotal - descuento + costoDomicilio;
     monto(Math.round(total * 100) / 100, 'Total', 0, 99999999.99);
     if (puntosGanados > 2147483647) throw new BadRequestException('Revise la regla de acumulación: genera demasiados puntos');
+    const cambio = monto(datos.cambio ?? 0, 'Cambio', 0, 99999999.99);
     const { metodoPago, pagos } = this.normalizarPagos(datos, Math.round(total * 100) / 100);
 
     for (const item of itemsValidados) {
@@ -296,7 +297,7 @@ export class PedidosService {
     const pedido = await db.pedido.create({
       data: {
         numero,
-        puntosGanados, puntosCanjeados, valorPuntoAplicado: reglas.valorPunto, costoDomicilio,
+        puntosGanados, puntosCanjeados, valorPuntoAplicado: reglas.valorPunto, costoDomicilio, cambio,
         sucursalId,
         usuarioId,
         clienteId: clienteId || null,
