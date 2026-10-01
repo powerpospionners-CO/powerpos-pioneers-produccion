@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import { useAuthStore } from '@/store/authStore';
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com';
 
@@ -21,6 +22,8 @@ interface ItemCatalogo {
 }
 
 export default function CatalogoPage() {
+  const usuario = useAuthStore((state) => state.usuario);
+  const esEnchilaMarket = usuario?.empresaId === 2;
   const [items, setItems] = useState<ItemCatalogo[]>([]);
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState<ItemCatalogo | null>(null);
@@ -176,6 +179,26 @@ export default function CatalogoPage() {
     }
   };
 
+  const [descargandoExcel, setDescargandoExcel] = useState(false);
+  const descargarExcel = async () => {
+    setDescargandoExcel(true);
+    try {
+      const respuesta = await api.get('/catalogo/exportar-excel', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = 'catalogo.xlsx';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDescargandoExcel(false);
+    }
+  };
+
   const abrirModalImagenes = () => {
     setArchivosImagenes([]);
     setResultadoImagenes(null);
@@ -280,6 +303,16 @@ export default function CatalogoPage() {
                 <FileText size={16} />
                 {descargandoPdf ? 'Generando...' : 'Descargar PDF'}
               </button>
+              {esEnchilaMarket && (
+                <button
+                  onClick={descargarExcel}
+                  disabled={descargandoExcel}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+                >
+                  <FileSpreadsheet size={16} />
+                  {descargandoExcel ? 'Generando...' : 'Descargar lista (Excel)'}
+                </button>
+              )}
               <button
                 onClick={abrirModalImportar}
                 className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"

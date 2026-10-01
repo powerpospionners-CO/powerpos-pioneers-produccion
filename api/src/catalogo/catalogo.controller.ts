@@ -90,6 +90,14 @@ export class CatalogoController {
     res.send(buffer);
   }
 
+  @Get('exportar-excel')
+  async exportarExcel(@Request() req: any, @Res() res: Response) {
+    const buffer = await this.catalogoService.exportarExcel(req.user.empresaId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="catalogo.xlsx"');
+    res.send(buffer);
+  }
+
   @Post(':id/imagen')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   @UseInterceptors(FileInterceptor('imagen', {

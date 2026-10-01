@@ -482,6 +482,27 @@ export class CatalogoService {
     return items.map((item) => ({ ...item, imagen: null }));
   }
 
+  // Lista plana del catálogo (nombre, peso, precio) en Excel, para compartir
+  // los datos en bruto con distribuidores/clientes en vez del folleto visual.
+  async exportarExcel(empresaId: number): Promise<Buffer> {
+    await this.verificarHabilitado(empresaId);
+    const items = await this.prisma.catalogoProducto.findMany({
+      where: { empresaId, activo: true },
+      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+      select: { nombre: true, presentacion: true, precio: true },
+    });
+    const filas = items.map((item) => ({
+      Nombre: item.nombre,
+      Peso: item.presentacion || '',
+      Precio: item.precio !== null ? Number(item.precio) : '',
+    }));
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    hoja['!cols'] = [{ wch: 45 }, { wch: 15 }, { wch: 15 }];
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Catálogo');
+    return XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  }
+
   async generarPDF(empresaId: number) {
     await this.verificarHabilitado(empresaId);
     const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { nombre: true, logo: true, telefono: true, tiendaConfig: true } });
