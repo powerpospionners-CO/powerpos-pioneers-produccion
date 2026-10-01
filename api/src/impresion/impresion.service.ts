@@ -16,16 +16,20 @@ const TIMEOUT_MS = 3000;
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
 // Mensaje de fe al pie de la tirilla, a pedido puntual de Enchila Market
-// Pereira (empresaId 2) — no se activa para ninguna otra empresa.
-const MENSAJES_FE: { texto: string; cita: string }[] = [
-  { texto: 'Todo lo puedo en Cristo', cita: 'Filipenses 4:13' },
-  { texto: 'El Señor es mi pastor', cita: 'Salmo 23:1' },
-  { texto: 'Con Dios todo es posible', cita: 'Mateo 19:26' },
-  { texto: 'Confía en el Señor', cita: 'Proverbios 3:5' },
-  { texto: 'El gozo del Señor es tu fuerza', cita: 'Nehemías 8:10' },
-  { texto: 'Da gracias, el Señor es bueno', cita: 'Salmo 107:1' },
-  { texto: 'Dios es nuestro refugio', cita: 'Salmo 46:1' },
-  { texto: 'Encomienda al Señor tu camino', cita: 'Salmo 37:5' },
+// Pereira (empresaId 2) — no se activa para ninguna otra empresa. Son
+// bendiciones cortas y cálidas, no citas bíblicas formales — la idea es
+// alegrarle el día a quien las lee, no que suene a lectura de iglesia.
+const MENSAJES_FE: string[] = [
+  'Que Dios bendiga tu día',
+  'Que tengas un día lleno de luz',
+  'Dios te acompañe hoy y siempre',
+  'Eres una bendición hoy',
+  'Que tu día esté lleno de alegría',
+  'Dios te ama, que tengas buen día',
+  'Dios tiene un buen plan para ti',
+  'La bondad de Dios te acompaña',
+  'Hoy es un buen día para brillar',
+  'Que la paz de Dios te acompañe',
 ];
 
 @Injectable()
@@ -515,8 +519,7 @@ export class ImpresionService {
     if (empresaId === 2) {
       const mensaje = MENSAJES_FE[Math.floor(Math.random() * MENSAJES_FE.length)];
       lineas.push('\n');
-      lineas.push(`${this.centrarTexto(mensaje.texto, 32)}\n`);
-      lineas.push(`${this.centrarTexto(mensaje.cita, 32)}\n`);
+      lineas.push(`${this.centrarTexto(mensaje, 32)}\n`);
     }
     lineas.push('\n');
 
