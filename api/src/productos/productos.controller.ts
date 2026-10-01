@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterceptors, UploadedFile, Request, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterceptors, UploadedFile, Request, Query, Res, BadRequestException } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, diskStorage } from 'multer';
 import { extname } from 'path';
@@ -83,6 +84,14 @@ export class ProductosController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   reporteMerma(@Request() req: any, @Query('desde') desde?: string, @Query('hasta') hasta?: string) {
     return this.productosService.reporteMerma(req.user.empresaId, desde, hasta);
+  }
+
+  @Get('exportar-excel')
+  async exportarExcel(@Request() req: any, @Res() res: Response) {
+    const buffer = await this.productosService.exportarExcel(req.user.empresaId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="productos.xlsx"');
+    res.send(buffer);
   }
 
   @Get(':id')

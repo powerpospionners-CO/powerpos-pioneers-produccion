@@ -331,6 +331,26 @@ function SeccionLotes({ productoId }: { productoId: number }) {
 export default function ProductosPage() {
   const tipoNegocio = useAuthStore((state) => state.usuario?.tipoNegocio);
   const esRestaurante = !tipoNegocio || tipoNegocio === 'RESTAURANTE';
+  const esEnchilaMarket = useAuthStore((state) => state.usuario?.empresaId) === 2;
+  const [descargandoExcel, setDescargandoExcel] = useState(false);
+  const descargarExcel = async () => {
+    setDescargandoExcel(true);
+    try {
+      const respuesta = await api.get('/productos/exportar-excel', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = 'productos.xlsx';
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDescargandoExcel(false);
+    }
+  };
   const iconosCategoria = esRestaurante ? ICONOS_CATEGORIA_RESTAURANTE : ICONOS_CATEGORIA_COMERCIO;
   const iconoCategoriaDefecto = esRestaurante ? '🍽️' : '📦';
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -718,6 +738,16 @@ export default function ProductosPage() {
               <FileSpreadsheet size={16} />
               Importar Excel
             </button>}
+            {esEnchilaMarket && (
+              <button
+                onClick={descargarExcel}
+                disabled={descargandoExcel}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+              >
+                <Download size={16} />
+                {descargandoExcel ? 'Generando...' : 'Descargar lista (Excel)'}
+              </button>
+            )}
             <button
               onClick={() => abrirModal()}
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg px-4 py-2 transition-colors"

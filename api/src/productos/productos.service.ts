@@ -6,6 +6,30 @@ import { NotificacionesService } from '../notificaciones/notificaciones.service'
 const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || '').toLowerCase().trim());
 
+// Unidades de gramaje/presentación que suelen venir al final del nombre del
+// producto (ej. "ACACIA DE LA INDIA ENTERO 125 G") — se usan para separar el
+// peso del nombre en la lista exportada a Excel.
+const UNIDADES_CANONICAS: Record<string, string> = {
+  g: 'g', gr: 'g', grs: 'g', gramo: 'g', gramos: 'g',
+  kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg',
+  ml: 'ml', mililitro: 'ml', mililitros: 'ml',
+  l: 'l', lt: 'l', lts: 'l', litro: 'l', litros: 'l',
+  uni: 'uni', und: 'uni', unidad: 'uni', unidades: 'uni',
+  oz: 'oz', lb: 'lb', libra: 'lb', libras: 'lb',
+};
+const PATRON_MEDIDA = new RegExp(`\\b(\\d+(?:[.,]\\d+)?)\\s*(${Object.keys(UNIDADES_CANONICAS).join('|')})\\b`, 'i');
+
+function separarNombreYPeso(nombreCompleto: string): { nombre: string; peso: string } {
+  const match = nombreCompleto.match(PATRON_MEDIDA);
+  if (!match || match.index === undefined) return { nombre: nombreCompleto, peso: '' };
+  const unidad = UNIDADES_CANONICAS[match[2].toLowerCase()];
+  const peso = `${match[1].replace(',', '.')} ${unidad}`;
+  const nombre = (nombreCompleto.slice(0, match.index) + nombreCompleto.slice(match.index + match[0].length))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { nombre: nombre || nombreCompleto, peso };
+}
+
 const SINONIMOS_COLUMNAS: Record<string, string[]> = {
   nombre: ['nombre', 'producto', 'nombre del producto', 'articulo'],
   categoria: ['categoria', 'categoria del producto'],
@@ -274,6 +298,26 @@ export class ProductosService {
       },
       orderBy: { nombre: 'asc' },
     });
+  }
+
+  // Lista plana del inventario (nombre, peso, precio) en Excel, separando el
+  // peso del nombre cuando viene incluido (ej. "ACACIA DE LA INDIA ENTERO
+  // 125 G" -> nombre "ACACIA DE LA INDIA ENTERO", peso "125 g").
+  async exportarExcel(empresaId: number): Promise<Buffer> {
+    const productos = await this.prisma.producto.findMany({
+      where: { empresaId, activo: true },
+      select: { nombre: true, precio: true },
+      orderBy: { nombre: 'asc' },
+    });
+    const filas = productos.map((producto) => {
+      const { nombre, peso } = separarNombreYPeso(producto.nombre);
+      return { Nombre: nombre, Peso: peso, Precio: Number(producto.precio) };
+    });
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    hoja['!cols'] = [{ wch: 45 }, { wch: 15 }, { wch: 15 }];
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Productos');
+    return XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 
   async obtener(id: number, empresaId: number) {
