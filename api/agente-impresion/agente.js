@@ -51,20 +51,110 @@ function clienteHttp(url) {
   return url.startsWith('https://') ? https : http;
 }
 
-// Impresora en red (misma IP de siempre, funciona igual que hasta ahora).
-function imprimirRed(config, datosBase64) {
+// Intenta una conexión TCP corta a un puerto, solo para saber si algo
+// responde ahí (no envía ni recibe datos reales).
+function puertoAbierto(ip, puerto, timeoutMs) {
   return new Promise((resolve) => {
-    const datos = Buffer.from(datosBase64, 'base64');
+    const socket = new net.Socket();
+    let resuelto = false;
+    const terminar = (abierto) => {
+      if (resuelto) return;
+      resuelto = true;
+      socket.destroy();
+      resolve(abierto);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => terminar(true));
+    socket.once('timeout', () => terminar(false));
+    socket.once('error', () => terminar(false));
+    socket.connect(puerto, ip);
+  });
+}
+
+// Lee la tabla ARP del sistema (IP -> MAC) para confirmar, cuando hay más
+// de un candidato, cuál de las IPs que respondieron es la impresora.
+function leerTablaArp() {
+  return new Promise((resolve) => {
+    exec('arp -a', (error, stdout) => {
+      const tabla = new Map();
+      if (!error && stdout) {
+        for (const linea of stdout.split('\n')) {
+          const match = linea.match(/(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F:-]{17})/);
+          if (match) tabla.set(match[1], match[2].toLowerCase().replace(/-/g, ':'));
+        }
+      }
+      resolve(tabla);
+    });
+  });
+}
+
+function propiaSubredLocal() {
+  const interfaces = os.networkInterfaces();
+  for (const nombre of Object.keys(interfaces)) {
+    for (const iface of interfaces[nombre]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        const partes = iface.address.split('.');
+        return { prefijo: `${partes[0]}.${partes[1]}.${partes[2]}`, propiaIp: iface.address };
+      }
+    }
+  }
+  return null;
+}
+
+// La IP de la impresora puede cambiar (DHCP del router) si se reinicia la
+// impresora o el router. En vez de depender de que la IP quede fija,
+// cuando falla una conexión se busca la impresora en toda la red local por
+// el puerto 9100 y, si hay varios candidatos, se confirma con la MAC
+// (config.impresoraMac) usando la tabla ARP del sistema.
+async function buscarImpresoraEnRed(config) {
+  const subred = propiaSubredLocal();
+  if (!subred) return null;
+  console.log(`Buscando la impresora en la red ${subred.prefijo}.0/24 ...`);
+
+  const candidatos = [];
+  const tareas = [];
+  for (let i = 1; i <= 254; i++) {
+    const ip = `${subred.prefijo}.${i}`;
+    if (ip === subred.propiaIp) continue;
+    tareas.push(puertoAbierto(ip, config.impresoraPuerto, 250).then((abierto) => { if (abierto) candidatos.push(ip); }));
+  }
+  await Promise.all(tareas);
+
+  if (candidatos.length === 0) return null;
+  if (candidatos.length === 1) return candidatos[0];
+
+  if (config.impresoraMac) {
+    const macBuscada = String(config.impresoraMac).toLowerCase().replace(/-/g, ':');
+    const tablaArp = await leerTablaArp();
+    const confirmado = candidatos.find((ip) => tablaArp.get(ip) === macBuscada);
+    if (confirmado) return confirmado;
+  }
+  console.warn(`Se encontraron ${candidatos.length} dispositivos con el puerto ${config.impresoraPuerto} abierto; se usará el primero (${candidatos[0]}). Agrega "impresoraMac" en config.json para que la búsqueda sea exacta.`);
+  return candidatos[0];
+}
+
+function guardarIpImpresora(nuevaIp) {
+  try {
+    const config = JSON.parse(fs.readFileSync(RUTA_CONFIG, 'utf8'));
+    config.impresoraHost = nuevaIp;
+    fs.writeFileSync(RUTA_CONFIG, JSON.stringify(config, null, 2));
+  } catch (error) {
+    console.error('No se pudo guardar la nueva IP de la impresora en config.json:', error.message);
+  }
+}
+
+function intentarConexion(config, datos) {
+  return new Promise((resolve) => {
     const socket = new net.Socket();
     const timeout = setTimeout(() => {
       socket.destroy();
-      resolve(`Tiempo agotado conectando a ${config.impresoraHost}:${config.impresoraPuerto}`);
+      resolve('timeout');
     }, 4000);
 
-    socket.once('error', (error) => {
+    socket.once('error', () => {
       clearTimeout(timeout);
       socket.destroy();
-      resolve(error.message);
+      resolve('error');
     });
     socket.connect(config.impresoraPuerto, config.impresoraHost, () => {
       socket.end(datos, () => {
@@ -73,6 +163,30 @@ function imprimirRed(config, datosBase64) {
       });
     });
   });
+}
+
+// Impresora en red. Si no conecta en la IP guardada, busca la impresora en
+// la red local y, si la encuentra en otra IP, actualiza config.json y
+// reintenta una sola vez — así el cambio de IP se autocorrige solo.
+async function imprimirRed(config, datosBase64, reintentando = false) {
+  const datos = Buffer.from(datosBase64, 'base64');
+  const resultado = await intentarConexion(config, datos);
+  if (!resultado) return null;
+
+  if (!reintentando) {
+    console.warn(`No se pudo conectar a ${config.impresoraHost}:${config.impresoraPuerto}. Buscando la impresora en la red...`);
+    const ipEncontrada = await buscarImpresoraEnRed(config);
+    if (ipEncontrada && ipEncontrada !== config.impresoraHost) {
+      console.log(`Impresora encontrada en ${ipEncontrada} (antes ${config.impresoraHost}). Guardando en config.json...`);
+      config.impresoraHost = ipEncontrada;
+      guardarIpImpresora(ipEncontrada);
+      return imprimirRed(config, datosBase64, true);
+    }
+  }
+
+  return resultado === 'timeout'
+    ? `Tiempo agotado conectando a ${config.impresoraHost}:${config.impresoraPuerto}`
+    : `No se pudo conectar a ${config.impresoraHost}:${config.impresoraPuerto}`;
 }
 
 // Impresora conectada por cable USB al computador, instalada y compartida en
