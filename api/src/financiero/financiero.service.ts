@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -29,6 +29,38 @@ export class FinancieroService {
       include: {
         usuario: { select: { nombre: true } },
       },
+    });
+  }
+
+  // Solo los egresos que el admin registró a mano (sin pedidoId) se pueden
+  // editar — los ingresos de ventas y el costo de venta se generan solos al
+  // registrar un pedido, y editarlos a mano rompería el cuadre con Caja.
+  async editarMovimiento(id: number, datos: any, empresaId: number) {
+    const movimiento = await this.prisma.movimientoFinanciero.findFirst({ where: { id, empresaId } });
+    if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+    if (movimiento.tipo !== 'EGRESO' || movimiento.pedidoId !== null) {
+      throw new ForbiddenException('Solo se pueden editar los egresos registrados manualmente, no los generados por una venta');
+    }
+
+    const data: Record<string, unknown> = {};
+    if (datos.categoria !== undefined) data.categoria = datos.categoria;
+    if (datos.descripcion !== undefined) {
+      const descripcion = String(datos.descripcion).trim();
+      if (!descripcion) throw new BadRequestException('La descripción es obligatoria');
+      data.descripcion = descripcion;
+    }
+    if (datos.monto !== undefined) {
+      const monto = Number(datos.monto);
+      if (!Number.isFinite(monto) || monto <= 0) throw new BadRequestException('El monto debe ser un número mayor a 0');
+      data.monto = monto;
+    }
+    if (datos.comprobante !== undefined) data.comprobante = datos.comprobante || null;
+    if (datos.fecha !== undefined) data.fecha = new Date(datos.fecha);
+
+    return this.prisma.movimientoFinanciero.update({
+      where: { id },
+      data,
+      include: { usuario: { select: { nombre: true } } },
     });
   }
 

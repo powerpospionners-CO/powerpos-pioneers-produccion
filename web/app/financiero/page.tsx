@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 
@@ -37,7 +37,9 @@ export default function FinancieroPage() {
   const [resumen, setResumen] = useState<any>(null);
   const [movimientos, setMovimientos] = useState<any[]>([]);
   const [modal, setModal] = useState(false);
+  const [editando, setEditando] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errorForm, setErrorForm] = useState('');
   const [descargando, setDescargando] = useState(false);
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [desdePersonalizado, setDesdePersonalizado] = useState('');
@@ -91,19 +93,43 @@ export default function FinancieroPage() {
     }
   };
 
+  const abrirModalNuevo = () => {
+    setEditando(null);
+    setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '' });
+    setErrorForm('');
+    setModal(true);
+  };
+
+  const abrirModalEditar = (mov: any) => {
+    setEditando(mov);
+    setForm({ tipo: mov.tipo, categoria: mov.categoria, descripcion: mov.descripcion, monto: String(mov.monto) });
+    setErrorForm('');
+    setModal(true);
+  };
+
   const registrar = async () => {
     if (!form.descripcion || !form.monto) return;
     setLoading(true);
+    setErrorForm('');
     try {
-      await api.post('/financiero/movimiento', {
-        ...form,
-        monto: Number(form.monto),
-      });
+      if (editando) {
+        await api.patch(`/financiero/movimiento/${editando.id}`, {
+          categoria: form.categoria,
+          descripcion: form.descripcion,
+          monto: Number(form.monto),
+        });
+      } else {
+        await api.post('/financiero/movimiento', {
+          ...form,
+          monto: Number(form.monto),
+        });
+      }
       setModal(false);
+      setEditando(null);
       setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '' });
       cargarDatos();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setErrorForm(e?.response?.data?.message || 'No se pudo guardar el movimiento');
     } finally {
       setLoading(false);
     }
@@ -257,7 +283,7 @@ export default function FinancieroPage() {
             <div className="p-4 border-b border-gray-800 flex items-center justify-between">
               <h2 className="text-white font-semibold">Movimientos financieros</h2>
               <button
-                onClick={() => setModal(true)}
+                onClick={abrirModalNuevo}
                 className="no-imprimir flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
               >
                 <Plus size={16} />
@@ -269,22 +295,36 @@ export default function FinancieroPage() {
               <div className="p-8 text-center text-gray-500">No hay movimientos registrados</div>
             ) : (
               <div className="divide-y divide-gray-800">
-                {movimientos.map((mov) => (
-                  <div key={mov.id} className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${mov.tipo === 'INGRESO' ? 'bg-green-400' : 'bg-red-400'}`} />
-                      <div>
-                        <div className="text-white text-sm font-medium">{mov.descripcion}</div>
-                        <div className="text-gray-500 text-xs mt-0.5">
-                          {mov.categoria} · {mov.usuario?.nombre} · {new Date(mov.fecha).toLocaleString('es-CO')}
+                {movimientos.map((mov) => {
+                  const esEditable = mov.tipo === 'EGRESO' && !mov.pedidoId;
+                  return (
+                    <div key={mov.id} className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${mov.tipo === 'INGRESO' ? 'bg-green-400' : 'bg-red-400'}`} />
+                        <div>
+                          <div className="text-white text-sm font-medium">{mov.descripcion}</div>
+                          <div className="text-gray-500 text-xs mt-0.5">
+                            {mov.categoria} · {mov.usuario?.nombre} · {new Date(mov.fecha).toLocaleString('es-CO')}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-3">
+                        <div className={`font-bold ${mov.tipo === 'INGRESO' ? 'text-green-400' : 'text-red-400'}`}>
+                          {mov.tipo === 'INGRESO' ? '+' : '-'}${Number(mov.monto).toLocaleString()}
+                        </div>
+                        {esEditable && (
+                          <button
+                            onClick={() => abrirModalEditar(mov)}
+                            className="no-imprimir text-gray-500 hover:text-white transition-colors"
+                            title="Editar movimiento"
+                          >
+                            <Edit size={15} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className={`font-bold ${mov.tipo === 'INGRESO' ? 'text-green-400' : 'text-red-400'}`}>
-                      {mov.tipo === 'INGRESO' ? '+' : '-'}${Number(mov.monto).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -294,18 +334,20 @@ export default function FinancieroPage() {
         {modal && (
           <div className="no-imprimir fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
             <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
-              <h3 className="text-white font-bold text-lg mb-4">Registrar movimiento</h3>
+              <h3 className="text-white font-bold text-lg mb-4">{editando ? 'Editar movimiento' : 'Registrar movimiento'}</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Tipo</label>
                   <select
                     value={form.tipo}
+                    disabled={!!editando}
                     onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500 disabled:opacity-50"
                   >
                     <option value="INGRESO">Ingreso</option>
                     <option value="EGRESO">Egreso</option>
                   </select>
+                  {editando && <p className="text-gray-500 text-xs mt-1">Solo se pueden editar egresos.</p>}
                 </div>
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Categoría</label>
@@ -340,9 +382,16 @@ export default function FinancieroPage() {
                   />
                 </div>
               </div>
+
+              {errorForm && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-3 mt-4 text-sm">
+                  {errorForm}
+                </div>
+              )}
+
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setModal(false)}
+                  onClick={() => { setModal(false); setEditando(null); }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors"
                 >
                   Cancelar

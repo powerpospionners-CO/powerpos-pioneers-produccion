@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards, Request, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { FinancieroService } from './financiero.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -19,6 +19,11 @@ export class FinancieroController {
       req.user.empresaId,
       req.user.sucursalId || 1,
     );
+  }
+
+  @Patch('movimiento/:id')
+  editar(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.financieroService.editarMovimiento(+id, body, req.user.empresaId);
   }
 
   @Get('movimientos')
