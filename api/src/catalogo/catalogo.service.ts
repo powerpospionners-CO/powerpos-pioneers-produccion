@@ -173,6 +173,16 @@ export class CatalogoService {
     return this.prisma.catalogoProducto.update({ where: { id }, data: { imagen } });
   }
 
+  async actualizarFotosPublicas(empresaId: number, fotosPublicas: boolean) {
+    await this.verificarHabilitado(empresaId);
+    const empresa = await this.prisma.empresa.update({
+      where: { id: empresaId },
+      data: { catalogoFotosPublicas: !!fotosPublicas },
+      select: { catalogoFotosPublicas: true },
+    });
+    return empresa;
+  }
+
   async importarExcel(buffer: Buffer, empresaId: number) {
     await this.verificarHabilitado(empresaId);
     let libro: XLSX.WorkBook;
@@ -486,10 +496,18 @@ export class CatalogoService {
   private async empresaPorSlug(slug: string) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { tiendaSlug: slug },
-      select: { id: true, nombre: true, logo: true, telefono: true, activo: true, tiendaConfig: true, catalogoHabilitado: true },
+      select: { id: true, nombre: true, logo: true, telefono: true, activo: true, tiendaConfig: true, catalogoHabilitado: true, catalogoFotosPublicas: true },
     });
     if (!empresa || !empresa.activo || !empresa.catalogoHabilitado) throw new NotFoundException('Catálogo no disponible');
     return empresa;
+  }
+
+  // El admin puede ocultar las fotos del catálogo en la vista pública (ej.
+  // mientras las está organizando) sin perderlas — siguen guardadas y
+  // visibles en el panel interno de /catalogo.
+  private ocultarFotosSiAplica<T extends { imagen: string | null }>(mostrarFotos: boolean, items: T[]): T[] {
+    if (mostrarFotos) return items;
+    return items.map((item) => ({ ...item, imagen: null }));
   }
 
   async catalogoPublico(slug: string) {
@@ -504,16 +522,8 @@ export class CatalogoService {
       logo: empresa.logo,
       telefono: empresa.telefono,
       color,
-      productos: this.ocultarFotosSiAplica(empresa.id, items),
+      productos: this.ocultarFotosSiAplica(empresa.catalogoFotosPublicas, items),
     };
-  }
-
-  // Enchila Market pidió que las fotos del catálogo no se vean en la página
-  // pública (folleto web ni PDF descargable) aunque sigan guardadas y
-  // visibles en el panel interno de /catalogo.
-  private ocultarFotosSiAplica<T extends { imagen: string | null }>(empresaId: number, items: T[]): T[] {
-    if (empresaId !== 2) return items;
-    return items.map((item) => ({ ...item, imagen: null }));
   }
 
   async generarPDF(empresaId: number) {
@@ -535,7 +545,7 @@ export class CatalogoService {
       orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
     });
     const color = (empresa.tiendaConfig as any)?.color || '#0f766e';
-    return this.construirPDF(empresa.nombre, color, this.ocultarFotosSiAplica(empresa.id, items));
+    return this.construirPDF(empresa.nombre, color, this.ocultarFotosSiAplica(empresa.catalogoFotosPublicas, items));
   }
 
   private async descargarImagen(url: string): Promise<Buffer | null> {

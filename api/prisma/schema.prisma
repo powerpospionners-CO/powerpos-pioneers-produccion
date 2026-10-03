@@ -47,6 +47,7 @@ model Empresa {
   facturacionElectronicaHabilitada Boolean @default(false)
   consumoEmpleadosHabilitado Boolean @default(false)
   catalogoHabilitado Boolean @default(false)
+  catalogoFotosPublicas Boolean @default(true)
   tiendaSlug String @unique @default(uuid())
   tiendaConfig Json @default("{}")
   fidelizacionConfig Json @default("{}")

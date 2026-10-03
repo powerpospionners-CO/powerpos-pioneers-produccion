@@ -82,6 +82,12 @@ export class CatalogoController {
     return this.catalogoService.sincronizarPreciosDesdeProductos(req.user.empresaId);
   }
 
+  @Patch('fotos-publicas')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  actualizarFotosPublicas(@Body() body: any, @Request() req: any) {
+    return this.catalogoService.actualizarFotosPublicas(req.user.empresaId, !!body.fotosPublicas);
+  }
+
   @Get('pdf')
   async pdf(@Request() req: any, @Res() res: Response) {
     const buffer = await this.catalogoService.generarPDF(req.user.empresaId);

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
-  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images, DollarSign,
+  Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images, DollarSign, Eye, EyeOff,
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -36,6 +36,8 @@ export default function CatalogoPage() {
   const [errorImportar, setErrorImportar] = useState('');
   const [descargandoPdf, setDescargandoPdf] = useState(false);
   const [slugTienda, setSlugTienda] = useState('');
+  const [fotosPublicas, setFotosPublicas] = useState(true);
+  const [cambiandoFotosPublicas, setCambiandoFotosPublicas] = useState(false);
   const [categoria, setCategoria] = useState('Todos');
   const [busqueda, setBusqueda] = useState('');
 
@@ -57,7 +59,10 @@ export default function CatalogoPage() {
 
   useEffect(() => {
     cargarDatos();
-    api.get('/empresa').then(({ data }) => setSlugTienda(data.tiendaSlug)).catch(() => {});
+    api.get('/empresa').then(({ data }) => {
+      setSlugTienda(data.tiendaSlug);
+      setFotosPublicas(data.catalogoFotosPublicas ?? true);
+    }).catch(() => {});
   }, []);
 
   const cargarDatos = async () => {
@@ -127,6 +132,19 @@ export default function CatalogoPage() {
     if (!confirm(`¿Eliminar "${item.nombre}" del catálogo?`)) return;
     await api.delete(`/catalogo/${item.id}`);
     cargarDatos();
+  };
+
+  const alternarFotosPublicas = async () => {
+    const nuevoValor = !fotosPublicas;
+    setCambiandoFotosPublicas(true);
+    try {
+      await api.patch('/catalogo/fotos-publicas', { fotosPublicas: nuevoValor });
+      setFotosPublicas(nuevoValor);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCambiandoFotosPublicas(false);
+    }
   };
 
   const [eliminandoTodos, setEliminandoTodos] = useState(false);
@@ -319,6 +337,17 @@ export default function CatalogoPage() {
               >
                 <DollarSign size={16} />
                 Actualizar precios
+              </button>
+              <button
+                onClick={alternarFotosPublicas}
+                disabled={cambiandoFotosPublicas}
+                title={fotosPublicas ? 'Las fotos se ven en la página pública — clic para ocultarlas' : 'Las fotos están ocultas en la página pública — clic para mostrarlas'}
+                className={`flex items-center gap-2 disabled:opacity-50 font-medium rounded-lg px-4 py-2 transition-colors ${
+                  fotosPublicas ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400'
+                }`}
+              >
+                {fotosPublicas ? <Eye size={16} /> : <EyeOff size={16} />}
+                {fotosPublicas ? 'Fotos visibles en la web' : 'Fotos ocultas en la web'}
               </button>
               {items.length > 0 && (
                 <button
