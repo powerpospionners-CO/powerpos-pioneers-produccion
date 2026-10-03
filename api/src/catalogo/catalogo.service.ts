@@ -161,6 +161,12 @@ export class CatalogoService {
     return { ok: true };
   }
 
+  async eliminarTodos(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    const resultado = await this.prisma.catalogoProducto.deleteMany({ where: { empresaId } });
+    return { eliminados: resultado.count };
+  }
+
   async actualizarImagen(id: number, empresaId: number, imagen: string) {
     await this.verificarHabilitado(empresaId);
     await this.obtener(id, empresaId);

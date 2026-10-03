@@ -123,6 +123,12 @@ export class CatalogoController {
     return this.catalogoService.actualizar(+id, body, req.user.empresaId);
   }
 
+  @Delete('eliminar-todos')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  eliminarTodos(@Request() req: any) {
+    return this.catalogoService.eliminarTodos(req.user.empresaId);
+  }
+
   @Delete(':id')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   eliminar(@Param('id') id: string, @Request() req: any) {

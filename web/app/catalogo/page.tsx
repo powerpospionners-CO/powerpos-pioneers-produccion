@@ -129,6 +129,18 @@ export default function CatalogoPage() {
     cargarDatos();
   };
 
+  const [eliminandoTodos, setEliminandoTodos] = useState(false);
+  const eliminarTodos = async () => {
+    if (!confirm(`¿Eliminar los ${items.length} productos del catálogo? Esta acción no se puede deshacer. Las imágenes y precios de cada producto se pierden — tendrías que volver a subir el Excel y las fotos.`)) return;
+    setEliminandoTodos(true);
+    try {
+      await api.delete('/catalogo/eliminar-todos');
+      cargarDatos();
+    } finally {
+      setEliminandoTodos(false);
+    }
+  };
+
   const abrirModalImportar = () => {
     setArchivoImportar(null);
     setResultadoImportar(null);
@@ -308,6 +320,16 @@ export default function CatalogoPage() {
                 <DollarSign size={16} />
                 Actualizar precios
               </button>
+              {items.length > 0 && (
+                <button
+                  onClick={eliminarTodos}
+                  disabled={eliminandoTodos}
+                  className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 text-red-400 font-medium rounded-lg px-4 py-2 transition-colors"
+                >
+                  <Trash2 size={16} />
+                  {eliminandoTodos ? 'Eliminando...' : 'Eliminar todo'}
+                </button>
+              )}
               <button
                 onClick={() => abrirModal()}
                 className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg px-4 py-2 transition-colors"
