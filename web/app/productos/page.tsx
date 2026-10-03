@@ -1313,7 +1313,7 @@ export default function ProductosPage() {
               </button>
             </div>
             <p className="text-gray-500 text-sm mb-4">
-              Sube un archivo .xlsx con tus productos en vez de crearlos uno por uno. Cada fila debe tener al menos nombre y precio.
+              Sube un archivo .xlsx con tus productos en vez de crearlos uno por uno. Cada fila debe tener al menos nombre y precio. Para un producto que se vende a granel (por gramos), pon &quot;si&quot; en la columna &quot;granel&quot; — el precio y el stock de esa fila se interpretan en gramos.
             </p>
 
             <a

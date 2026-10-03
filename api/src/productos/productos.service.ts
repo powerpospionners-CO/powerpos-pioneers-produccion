@@ -39,7 +39,10 @@ const SINONIMOS_COLUMNAS: Record<string, string[]> = {
   stockMinimo: ['stock minimo', 'minimo', 'stock de seguridad'],
   codigoBarras: ['codigo de barras', 'codigo barras', 'sku', 'codigo'],
   descripcion: ['descripcion', 'detalle'],
+  granel: ['granel', 'venta a granel', 'vende granel', 'al granel', 'se vende al granel'],
 };
+
+const VALORES_AFIRMATIVOS = new Set(['si', 'x', 'true', '1', 'yes']);
 
 @Injectable()
 export class ProductosService {
@@ -228,17 +231,22 @@ export class ProductosService {
           costo = valor;
         }
 
+        const ventaGranel = mapaCampos.granel
+          ? VALORES_AFIRMATIVOS.has(NORMALIZAR_ENCABEZADO(fila[mapaCampos.granel]))
+          : false;
+        const unidadStock = ventaGranel ? 'gramos' : 'unidades';
+
         let stockActual = 0;
         if (mapaCampos.stock && fila[mapaCampos.stock] !== '') {
           const valor = Number(fila[mapaCampos.stock]);
-          if (!Number.isInteger(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: 'El stock debe ser un entero no negativo' }); continue; }
+          if (!Number.isInteger(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: `El stock debe ser un entero no negativo (en ${unidadStock})` }); continue; }
           stockActual = valor;
         }
 
         let stockMinimo = 0;
         if (mapaCampos.stockMinimo && fila[mapaCampos.stockMinimo] !== '') {
           const valor = Number(fila[mapaCampos.stockMinimo]);
-          if (!Number.isInteger(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: 'El stock mínimo debe ser un entero no negativo' }); continue; }
+          if (!Number.isInteger(valor) || valor < 0) { errores.push({ fila: numeroFila, motivo: `El stock mínimo debe ser un entero no negativo (en ${unidadStock})` }); continue; }
           stockMinimo = valor;
         }
 
@@ -266,6 +274,7 @@ export class ProductosService {
             controlaStock: true,
             stockActual,
             stockMinimo,
+            ventaGranel,
             disponible: true,
             aceptaAdicionales: false,
           },
