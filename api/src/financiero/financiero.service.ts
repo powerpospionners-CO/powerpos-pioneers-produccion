@@ -133,8 +133,11 @@ export class FinancieroService {
       .filter(m => m.tipo === 'INGRESO')
       .reduce((acc, m) => acc + Number(m.monto), 0);
 
+    // Al anular una venta se crea el movimiento contrario (EGRESO/VENTA) para
+    // no perder el rastro, pero no es un gasto real del negocio -- es solo la
+    // reversión de la venta, así que no debe sumar en el total de egresos.
     const totalEgresos = movimientos
-      .filter(m => m.tipo === 'EGRESO')
+      .filter(m => m.tipo === 'EGRESO' && m.categoria !== 'VENTA')
       .reduce((acc, m) => acc + Number(m.monto), 0);
 
     const utilidad = totalIngresos - totalEgresos;

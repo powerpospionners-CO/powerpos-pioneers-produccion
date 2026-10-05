@@ -66,7 +66,7 @@ export default function FinancieroPage() {
   const movimientosFiltrados = useMemo(() => {
     if (filtroMovimientos === 'todos') return movimientos;
     if (filtroMovimientos === 'ANULADOS') return movimientos.filter(esAnulacion);
-    if (filtroMovimientos === 'EGRESOS') return movimientos.filter((m) => m.tipo === 'EGRESO' && m.categoria !== 'COSTO_VENTA');
+    if (filtroMovimientos === 'EGRESOS') return movimientos.filter((m) => m.tipo === 'EGRESO' && m.categoria !== 'COSTO_VENTA' && !esAnulacion(m));
     return movimientos.filter((m) => m.categoria === filtroMovimientos);
   }, [movimientos, filtroMovimientos]);
 
