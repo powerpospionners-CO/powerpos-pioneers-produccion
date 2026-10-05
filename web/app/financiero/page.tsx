@@ -44,7 +44,10 @@ export default function FinancieroPage() {
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [desdePersonalizado, setDesdePersonalizado] = useState('');
   const [hastaPersonalizado, setHastaPersonalizado] = useState('');
-  const [filtroMovimientos, setFiltroMovimientos] = useState<'todos' | 'VENTA' | 'COSTO_VENTA' | 'EGRESOS'>('todos');
+  const [periodoMovs, setPeriodoMovs] = useState<Periodo>('mes');
+  const [desdeMovsPersonalizado, setDesdeMovsPersonalizado] = useState('');
+  const [hastaMovsPersonalizado, setHastaMovsPersonalizado] = useState('');
+  const [filtroMovimientos, setFiltroMovimientos] = useState<'todos' | 'VENTA' | 'COSTO_VENTA' | 'EGRESOS' | 'ANULADOS'>('todos');
   const [form, setForm] = useState({
     tipo: 'EGRESO',
     categoria: 'OTROS',
@@ -53,29 +56,51 @@ export default function FinancieroPage() {
   });
 
   const rango = calcularRango(periodo, desdePersonalizado, hastaPersonalizado);
+  const rangoMovs = calcularRango(periodoMovs, desdeMovsPersonalizado, hastaMovsPersonalizado);
+
+  // Una anulación de venta no se borra, queda como el movimiento contrario
+  // (EGRESO/VENTA en vez de INGRESO/VENTA) para no perder el rastro — se
+  // reconoce por esa descripción.
+  const esAnulacion = (m: any) => typeof m.descripcion === 'string' && m.descripcion.startsWith('Anulación de venta');
 
   const movimientosFiltrados = useMemo(() => {
     if (filtroMovimientos === 'todos') return movimientos;
+    if (filtroMovimientos === 'ANULADOS') return movimientos.filter(esAnulacion);
     if (filtroMovimientos === 'EGRESOS') return movimientos.filter((m) => m.tipo === 'EGRESO' && m.categoria !== 'COSTO_VENTA');
     return movimientos.filter((m) => m.categoria === filtroMovimientos);
   }, [movimientos, filtroMovimientos]);
 
   useEffect(() => {
-    cargarDatos();
-    const intervalo = setInterval(cargarDatos, 10000);
+    cargarResumen();
+    const intervalo = setInterval(cargarResumen, 10000);
     return () => clearInterval(intervalo);
   }, [periodo, desdePersonalizado, hastaPersonalizado]);
 
-  const cargarDatos = async () => {
+  useEffect(() => {
+    cargarMovimientos();
+    const intervalo = setInterval(cargarMovimientos, 10000);
+    return () => clearInterval(intervalo);
+  }, [periodoMovs, desdeMovsPersonalizado, hastaMovsPersonalizado]);
+
+  const cargarResumen = async () => {
     const params: any = {};
     if (rango.desde) params.fechaDesde = rango.desde;
     if (rango.hasta) params.fechaHasta = rango.hasta;
-    const [res, movs] = await Promise.all([
-      api.get('/financiero/resumen', { params }),
-      api.get('/financiero/movimientos', { params }),
-    ]);
-    setResumen(res.data);
-    setMovimientos(movs.data);
+    const { data } = await api.get('/financiero/resumen', { params });
+    setResumen(data);
+  };
+
+  const cargarMovimientos = async () => {
+    const params: any = {};
+    if (rangoMovs.desde) params.fechaDesde = rangoMovs.desde;
+    if (rangoMovs.hasta) params.fechaHasta = rangoMovs.hasta;
+    const { data } = await api.get('/financiero/movimientos', { params });
+    setMovimientos(data);
+  };
+
+  const cargarDatos = () => {
+    cargarResumen();
+    cargarMovimientos();
   };
 
   const descargarExcel = async () => {
@@ -298,12 +323,49 @@ export default function FinancieroPage() {
               </button>
             </div>
 
-            <div className="no-imprimir px-4 pt-3 flex flex-wrap gap-1.5">
+            <div className="no-imprimir px-4 pt-3 flex flex-wrap items-center gap-2">
+              {([
+                ['hoy', 'Hoy'],
+                ['mes', 'Este mes'],
+                ['anio', 'Este año'],
+                ['personalizado', 'Personalizado'],
+              ] as [Periodo, string][]).map(([valor, etiqueta]) => (
+                <button
+                  key={valor}
+                  onClick={() => setPeriodoMovs(valor)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    periodoMovs === valor ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+              {periodoMovs === 'personalizado' && (
+                <div className="flex items-center gap-2 ml-1">
+                  <input
+                    type="date"
+                    value={desdeMovsPersonalizado}
+                    onChange={(e) => setDesdeMovsPersonalizado(e.target.value)}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500"
+                  />
+                  <span className="text-gray-500 text-sm">a</span>
+                  <input
+                    type="date"
+                    value={hastaMovsPersonalizado}
+                    onChange={(e) => setHastaMovsPersonalizado(e.target.value)}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="no-imprimir px-4 pt-2 flex flex-wrap gap-1.5">
               {([
                 ['todos', 'Todos'],
                 ['VENTA', 'Ventas'],
                 ['COSTO_VENTA', 'Costos de venta'],
                 ['EGRESOS', 'Egresos'],
+                ['ANULADOS', 'Anulados'],
               ] as [typeof filtroMovimientos, string][]).map(([valor, etiqueta]) => (
                 <button
                   key={valor}
