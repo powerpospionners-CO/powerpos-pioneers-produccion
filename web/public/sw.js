@@ -43,7 +43,14 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cacheada) => {
         const enRed = fetch(request).then((respuesta) => {
-          if (respuesta.ok) caches.open(VERSION).then((cache) => cache.put(request, respuesta.clone()));
+          // clonar ya mismo, antes de que el navegador empiece a consumir el
+          // cuerpo de la respuesta original — si se clona dentro del .then()
+          // de caches.open() (asíncrono), para entonces el cuerpo ya pudo
+          // quedar bloqueado y el clone() falla.
+          if (respuesta.ok) {
+            const copia = respuesta.clone();
+            caches.open(VERSION).then((cache) => cache.put(request, copia));
+          }
           return respuesta;
         }).catch(() => cacheada);
         return cacheada || enRed;
