@@ -146,9 +146,9 @@ export default function RetailPOS() {
   // Cada producto se convierte en uno o varios ítems vendibles: si vende al
   // granel se agrega un ítem "al granel" (precio por gramo, cantidad =
   // gramos pesados); si tiene presentaciones empacadas, cada una es su
-  // propio ítem; si no tiene ninguna de las dos, es el producto tal cual
-  // (factor 1). Granel y presentaciones pueden coexistir en el mismo
-  // producto — todos comparten el mismo stockBase.
+  // propio ítem; y salvo que venda al granel, también se agrega la unidad
+  // base (factor 1) — así un producto con presentaciones se puede vender
+  // tanto suelto como empacado. Todos comparten el mismo stockBase.
   const itemsVendibles = useMemo<ItemVendible[]>(() => productos.filter((producto) => producto.disponible).flatMap((producto): ItemVendible[] => {
     const items: ItemVendible[] = [];
     const tienePresentaciones = producto.presentaciones && producto.presentaciones.length > 0;
@@ -185,12 +185,17 @@ export default function RetailPOS() {
       })));
     }
 
-    if (!producto.ventaGranel && !tienePresentaciones) {
+    // Un producto con presentaciones (ej. "Paquete x18") también se puede
+    // seguir vendiendo suelto por unidad — las presentaciones son variantes
+    // adicionales, no reemplazan la venta de la unidad base. Eso no aplica a
+    // los que se venden al granel, porque ahí el precio es por gramo, no por
+    // unidad completa.
+    if (!producto.ventaGranel) {
       items.push({
         key: `${producto.id}`,
         productoId: producto.id,
         presentacionId: null,
-        nombre: producto.nombre,
+        nombre: tienePresentaciones ? `${producto.nombre} (unidad)` : producto.nombre,
         precio: Number(producto.precio),
         codigoBarras: producto.codigoBarras || null,
         controlaStock: producto.controlaStock,
