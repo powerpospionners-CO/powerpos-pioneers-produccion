@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
 import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
@@ -44,6 +44,7 @@ export default function FinancieroPage() {
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [desdePersonalizado, setDesdePersonalizado] = useState('');
   const [hastaPersonalizado, setHastaPersonalizado] = useState('');
+  const [filtroMovimientos, setFiltroMovimientos] = useState<'todos' | 'VENTA' | 'COSTO_VENTA' | 'EGRESOS'>('todos');
   const [form, setForm] = useState({
     tipo: 'EGRESO',
     categoria: 'OTROS',
@@ -52,6 +53,12 @@ export default function FinancieroPage() {
   });
 
   const rango = calcularRango(periodo, desdePersonalizado, hastaPersonalizado);
+
+  const movimientosFiltrados = useMemo(() => {
+    if (filtroMovimientos === 'todos') return movimientos;
+    if (filtroMovimientos === 'EGRESOS') return movimientos.filter((m) => m.tipo === 'EGRESO' && m.categoria !== 'COSTO_VENTA');
+    return movimientos.filter((m) => m.categoria === filtroMovimientos);
+  }, [movimientos, filtroMovimientos]);
 
   useEffect(() => {
     cargarDatos();
@@ -280,7 +287,7 @@ export default function FinancieroPage() {
 
           {/* Movimientos */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl">
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-white font-semibold">Movimientos financieros</h2>
               <button
                 onClick={abrirModalNuevo}
@@ -291,11 +298,34 @@ export default function FinancieroPage() {
               </button>
             </div>
 
-            {movimientos.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No hay movimientos registrados</div>
+            <div className="no-imprimir px-4 pt-3 flex flex-wrap gap-1.5">
+              {([
+                ['todos', 'Todos'],
+                ['VENTA', 'Ventas'],
+                ['COSTO_VENTA', 'Costos de venta'],
+                ['EGRESOS', 'Egresos'],
+              ] as [typeof filtroMovimientos, string][]).map(([valor, etiqueta]) => (
+                <button
+                  key={valor}
+                  onClick={() => setFiltroMovimientos(valor)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    filtroMovimientos === valor
+                      ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30'
+                      : 'bg-gray-800 text-gray-400 border border-transparent hover:text-white'
+                  }`}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
+
+            {movimientosFiltrados.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                {movimientos.length === 0 ? 'No hay movimientos registrados' : 'Ningún movimiento coincide con ese filtro'}
+              </div>
             ) : (
               <div className="divide-y divide-gray-800">
-                {movimientos.map((mov) => {
+                {movimientosFiltrados.map((mov) => {
                   const esEditable = mov.tipo === 'EGRESO' && !mov.pedidoId;
                   return (
                     <div key={mov.id} className="p-4 flex items-center justify-between">
