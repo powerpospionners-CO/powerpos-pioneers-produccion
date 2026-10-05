@@ -53,7 +53,13 @@ export default function FinancieroPage() {
     categoria: 'OTROS',
     descripcion: '',
     monto: '',
+    fecha: '',
   });
+
+  const fechaLocal = (fechaIso: string) => {
+    const d = new Date(fechaIso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
 
   const rango = calcularRango(periodo, desdePersonalizado, hastaPersonalizado);
   const rangoMovs = calcularRango(periodoMovs, desdeMovsPersonalizado, hastaMovsPersonalizado);
@@ -127,14 +133,14 @@ export default function FinancieroPage() {
 
   const abrirModalNuevo = () => {
     setEditando(null);
-    setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '' });
+    setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '', fecha: '' });
     setErrorForm('');
     setModal(true);
   };
 
   const abrirModalEditar = (mov: any) => {
     setEditando(mov);
-    setForm({ tipo: mov.tipo, categoria: mov.categoria, descripcion: mov.descripcion, monto: String(mov.monto) });
+    setForm({ tipo: mov.tipo, categoria: mov.categoria, descripcion: mov.descripcion, monto: String(mov.monto), fecha: fechaLocal(mov.fecha) });
     setErrorForm('');
     setModal(true);
   };
@@ -149,16 +155,20 @@ export default function FinancieroPage() {
           categoria: form.categoria,
           descripcion: form.descripcion,
           monto: Number(form.monto),
+          ...(form.fecha ? { fecha: new Date(`${form.fecha}T12:00:00`).toISOString() } : {}),
         });
       } else {
         await api.post('/financiero/movimiento', {
-          ...form,
+          tipo: form.tipo,
+          categoria: form.categoria,
+          descripcion: form.descripcion,
           monto: Number(form.monto),
+          ...(form.fecha ? { fecha: new Date(`${form.fecha}T12:00:00`).toISOString() } : {}),
         });
       }
       setModal(false);
       setEditando(null);
-      setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '' });
+      setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '', fecha: '' });
       cargarDatos();
     } catch (e: any) {
       setErrorForm(e?.response?.data?.message || 'No se pudo guardar el movimiento');
@@ -471,6 +481,15 @@ export default function FinancieroPage() {
                     onChange={(e) => setForm({ ...form, monto: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
                     placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Fecha {!editando && <span className="text-gray-600">(opcional, por defecto hoy)</span>}</label>
+                  <input
+                    type="date"
+                    value={form.fecha}
+                    onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
