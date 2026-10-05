@@ -64,6 +64,17 @@ export class FinancieroService {
     });
   }
 
+  // Mismo criterio que editar: solo egresos registrados a mano.
+  async eliminarMovimiento(id: number, empresaId: number) {
+    const movimiento = await this.prisma.movimientoFinanciero.findFirst({ where: { id, empresaId } });
+    if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+    if (movimiento.tipo !== 'EGRESO' || movimiento.pedidoId !== null) {
+      throw new ForbiddenException('Solo se pueden eliminar los egresos registrados manualmente, no los generados por una venta');
+    }
+    await this.prisma.movimientoFinanciero.delete({ where: { id } });
+    return { ok: true };
+  }
+
   async listarMovimientos(empresaId: number, filtros?: any) {
     const where: any = { empresaId };
 

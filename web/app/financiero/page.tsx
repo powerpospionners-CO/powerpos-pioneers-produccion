@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 
@@ -174,6 +174,16 @@ export default function FinancieroPage() {
       setErrorForm(e?.response?.data?.message || 'No se pudo guardar el movimiento');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const eliminarMovimiento = async (mov: any) => {
+    if (!confirm(`¿Eliminar "${mov.descripcion}" por $${Number(mov.monto).toLocaleString()}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/financiero/movimiento/${mov.id}`);
+      cargarDatos();
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'No se pudo eliminar el movimiento');
     }
   };
 
@@ -415,13 +425,22 @@ export default function FinancieroPage() {
                           {mov.tipo === 'INGRESO' ? '+' : '-'}${Number(mov.monto).toLocaleString()}
                         </div>
                         {esEditable && (
-                          <button
-                            onClick={() => abrirModalEditar(mov)}
-                            className="no-imprimir text-gray-500 hover:text-white transition-colors"
-                            title="Editar movimiento"
-                          >
-                            <Edit size={15} />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => abrirModalEditar(mov)}
+                              className="no-imprimir text-gray-500 hover:text-white transition-colors"
+                              title="Editar movimiento"
+                            >
+                              <Edit size={15} />
+                            </button>
+                            <button
+                              onClick={() => eliminarMovimiento(mov)}
+                              className="no-imprimir text-gray-500 hover:text-red-400 transition-colors"
+                              title="Eliminar movimiento"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
