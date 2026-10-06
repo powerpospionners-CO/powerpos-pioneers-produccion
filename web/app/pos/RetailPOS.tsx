@@ -12,6 +12,7 @@ import VentasPendientes from '@/components/VentasPendientes';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
 import { encolarVentaPendiente, generarClaveVenta, listarVentasFallidas, listarVentasPendientes, quitarVentaFallida, sincronizarVentasPendientes } from '@/lib/colaOfflineVentas';
+import { guardarCajaOffline, guardarCatalogoOffline, leerCajaOffline, leerCatalogoOffline } from '@/lib/cacheOfflinePos';
 
 type Presentacion = { id: number; nombre: string; factorUnidades: number; precio: string; codigoBarras?: string | null };
 type Producto = {
@@ -63,19 +64,48 @@ export default function RetailPOS() {
   // reintento periódico, por si ese evento no dispara en algunos navegadores).
   const [pendientesSync, setPendientesSync] = useState(0);
   const [fallidasSync, setFallidasSync] = useState<ReturnType<typeof listarVentasFallidas>>([]);
+  // Si el computador se reinició durante un corte de internet largo (ej. un
+  // apagón de días) y no logró volver a cargar el catálogo ni la caja desde
+  // el servidor, se usa el último respaldo guardado en este dispositivo
+  // para que el cajero pueda seguir vendiendo — con datos que pueden estar
+  // desactualizados, por eso se avisa.
+  const [usandoDatosOffline, setUsandoDatosOffline] = useState(false);
   const buscarRef = useRef<HTMLInputElement>(null);
   const solicitudProductos = useRef(0);
   const cargarProductos = useCallback(async (signal?: AbortSignal) => {
     const solicitud = ++solicitudProductos.current;
-    const { data } = await api.get('/productos', { signal });
-    if (!signal?.aborted && solicitud === solicitudProductos.current) setProductos(data);
-  }, []);
+    try {
+      const { data } = await api.get('/productos', { signal });
+      if (!signal?.aborted && solicitud === solicitudProductos.current) {
+        setProductos(data);
+        setUsandoDatosOffline(false);
+        if (usuario?.empresaId && usuario?.sucursalId) guardarCatalogoOffline(usuario.empresaId, usuario.sucursalId, data);
+      }
+    } catch (e: any) {
+      if (!e?.response && usuario?.empresaId && usuario?.sucursalId) {
+        const catalogoGuardado = leerCatalogoOffline(usuario.empresaId, usuario.sucursalId);
+        if (catalogoGuardado && !signal?.aborted && solicitud === solicitudProductos.current) {
+          setProductos(catalogoGuardado);
+          setUsandoDatosOffline(true);
+          return;
+        }
+      }
+      throw e;
+    }
+  }, [usuario?.empresaId, usuario?.sucursalId]);
 
   const cargar = async () => {
     const [p, cajaRes] = await Promise.allSettled([
       cargarProductos(), api.get('/caja/abierta'),
     ]);
-    setCaja(cajaRes.status === 'fulfilled' ? cajaRes.value.data : null);
+    if (cajaRes.status === 'fulfilled') {
+      setCaja(cajaRes.value.data);
+      if (usuario?.empresaId && usuario?.sucursalId) guardarCajaOffline(usuario.empresaId, usuario.sucursalId, cajaRes.value.data);
+    } else if (!cajaRes.reason?.response && usuario?.empresaId && usuario?.sucursalId) {
+      setCaja(leerCajaOffline(usuario.empresaId, usuario.sucursalId));
+    } else {
+      setCaja(null);
+    }
     if (p.status === 'rejected') setError('No se pudo cargar el catálogo de productos.');
   };
 
@@ -389,6 +419,11 @@ export default function RetailPOS() {
         <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Escanea el código de barras para agregar de una, o escribe el nombre y selecciona el producto.</p></div>
       </div>
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
+      {usandoDatosOffline && (
+        <div role="status" className="mb-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-yellow-300">
+          Sin conexión: mostrando el catálogo y la caja guardados en este equipo desde la última vez que hubo señal — los precios y existencias pueden estar desactualizados. Las ventas se guardan y se sincronizan solas cuando vuelva internet.
+        </div>
+      )}
       {aviso && (
         <div role="status" className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${fallaImpresion ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300' : 'border-green-500/30 bg-green-500/10 text-green-400'}`}>
           <span>{aviso}</span>

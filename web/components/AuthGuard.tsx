@@ -15,15 +15,22 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   useProtegerAtras();
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (inicioSesion && new Date(inicioSesion).toDateString() !== new Date().toDateString()) {
-      logout();
-      irALoginGenerico(router);
-      return;
-    }
-    if (!token || !usuario) {
-      irALoginGenerico(router);
-    }
+    const verificar = () => {
+      if (!hydrated) return;
+      // Igual que en el store: no forzar el logout diario mientras no hay
+      // conexión para volver a loguearse (corte de internet largo).
+      if (inicioSesion && new Date(inicioSesion).toDateString() !== new Date().toDateString() && navigator.onLine) {
+        logout();
+        irALoginGenerico(router);
+        return;
+      }
+      if (!token || !usuario) {
+        irALoginGenerico(router);
+      }
+    };
+    verificar();
+    window.addEventListener('online', verificar);
+    return () => window.removeEventListener('online', verificar);
   }, [hydrated, token, usuario, inicioSesion, logout, router]);
 
   if (!hydrated) {

@@ -55,8 +55,14 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'auth-storage',
       onRehydrateStorage: () => (state) => {
-        if (state?.inicioSesion && new Date(state.inicioSesion).toDateString() !== new Date().toDateString()) {
-          state.logout();
+        // El cierre de sesión diario es una medida de seguridad, no debe
+        // dejar al cajero sin poder entrar durante un corte de internet
+        // largo (ej. un apagón de días) solo porque no puede volver a
+        // loguearse. Si no hay conexión, se mantiene la sesión como estaba.
+        const diaDistinto = state?.inicioSesion && new Date(state.inicioSesion).toDateString() !== new Date().toDateString();
+        const enLinea = typeof navigator === 'undefined' || navigator.onLine;
+        if (diaDistinto && enLinea) {
+          state!.logout();
         }
         state?.setHydrated();
       },
