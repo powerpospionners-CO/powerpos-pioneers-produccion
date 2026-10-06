@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import RegistroServiceWorker from "@/components/RegistroServiceWorker";
+import { NotificacionesProvider } from "@/components/Notificaciones";
 
 export const metadata: Metadata = {
   title: "PowerPOS",
@@ -34,7 +35,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <RegistroServiceWorker />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider><NotificacionesProvider>{children}</NotificacionesProvider></ThemeProvider>
       </body>
     </html>
   );

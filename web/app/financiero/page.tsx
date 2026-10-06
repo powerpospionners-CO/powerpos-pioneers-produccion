@@ -1,4 +1,5 @@
 'use client';
+import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
 import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit, Trash2 } from 'lucide-react';
@@ -34,6 +35,7 @@ function calcularRango(periodo: Periodo, desdePersonalizado: string, hastaPerson
 }
 
 export default function FinancieroPage() {
+  const { aviso, confirmar } = useNotificar();
   const [resumen, setResumen] = useState<any>(null);
   const [movimientos, setMovimientos] = useState<any[]>([]);
   const [modal, setModal] = useState(false);
@@ -178,12 +180,12 @@ export default function FinancieroPage() {
   };
 
   const eliminarMovimiento = async (mov: any) => {
-    if (!confirm(`¿Eliminar "${mov.descripcion}" por $${Number(mov.monto).toLocaleString()}? Esta acción no se puede deshacer.`)) return;
+    if (!(await confirmar(`Se va a eliminar "${mov.descripcion}" por $${Number(mov.monto).toLocaleString()}. No se puede deshacer.`, { titulo: 'Eliminar movimiento', textoConfirmar: 'Sí, eliminar', peligroso: true }))) return;
     try {
       await api.delete(`/financiero/movimiento/${mov.id}`);
       cargarDatos();
     } catch (e: any) {
-      alert(e?.response?.data?.message || 'No se pudo eliminar el movimiento');
+      aviso(e?.response?.data?.message || 'No se pudo eliminar el movimiento.', 'error');
     }
   };
 

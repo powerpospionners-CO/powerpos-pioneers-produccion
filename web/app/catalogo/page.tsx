@@ -1,4 +1,5 @@
 'use client';
+import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
@@ -28,6 +29,7 @@ interface ItemCatalogo {
 }
 
 export default function CatalogoPage() {
+  const { aviso, confirmar } = useNotificar();
   const usuario = useAuthStore((state) => state.usuario);
   const esEnchilaMarket = usuario?.empresaId === 2;
   const [items, setItems] = useState<ItemCatalogo[]>([]);
@@ -144,7 +146,7 @@ export default function CatalogoPage() {
   };
 
   const eliminar = async (item: ItemCatalogo) => {
-    if (!confirm(`¿Eliminar "${item.nombre}" del catálogo?`)) return;
+    if (!(await confirmar(`Se va a eliminar "${item.nombre}" del catálogo.`, { titulo: 'Eliminar producto', textoConfirmar: 'Sí, eliminar', peligroso: true }))) return;
     await api.delete(`/catalogo/${item.id}`);
     cargarDatos();
   };
@@ -164,7 +166,7 @@ export default function CatalogoPage() {
 
   const [eliminandoTodos, setEliminandoTodos] = useState(false);
   const eliminarTodos = async () => {
-    if (!confirm(`¿Eliminar los ${items.length} productos del catálogo? Esta acción no se puede deshacer. Las imágenes y precios de cada producto se pierden — tendrías que volver a subir el Excel y las fotos.`)) return;
+    if (!(await confirmar(`Se van a eliminar los ${items.length} productos del catálogo. No se puede deshacer: se pierden también los precios y las fotos, y tendrías que volver a subir el Excel.`, { titulo: 'Eliminar todo el catálogo', textoConfirmar: 'Sí, eliminar todo', peligroso: true }))) return;
     setEliminandoTodos(true);
     try {
       await api.delete('/catalogo/eliminar-todos');
@@ -372,7 +374,7 @@ export default function CatalogoPage() {
                     setOcultandoSinFoto(true);
                     try {
                       const { data } = await api.post('/catalogo/ocultar-sin-foto');
-                      alert(`${data.ocultados} producto(s) sin foto ocultados de la web. ${data.mostrados} con foto visibles en la web.`);
+                      aviso(`Se ocultaron ${data.ocultados} producto(s) sin foto de la web. ${data.mostrados} con foto siguen visibles.`, 'exito');
                       cargarDatos();
                     } finally {
                       setOcultandoSinFoto(false);
@@ -388,7 +390,7 @@ export default function CatalogoPage() {
                 <button
                   onClick={async () => {
                     const { data } = await api.post('/catalogo/clasificar-automatico');
-                    alert(`${data.clasificados} producto(s) clasificados automáticamente por origen y uso. ${data.sinClasificar} quedaron sin clasificar (edítalos a mano).`);
+                    aviso(data.clasificados > 0 ? `Se clasificaron ${data.clasificados} producto(s) por origen y uso.${data.sinClasificar ? ` ${data.sinClasificar} no coinciden con ninguna regla: edítalos a mano.` : ''}` : `No había productos nuevos para clasificar.${data.sinClasificar ? ` ${data.sinClasificar} no coinciden con ninguna regla: edítalos a mano.` : ''}`, 'exito');
                     cargarDatos();
                   }}
                   className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"

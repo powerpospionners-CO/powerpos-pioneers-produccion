@@ -1,4 +1,5 @@
 'use client';
+import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff } from 'lucide-react';
@@ -115,6 +116,7 @@ const ICONOS_CATEGORIA_COMERCIO = [
 ].filter((icono, indice, arreglo) => arreglo.indexOf(icono) === indice);
 
 function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onCambio: (producto: Producto) => void }) {
+  const { aviso, confirmar } = useNotificar();
   const [nuevo, setNuevo] = useState({ nombre: '', factorUnidades: '', precio: '', codigoBarras: '' });
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -147,7 +149,7 @@ function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onC
   };
 
   const eliminar = async (id: number) => {
-    if (!window.confirm('¿Quitar esta presentación? Ya no se podrá vender así, pero las ventas anteriores no cambian.')) return;
+    if (!(await confirmar('Esta presentación ya no se podrá vender. Las ventas anteriores no cambian.', { titulo: 'Quitar presentación', textoConfirmar: 'Sí, quitar', peligroso: true }))) return;
     setError('');
     try { await api.delete(`/productos/${producto.id}/presentaciones/${id}`); await recargar(); }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo quitar la presentación.'); }
@@ -191,6 +193,7 @@ function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onC
 }
 
 function SeccionComboComponentes({ producto, productosDisponibles, onCambio }: { producto: Producto; productosDisponibles: Producto[]; onCambio: (producto: Producto) => void }) {
+  const { aviso, confirmar } = useNotificar();
   const [productoIdNuevo, setProductoIdNuevo] = useState('');
   const [cantidadNueva, setCantidadNueva] = useState('');
   const [editandoId, setEditandoId] = useState<number | null>(null);
@@ -221,7 +224,7 @@ function SeccionComboComponentes({ producto, productosDisponibles, onCambio }: {
   const editar = (c: ComboComponente) => { setEditandoId(c.id); setCantidadNueva(String(c.cantidad)); };
 
   const eliminar = async (id: number) => {
-    if (!window.confirm('¿Quitar este componente de la canasta?')) return;
+    if (!(await confirmar('Este componente se quitará de la canasta.', { titulo: 'Quitar componente', textoConfirmar: 'Sí, quitar', peligroso: true }))) return;
     setError('');
     try { await api.delete(`/productos/${producto.id}/combo-componentes/${id}`); await recargar(); }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo quitar el componente.'); }
@@ -344,6 +347,7 @@ function SeccionLotes({ productoId }: { productoId: number }) {
 }
 
 export default function ProductosPage() {
+  const { aviso, confirmar } = useNotificar();
   const tipoNegocio = useAuthStore((state) => state.usuario?.tipoNegocio);
   const esRestaurante = !tipoNegocio || tipoNegocio === 'RESTAURANTE';
   const esEnchilaMarket = useAuthStore((state) => state.usuario?.empresaId) === 2;
@@ -669,7 +673,7 @@ export default function ProductosPage() {
   };
 
   const quitarImagen = async (producto: Producto) => {
-    if (!window.confirm(`¿Quitar la imagen de "${producto.nombre}"? El producto queda sin foto.`)) return;
+    if (!(await confirmar(`Se quitará la imagen de "${producto.nombre}". El producto queda sin foto.`, { titulo: 'Quitar imagen', textoConfirmar: 'Sí, quitar' }))) return;
     await api.patch(`/productos/${producto.id}`, { imagen: null });
     cargarDatos();
   };

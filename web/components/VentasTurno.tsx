@@ -1,5 +1,6 @@
 'use client';
 
+import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
 import { Ban, Pencil, Receipt } from 'lucide-react';
 import api from '@/lib/api';
@@ -12,6 +13,7 @@ type Venta = {
 };
 
 export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { cajaId: number | null; sucursalId?: number; puedeGestionar: boolean }) {
+  const { aviso, confirmar } = useNotificar();
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [abierto, setAbierto] = useState(false);
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
@@ -29,7 +31,7 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
   useEffect(() => { if (abierto) void cargar(); }, [abierto, cajaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anular = async (venta: Venta) => {
-    if (!window.confirm(`¿Anular la venta ${venta.numero} por ${moneda(Number(venta.total))}? Esto repone existencias y elimina sus movimientos financieros.`)) return;
+    if (!(await confirmar(`Se va a anular la venta ${venta.numero} por ${moneda(Number(venta.total))}. Se devuelven las existencias y se eliminan sus movimientos financieros.`, { titulo: 'Anular venta', textoConfirmar: 'Sí, anular', peligroso: true }))) return;
     setError('');
     try {
       await api.patch(`/pedidos/${venta.id}/estado`, { estado: 'ANULADO' });

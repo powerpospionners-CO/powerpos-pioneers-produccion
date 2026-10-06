@@ -1,5 +1,6 @@
 'use client';
 
+import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Ban, Boxes, CircleDollarSign, Pencil, Receipt, RefreshCw } from 'lucide-react';
 import api from '@/lib/api';
@@ -24,6 +25,7 @@ const fechaLocalISO = (fecha: Date) => {
 };
 
 export default function RetailDashboard() {
+  const { aviso, confirmar } = useNotificar();
   const usuario = useAuthStore((s) => s.usuario);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [ventas, setVentas] = useState<Venta[]>([]);
@@ -79,7 +81,7 @@ export default function RetailDashboard() {
   };
 
   const anular = async (venta: Venta) => {
-    if (!window.confirm(`¿Anular la venta ${venta.numero} por ${moneda(Number(venta.total))}? Esto repone existencias y elimina sus movimientos financieros.`)) return;
+    if (!(await confirmar(`Se va a anular la venta ${venta.numero} por ${moneda(Number(venta.total))}. Se devuelven las existencias y se eliminan sus movimientos financieros.`, { titulo: 'Anular venta', textoConfirmar: 'Sí, anular', peligroso: true }))) return;
     setError('');
     try { await api.patch(`/pedidos/${venta.id}/estado`, { estado: 'ANULADO' }); await cargar(); await cargarVentasFecha(fechaSeleccionada); }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo anular la venta.'); }
