@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import PDFDocument = require('pdfkit');
 const sharp: typeof import('sharp').default = require('sharp');
 import { PrismaService } from '../prisma/prisma.service';
+import { clasificarProducto } from './clasificacion';
 
 const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || '').toLowerCase().trim());
@@ -137,7 +138,7 @@ export class CatalogoService {
     const descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     const precio = this.validarPrecio(datos.precio);
     return this.prisma.catalogoProducto.create({
-      data: { empresaId, nombre, categoria, presentacion, descripcion, precio, ...(datos.origen !== undefined || datos.usos !== undefined ? validarOrigenYUsos(datos.origen, datos.usos) : {}) },
+      data: { empresaId, nombre, categoria, presentacion, descripcion, precio, ...(datos.origen !== undefined || datos.usos !== undefined ? validarOrigenYUsos(datos.origen, datos.usos) : clasificarProducto(nombre, presentacion, categoria)) },
     });
   }
 
@@ -275,7 +276,7 @@ export class CatalogoService {
         }
 
         const nuevo = await this.prisma.catalogoProducto.create({
-          data: { empresaId, nombre, precio, categoria, presentacion, descripcion, orden: totalExistentes + creados },
+          data: { empresaId, nombre, precio, categoria, presentacion, descripcion, orden: totalExistentes + creados, ...clasificarProducto(nombre, presentacion, categoria) },
         });
         creados++;
         indice.set(clave, nuevo.id);
@@ -515,6 +516,24 @@ export class CatalogoService {
     });
     if (!empresa || !empresa.activo || !empresa.catalogoHabilitado) throw new NotFoundException('Catálogo no disponible');
     return empresa;
+  }
+
+  // Clasifica por origen y uso los productos que todavía no tienen clasificación
+  // (los que el admin ya marcó a mano no se tocan).
+  async clasificarAutomatico(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    const pendientes = await this.prisma.catalogoProducto.findMany({
+      where: { empresaId, origen: null, usos: { equals: [] } },
+      select: { id: true, nombre: true, presentacion: true, categoria: true },
+    });
+    let clasificados = 0;
+    for (const item of pendientes) {
+      const { origen, usos } = clasificarProducto(item.nombre, item.presentacion, item.categoria);
+      if (!origen && usos.length === 0) continue;
+      await this.prisma.catalogoProducto.update({ where: { id: item.id }, data: { origen, usos } });
+      clasificados++;
+    }
+    return { clasificados, sinClasificar: pendientes.length - clasificados };
   }
 
   // Oculta de la web los productos que no tienen foto, y los vuelve a mostrar

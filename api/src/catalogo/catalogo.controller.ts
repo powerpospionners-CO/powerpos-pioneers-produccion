@@ -82,6 +82,12 @@ export class CatalogoController {
     return this.catalogoService.sincronizarPreciosDesdeProductos(req.user.empresaId);
   }
 
+  @Post('clasificar-automatico')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  clasificarAutomatico(@Request() req: any) {
+    return this.catalogoService.clasificarAutomatico(req.user.empresaId);
+  }
+
   @Post('ocultar-sin-foto')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   ocultarSinFoto(@Request() req: any) {

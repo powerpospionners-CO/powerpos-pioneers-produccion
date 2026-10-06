@@ -384,6 +384,18 @@ export default function CatalogoPage() {
                   {ocultandoSinFoto ? 'Revisando...' : 'Ocultar sin foto en la web'}
                 </button>
               )}
+              {esEnchilaMarket && (
+                <button
+                  onClick={async () => {
+                    const { data } = await api.post('/catalogo/clasificar-automatico');
+                    alert(`${data.clasificados} producto(s) clasificados automáticamente por origen y uso. ${data.sinClasificar} quedaron sin clasificar (edítalos a mano).`);
+                    cargarDatos();
+                  }}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+                >
+                  Clasificar automáticamente
+                </button>
+              )}
               {items.length > 0 && (
                 <button
                   onClick={eliminarTodos}
