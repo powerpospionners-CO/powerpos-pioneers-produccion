@@ -40,6 +40,20 @@ export class SuperadminController {
     return this.superadminService.editarEmpresa(+id, body, req.user.id);
   }
 
+  @Get('empresas/:id/administradores')
+  administradores(@Param('id') id: string) {
+    return this.superadminService.listarAdministradores(+id);
+  }
+
+  @Patch('administradores/:id')
+  editarAdministrador(
+    @Param('id') id: string,
+    @Body() body: { nombre?: string; email?: string; password?: string; activo?: boolean },
+    @Request() req: any,
+  ) {
+    return this.superadminService.editarAdministrador(+id, body, req.user.id);
+  }
+
   @Delete('empresas/:id')
   eliminarEmpresa(@Param('id') id: string, @Request() req: any) {
     return this.superadminService.eliminarEmpresa(+id, req.user.id);

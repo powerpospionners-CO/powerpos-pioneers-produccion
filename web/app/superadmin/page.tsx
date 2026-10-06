@@ -7,6 +7,9 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
+import { useNotificar } from '@/components/Notificaciones';
+
+type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean };
 
 const MODULOS = [
   { id: 'pos', label: 'POS y caja' },
@@ -100,8 +103,46 @@ export default function SuperadminPage() {
   ]);
   const [nuevaEmpresa, setNuevaEmpresa] = useState({ nombre: '', nit: '', email: '', telefono: '', direccion: '' });
 
+  const { aviso } = useNotificar();
+  const [adminsEmpresa, setAdminsEmpresa] = useState<AdministradorEmpresa[]>([]);
+  const [editandoAdminId, setEditandoAdminId] = useState<number | null>(null);
+  const [formAdmin, setFormAdmin] = useState({ nombre: '', email: '', password: '', activo: true });
+  const [guardandoAdmin, setGuardandoAdmin] = useState(false);
+
+  const cargarAdministradores = async (empresaId: number) => {
+    try {
+      const { data } = await api.get(`/superadmin/empresas/${empresaId}/administradores`);
+      setAdminsEmpresa(data);
+    } catch {
+      setAdminsEmpresa([]);
+    }
+  };
+
+  const abrirEdicionAdmin = (admin: AdministradorEmpresa) => {
+    setEditandoAdminId(admin.id);
+    setFormAdmin({ nombre: admin.nombre, email: admin.email, password: '', activo: admin.activo });
+  };
+
+  const guardarAdministrador = async (admin: AdministradorEmpresa) => {
+    setGuardandoAdmin(true);
+    try {
+      const cuerpo: Record<string, unknown> = { nombre: formAdmin.nombre, email: formAdmin.email, activo: formAdmin.activo };
+      if (formAdmin.password) cuerpo.password = formAdmin.password;
+      await api.patch(`/superadmin/administradores/${admin.id}`, cuerpo);
+      setEditandoAdminId(null);
+      aviso(formAdmin.password ? 'Administrador actualizado. La contraseña nueva ya quedó guardada.' : 'Administrador actualizado.', 'exito');
+      if (seleccionada) await cargarAdministradores(seleccionada.id);
+    } catch (e: any) {
+      aviso(e?.response?.data?.message || 'No se pudo actualizar el administrador.', 'error');
+    } finally {
+      setGuardandoAdmin(false);
+    }
+  };
+
   const seleccionarEmpresa = (empresa: Empresa) => {
     setSeleccionada(empresa);
+    setEditandoAdminId(null);
+    void cargarAdministradores(empresa.id);
     setPlan(empresa.plan);
     setTipoNegocio(empresa.tipoNegocio || 'RESTAURANTE');
     setPermisos(empresa.permisos || {});
@@ -330,6 +371,47 @@ export default function SuperadminPage() {
               <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm mt-4"><span>Catálogo de productos</span><input type="checkbox" checked={catalogoHabilitado} onChange={(event) => setCatalogoHabilitado(event.target.checked)} className="h-4 w-4 accent-orange-500" /></label>
               <p className="text-slate-500 text-xs mt-2">Catálogo tipo folleto (independiente del inventario) para compartir con distribuidores. Actívalo solo si la empresa lo pidió.</p>
               <div className="mt-6 space-y-2">{MODULOS.filter((modulo) => tipoNegocio === 'RESTAURANTE' || modulo.id !== 'cocina').map((modulo) => <label key={modulo.id} className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm"><span>{modulo.label}</span><input type="checkbox" checked={Boolean(permisos[modulo.id])} onChange={(event) => setPermisos((actuales) => ({ ...actuales, [modulo.id]: event.target.checked }))} className="h-4 w-4 accent-orange-500" /></label>)}</div>
+              <div className="mt-6 border-t border-slate-800 pt-5">
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Administradores de la empresa</p>
+                {adminsEmpresa.length === 0 ? (
+                  <p className="text-sm text-slate-500">Esta empresa no tiene administradores.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {adminsEmpresa.map((admin) => (
+                      <div key={admin.id} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                        {editandoAdminId === admin.id ? (
+                          <div className="space-y-3">
+                            <label className="block text-xs text-slate-400">Nombre
+                              <input value={formAdmin.nombre} onChange={(e) => setFormAdmin({ ...formAdmin, nombre: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                            </label>
+                            <label className="block text-xs text-slate-400">Usuario (correo)
+                              <input type="email" value={formAdmin.email} onChange={(e) => setFormAdmin({ ...formAdmin, email: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                            </label>
+                            <label className="block text-xs text-slate-400">Nueva contraseña <span className="text-slate-600">(déjala vacía para no cambiarla)</span>
+                              <input type="password" autoComplete="new-password" value={formAdmin.password} onChange={(e) => setFormAdmin({ ...formAdmin, password: e.target.value })} placeholder="Mínimo 6 caracteres" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-slate-300">
+                              <input type="checkbox" checked={formAdmin.activo} onChange={(e) => setFormAdmin({ ...formAdmin, activo: e.target.checked })} /> Puede entrar al sistema
+                            </label>
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => setEditandoAdminId(null)} className="flex-1 rounded-lg border border-slate-700 py-2 text-sm">Cancelar</button>
+                              <button type="button" disabled={guardandoAdmin} onClick={() => guardarAdministrador(admin)} className="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-bold text-white disabled:opacity-50">{guardandoAdmin ? 'Guardando...' : 'Guardar administrador'}</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="font-semibold text-sm">{admin.nombre}</div>
+                              <div className="text-xs text-slate-500 mt-1">{admin.email} · <span className={admin.activo ? 'text-emerald-400' : 'text-red-400'}>{admin.activo ? 'Puede entrar' : 'Bloqueado'}</span></div>
+                            </div>
+                            <button type="button" onClick={() => abrirEdicionAdmin(admin)} className="text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 hover:border-orange-500">Editar</button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button onClick={guardarConfiguracion} disabled={guardando} className="w-full mt-6 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2"><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar configuracion'}</button>
             </>}
           </aside>

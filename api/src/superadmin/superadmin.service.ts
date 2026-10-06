@@ -254,4 +254,57 @@ export class SuperadminService {
       take: 100,
     });
   }
+
+  async listarAdministradores(empresaId: number) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { id: true } });
+    if (!empresa) throw new NotFoundException('Empresa no encontrada');
+    return this.prisma.usuario.findMany({
+      where: { empresaId, rol: 'ADMIN_EMPRESA' },
+      select: { id: true, nombre: true, email: true, activo: true },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  async editarAdministrador(
+    usuarioId: number,
+    datos: { nombre?: string; email?: string; password?: string; activo?: boolean },
+    superadminId?: number,
+  ) {
+    const usuario = await this.prisma.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, rol: true, empresaId: true } });
+    if (!usuario || usuario.rol !== 'ADMIN_EMPRESA' || !usuario.empresaId) throw new NotFoundException('Administrador no encontrado');
+
+    const data: Record<string, unknown> = {};
+    if (datos.nombre !== undefined) {
+      const nombre = String(datos.nombre).trim();
+      if (!nombre) throw new BadRequestException('El nombre no puede quedar vacío');
+      data.nombre = nombre;
+    }
+    if (datos.email !== undefined) {
+      const email = String(datos.email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('El email no es válido');
+      const existente = await this.prisma.usuario.findUnique({ where: { email }, select: { id: true } });
+      if (existente && existente.id !== usuarioId) throw new ConflictException('Ya existe un usuario con ese email');
+      data.email = email;
+    }
+    if (datos.password) {
+      if (datos.password.length < 6) throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+      data.password = await bcrypt.hash(datos.password, 10);
+    }
+    if (datos.activo !== undefined) data.activo = !!datos.activo;
+
+    const actualizado = await this.prisma.usuario.update({
+      where: { id: usuarioId },
+      data,
+      select: { id: true, nombre: true, email: true, activo: true },
+    });
+    await this.auditoria.registrar({
+      accion: 'EDITAR',
+      entidad: 'USUARIO',
+      entidadId: usuarioId,
+      empresaId: usuario.empresaId,
+      usuarioId: superadminId,
+      detalle: { campos: Object.keys(data).filter((c) => c !== 'password'), cambioPassword: !!datos.password },
+    });
+    return actualizado;
+  }
 }
