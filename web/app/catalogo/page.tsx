@@ -6,6 +6,10 @@ import {
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import { useAuthStore } from '@/store/authStore';
+
+const ORIGENES = [['MEXICANO', 'Mexicano'], ['PERUANO', 'Peruano']] as const;
+const USOS = [['RESTAURANTE', 'Restaurantes'], ['TIENDA', 'Tiendas'], ['SUPERMERCADO', 'Supermercados'], ['MAYORISTA', 'Mayoristas']] as const;
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com';
 
@@ -18,14 +22,19 @@ interface ItemCatalogo {
   categoria: string | null;
   imagen: string | null;
   activo: boolean;
+  origen: string | null;
+  usos: string[];
+  ocultoWeb: boolean;
 }
 
 export default function CatalogoPage() {
+  const usuario = useAuthStore((state) => state.usuario);
+  const esEnchilaMarket = usuario?.empresaId === 2;
   const [items, setItems] = useState<ItemCatalogo[]>([]);
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState<ItemCatalogo | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ nombre: '', categoria: '', presentacion: '', precio: '', descripcion: '' });
+  const [form, setForm] = useState({ nombre: '', categoria: '', presentacion: '', precio: '', descripcion: '', origen: '', usos: [] as string[] });
   const [archivoImagen, setArchivoImagen] = useState<File | null>(null);
   const [previewImagen, setPreviewImagen] = useState('');
 
@@ -39,6 +48,9 @@ export default function CatalogoPage() {
   const [fotosPublicas, setFotosPublicas] = useState(true);
   const [cambiandoFotosPublicas, setCambiandoFotosPublicas] = useState(false);
   const [categoria, setCategoria] = useState('Todos');
+  const [origenFiltro, setOrigenFiltro] = useState('Todos');
+  const [usoFiltro, setUsoFiltro] = useState('Todos');
+  const [ocultandoSinFoto, setOcultandoSinFoto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
   const [modalImagenes, setModalImagenes] = useState(false);
@@ -79,11 +91,13 @@ export default function CatalogoPage() {
         presentacion: item.presentacion || '',
         precio: item.precio ? String(item.precio) : '',
         descripcion: item.descripcion || '',
+        origen: item.origen || '',
+        usos: item.usos || [],
       });
       setPreviewImagen(item.imagen || '');
     } else {
       setEditando(null);
-      setForm({ nombre: '', categoria: '', presentacion: '', precio: '', descripcion: '' });
+      setForm({ nombre: '', categoria: '', presentacion: '', precio: '', descripcion: '', origen: '', usos: [] });
       setPreviewImagen('');
     }
     setArchivoImagen(null);
@@ -107,6 +121,7 @@ export default function CatalogoPage() {
         presentacion: form.presentacion || null,
         precio: form.precio ? Number(form.precio) : null,
         descripcion: form.descripcion || null,
+        ...(esEnchilaMarket ? { origen: form.origen || null, usos: form.usos } : {}),
       };
       const { data: guardado } = editando
         ? await api.patch(`/catalogo/${editando.id}`, payload)
@@ -269,6 +284,8 @@ export default function CatalogoPage() {
   const visibles = items.filter(
     (i) =>
       (categoria === 'Todos' || i.categoria === categoria) &&
+      (origenFiltro === 'Todos' || (origenFiltro === 'SIN' ? !i.origen : i.origen === origenFiltro)) &&
+      (usoFiltro === 'Todos' || (i.usos || []).includes(usoFiltro)) &&
       i.nombre.toLowerCase().includes(busqueda.toLowerCase()),
   );
 
@@ -349,6 +366,24 @@ export default function CatalogoPage() {
                 {fotosPublicas ? <Eye size={16} /> : <EyeOff size={16} />}
                 {fotosPublicas ? 'Fotos visibles en la web' : 'Fotos ocultas en la web'}
               </button>
+              {esEnchilaMarket && (
+                <button
+                  onClick={async () => {
+                    setOcultandoSinFoto(true);
+                    try {
+                      const { data } = await api.post('/catalogo/ocultar-sin-foto');
+                      alert(`${data.ocultados} producto(s) sin foto ocultados de la web. ${data.mostrados} con foto visibles en la web.`);
+                      cargarDatos();
+                    } finally {
+                      setOcultandoSinFoto(false);
+                    }
+                  }}
+                  disabled={ocultandoSinFoto}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 transition-colors"
+                >
+                  {ocultandoSinFoto ? 'Revisando...' : 'Ocultar sin foto en la web'}
+                </button>
+              )}
               {items.length > 0 && (
                 <button
                   onClick={eliminarTodos}
@@ -402,6 +437,17 @@ export default function CatalogoPage() {
                 </div>
               </div>
 
+              {esEnchilaMarket && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                  {([['Todos', 'Todos los orígenes'], ['MEXICANO', 'Mexicano'], ['PERUANO', 'Peruano'], ['SIN', 'Sin clasificar']] as const).map(([valor, etiqueta]) => (
+                    <button key={valor} onClick={() => setOrigenFiltro(valor)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${origenFiltro === valor ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30' : 'bg-gray-800 text-gray-400 border border-transparent hover:text-white'}`}>{etiqueta}</button>
+                  ))}
+                  <span className="text-gray-600 px-1">|</span>
+                  {([['Todos', 'Todos los usos'], ...USOS] as const).map(([valor, etiqueta]) => (
+                    <button key={valor} onClick={() => setUsoFiltro(valor)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${usoFiltro === valor ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30' : 'bg-gray-800 text-gray-400 border border-transparent hover:text-white'}`}>{etiqueta}</button>
+                  ))}
+                </div>
+              )}
               {visibles.length === 0 ? (
                 <div className="text-center text-gray-500 py-20">
                   No hay productos que coincidan con ese filtro.
@@ -515,6 +561,28 @@ export default function CatalogoPage() {
                     />
                   </div>
                 </div>
+                {esEnchilaMarket && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Origen</label>
+                      <select value={form.origen} onChange={(e) => setForm({ ...form, origen: e.target.value })} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">
+                        <option value="">Sin clasificar</option>
+                        {ORIGENES.map(([valor, etiqueta]) => (<option key={valor} value={valor}>{etiqueta}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Se usa para</label>
+                      <div className="flex flex-col gap-1 text-sm text-gray-300">
+                        {USOS.map(([valor, etiqueta]) => (
+                          <label key={valor} className="flex items-center gap-2">
+                            <input type="checkbox" checked={form.usos.includes(valor)} onChange={(e) => setForm({ ...form, usos: e.target.checked ? [...form.usos, valor] : form.usos.filter((u) => u !== valor) })} />
+                            {etiqueta}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Descripción (opcional)</label>
                   <textarea

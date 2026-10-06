@@ -98,6 +98,20 @@ function textoOpcional(valor: unknown, campo: string, max: number, requerido = f
   return limpio;
 }
 
+const ORIGENES_VALIDOS = new Set(["MEXICANO", "PERUANO"]);
+const USOS_VALIDOS = new Set(["RESTAURANTE", "TIENDA", "SUPERMERCADO", "MAYORISTA"]);
+
+function validarOrigenYUsos(origen: unknown, usos: unknown): { origen: string | null; usos: string[] } {
+  let origenLimpio: string | null = null;
+  if (origen !== undefined && origen !== null && origen !== "") {
+    if (!ORIGENES_VALIDOS.has(String(origen))) throw new BadRequestException("El origen debe ser MEXICANO o PERUANO");
+    origenLimpio = String(origen);
+  }
+  const usosLimpios = Array.isArray(usos) ? usos.map(String) : [];
+  if (usosLimpios.some((u) => !USOS_VALIDOS.has(u))) throw new BadRequestException("Uso no válido");
+  return { origen: origenLimpio, usos: [...new Set(usosLimpios)] };
+}
+
 @Injectable()
 export class CatalogoService {
   constructor(private prisma: PrismaService) {}
@@ -123,7 +137,7 @@ export class CatalogoService {
     const descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     const precio = this.validarPrecio(datos.precio);
     return this.prisma.catalogoProducto.create({
-      data: { empresaId, nombre, categoria, presentacion, descripcion, precio },
+      data: { empresaId, nombre, categoria, presentacion, descripcion, precio, ...(datos.origen !== undefined || datos.usos !== undefined ? validarOrigenYUsos(datos.origen, datos.usos) : {}) },
     });
   }
 
@@ -150,6 +164,7 @@ export class CatalogoService {
     if (datos.descripcion !== undefined) data.descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     if (datos.precio !== undefined) data.precio = this.validarPrecio(datos.precio);
     if (datos.activo !== undefined) data.activo = !!datos.activo;
+    if (datos.origen !== undefined || datos.usos !== undefined) Object.assign(data, validarOrigenYUsos(datos.origen, datos.usos));
     if (datos.orden !== undefined) data.orden = Number.isInteger(datos.orden) ? datos.orden : 0;
     return this.prisma.catalogoProducto.update({ where: { id }, data });
   }
@@ -502,6 +517,17 @@ export class CatalogoService {
     return empresa;
   }
 
+  // Oculta de la web los productos que no tienen foto, y los vuelve a mostrar
+  // los que ya la tienen (así se puede correr de nuevo después de subir fotos).
+  async ocultarSinFoto(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    const [ocultados, mostrados] = await Promise.all([
+      this.prisma.catalogoProducto.updateMany({ where: { empresaId, imagen: null }, data: { ocultoWeb: true } }),
+      this.prisma.catalogoProducto.updateMany({ where: { empresaId, imagen: { not: null } }, data: { ocultoWeb: false } }),
+    ]);
+    return { ocultados: ocultados.count, mostrados: mostrados.count };
+  }
+
   // El admin puede ocultar las fotos del catálogo en la vista pública (ej.
   // mientras las está organizando) sin perderlas — siguen guardadas y
   // visibles en el panel interno de /catalogo.
@@ -513,7 +539,7 @@ export class CatalogoService {
   async catalogoPublico(slug: string) {
     const empresa = await this.empresaPorSlug(slug);
     const items = await this.prisma.catalogoProducto.findMany({
-      where: { empresaId: empresa.id, activo: true },
+      where: { empresaId: empresa.id, activo: true, ocultoWeb: false },
       orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
     });
     const color = (empresa.tiendaConfig as any)?.color || '#0f766e';
@@ -541,7 +567,7 @@ export class CatalogoService {
   async generarPDFPublico(slug: string) {
     const empresa = await this.empresaPorSlug(slug);
     const items = await this.prisma.catalogoProducto.findMany({
-      where: { empresaId: empresa.id, activo: true },
+      where: { empresaId: empresa.id, activo: true, ocultoWeb: false },
       orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
     });
     const color = (empresa.tiendaConfig as any)?.color || '#0f766e';

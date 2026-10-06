@@ -12,6 +12,8 @@ type Producto = {
   precio: string | null;
   categoria: string | null;
   imagen: string | null;
+  origen: string | null;
+  usos: string[];
 };
 type Catalogo = {
   nombre: string;
@@ -32,6 +34,8 @@ export default function CatalogoPublicoPage() {
   const [error, setError] = useState("");
   const [categoria, setCategoria] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
+  const [origen, setOrigen] = useState("Todos");
+  const [uso, setUso] = useState("Todos");
 
   useEffect(() => {
     setCargando(true);
@@ -61,9 +65,15 @@ export default function CatalogoPublicoPage() {
   }
 
   const cats = ["Todos", ...Array.from(new Set(catalogo.productos.map((p) => p.categoria).filter(Boolean) as string[]))];
+  const tieneOrigenes = catalogo.productos.some((p) => p.origen);
+  const tieneUsos = catalogo.productos.some((p) => p.usos?.length);
+  const etiquetasOrigen: Record<string, string> = { MEXICANO: "Mexicano", PERUANO: "Peruano" };
+  const etiquetasUso: Record<string, string> = { RESTAURANTE: "Restaurantes", TIENDA: "Tiendas", SUPERMERCADO: "Supermercados", MAYORISTA: "Mayoristas" };
   const visibles = catalogo.productos.filter(
     (p) =>
       (categoria === "Todos" || p.categoria === categoria) &&
+      (origen === "Todos" || p.origen === origen) &&
+      (uso === "Todos" || (p.usos || []).includes(uso)) &&
       p.nombre.toLowerCase().includes(busqueda.toLowerCase()),
   );
 
@@ -87,6 +97,24 @@ export default function CatalogoPublicoPage() {
       </header>
 
       <div className="catalogo-filtros">
+        {tieneOrigenes && (
+          <div className="catalogo-categorias">
+            {["Todos", "MEXICANO", "PERUANO"].map((o) => (
+              <button key={o} aria-pressed={origen === o} onClick={() => setOrigen(o)}>
+                {o === "Todos" ? "Todos los orígenes" : etiquetasOrigen[o]}
+              </button>
+            ))}
+          </div>
+        )}
+        {tieneUsos && (
+          <div className="catalogo-categorias">
+            {["Todos", "RESTAURANTE", "TIENDA", "SUPERMERCADO", "MAYORISTA"].map((u) => (
+              <button key={u} aria-pressed={uso === u} onClick={() => setUso(u)}>
+                {u === "Todos" ? "Todos los usos" : etiquetasUso[u]}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="catalogo-categorias">
           {cats.map((c) => (
             <button key={c} aria-pressed={categoria === c} onClick={() => setCategoria(c)}>

@@ -82,6 +82,12 @@ export class CatalogoController {
     return this.catalogoService.sincronizarPreciosDesdeProductos(req.user.empresaId);
   }
 
+  @Post('ocultar-sin-foto')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  ocultarSinFoto(@Request() req: any) {
+    return this.catalogoService.ocultarSinFoto(req.user.empresaId);
+  }
+
   @Patch('fotos-publicas')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   actualizarFotosPublicas(@Body() body: any, @Request() req: any) {

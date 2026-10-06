@@ -1,0 +1,1 @@
+ALTER TABLE "catalogo_productos" ADD COLUMN "origen" TEXT, ADD COLUMN "usos" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[], ADD COLUMN "ocultoWeb" BOOLEAN NOT NULL DEFAULT false;

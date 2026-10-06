@@ -89,6 +89,12 @@ model CatalogoProducto {
   imagen        String?
   orden         Int      @default(0)
   activo        Boolean  @default(true)
+  // Origen del producto ("MEXICANO" | "PERUANO" | null = sin clasificar).
+  origen        String?
+  // Para qué tipo de cliente sirve: RESTAURANTE, TIENDA, SUPERMERCADO, MAYORISTA (puede ser más de uno).
+  usos          String[] @default([])
+  // Se oculta solo de la página pública (el panel interno lo sigue mostrando).
+  ocultoWeb     Boolean  @default(false)
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
 
