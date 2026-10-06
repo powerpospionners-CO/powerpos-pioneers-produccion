@@ -73,12 +73,27 @@ interface Producto {
   stockActual: number;
   stockMinimo: number;
   ventaGranel?: boolean;
+  unidadGranel?: string | null;
   esCombo?: boolean;
   componentesCombo?: ComboComponente[];
   categoria: Categoria;
   ingredientes: { ingrediente: { id: number; nombre: string; unidad: string }; cantidad: string }[];
   adicionales: { adicional: { id: number; nombre: string; precio: string } }[];
   presentaciones?: Presentacion[];
+}
+
+// Para un producto a granel, precio y stock siempre se guardan en la
+// unidad base de su familia (gramos o mililitros) — kg/l son solo para
+// que el admin cargue y vea el producto en la unidad que le resulte más
+// natural. FACTOR_UNIDAD_GRANEL convierte esa unidad a la base.
+const FACTOR_UNIDAD_GRANEL: Record<string, number> = { g: 1, kg: 1000, ml: 1, l: 1000 };
+const ETIQUETA_UNIDAD_GRANEL: Record<string, string> = { g: 'Gramos', kg: 'Kilogramos', ml: 'Mililitros', l: 'Litros' };
+
+function textoStockGranel(producto: { stockActual: number; unidadGranel?: string | null }): string {
+  const unidad = producto.unidadGranel || 'g';
+  const factor = FACTOR_UNIDAD_GRANEL[unidad] || 1;
+  const valor = Math.round((producto.stockActual / factor) * 100) / 100;
+  return `${valor} ${unidad}`;
 }
 
 const ICONOS_CATEGORIA_RESTAURANTE = [
@@ -390,6 +405,7 @@ export default function ProductosPage() {
     stockActual: '0',
     stockMinimo: '0',
     ventaGranel: false,
+    unidadGranel: 'g',
     esCombo: false,
   });
   const [archivoImagenProducto, setArchivoImagenProducto] = useState<File | null>(null);
@@ -434,10 +450,15 @@ export default function ProductosPage() {
       const costoInicial = producto.costo ? Number(producto.costo) : 0;
       const precioInicial = Number(producto.precio) || 0;
       const margenInicial = costoInicial > 0 && precioInicial > 0 ? ((precioInicial - costoInicial) / costoInicial) * 100 : 0;
+      const unidadGranel = producto.unidadGranel || 'g';
+      const factorGranel = FACTOR_UNIDAD_GRANEL[unidadGranel] || 1;
+      // precio/stock vienen del servidor en la unidad base (g o ml); se
+      // convierten a la unidad elegida (ej. kg) solo para mostrarlos en el
+      // formulario — se vuelve a convertir a la base al guardar.
       setForm({
         nombre: producto.nombre,
         descripcion: producto.descripcion || '',
-        precio: producto.precio,
+        precio: producto.ventaGranel ? String(Number(producto.precio) * factorGranel) : producto.precio,
         costo: producto.costo ? String(producto.costo) : '',
         margenDeseado: margenInicial > 0 ? String(Math.round(margenInicial * 10) / 10) : '',
         categoriaId: String(producto.categoria.id),
@@ -445,9 +466,10 @@ export default function ProductosPage() {
         aceptaAdicionales: producto.aceptaAdicionales ?? true,
         codigoBarras: producto.codigoBarras || '',
         controlaStock: producto.controlaStock ?? false,
-        stockActual: String(producto.stockActual ?? 0),
-        stockMinimo: String(producto.stockMinimo ?? 0),
+        stockActual: producto.ventaGranel ? String((producto.stockActual ?? 0) / factorGranel) : String(producto.stockActual ?? 0),
+        stockMinimo: producto.ventaGranel ? String((producto.stockMinimo ?? 0) / factorGranel) : String(producto.stockMinimo ?? 0),
         ventaGranel: producto.ventaGranel ?? false,
+        unidadGranel,
         esCombo: producto.esCombo ?? false,
       });
       setRecetaTemp(
@@ -462,7 +484,7 @@ export default function ProductosPage() {
       setPreviewImagenProducto(producto.imagen || '');
     } else {
       setEditando(null);
-      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0', ventaGranel: false, esCombo: false });
+      setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0', ventaGranel: false, unidadGranel: 'g', esCombo: false });
       setRecetaTemp([]);
       setAdicionalIdsTemp([]);
       setPreviewImagenProducto('');
@@ -597,15 +619,29 @@ export default function ProductosPage() {
           stockMinimo: r.stockMinimo ? Number(r.stockMinimo) : 0,
         }));
 
+      // El formulario muestra precio/stock en la unidad elegida (ej. kg);
+      // se convierten a la unidad base (g o ml) antes de guardar, que es
+      // como el servidor siempre los espera.
+      const factorGranelGuardar = form.ventaGranel ? (FACTOR_UNIDAD_GRANEL[form.unidadGranel] || 1) : 1;
       const payload: any = {
         nombre: form.nombre,
         descripcion: form.descripcion,
-        precio: Number(form.precio),
+        precio: factorGranelGuardar !== 1 ? Number(form.precio) / factorGranelGuardar : Number(form.precio),
         categoriaId: Number(form.categoriaId),
         disponible: form.disponible,
         aceptaAdicionales: form.aceptaAdicionales,
         adicionalIds: adicionalIdsTemp,
-        ...(!esRestaurante ? { costo: form.costo ? Number(form.costo) : null, codigoBarras: form.codigoBarras, controlaStock: form.controlaStock, stockActual: Number(form.stockActual), stockMinimo: Number(form.stockMinimo), aceptaAdicionales: false, ventaGranel: form.ventaGranel, esCombo: form.esCombo } : {}),
+        ...(!esRestaurante ? {
+          costo: form.costo ? Number(form.costo) : null,
+          codigoBarras: form.codigoBarras,
+          controlaStock: form.controlaStock,
+          stockActual: Math.round(Number(form.stockActual) * factorGranelGuardar),
+          stockMinimo: Math.round(Number(form.stockMinimo) * factorGranelGuardar),
+          aceptaAdicionales: false,
+          ventaGranel: form.ventaGranel,
+          unidadGranel: form.ventaGranel ? form.unidadGranel : null,
+          esCombo: form.esCombo,
+        } : {}),
       };
       if (ingredientesPayload.length > 0) {
         payload.ingredientes = ingredientesPayload;
@@ -887,7 +923,7 @@ export default function ProductosPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-gray-500 text-xs">
-                      {esRestaurante ? `${producto.ingredientes?.length || 0} ingredientes` : `${producto.codigoBarras || 'Sin código'} · ${producto.controlaStock ? `${producto.stockActual} ${producto.ventaGranel ? 'g' : 'unidades'}` : 'Sin control'}`}
+                      {esRestaurante ? `${producto.ingredientes?.length || 0} ingredientes` : `${producto.codigoBarras || 'Sin código'} · ${producto.controlaStock ? (producto.ventaGranel ? textoStockGranel(producto) : `${producto.stockActual} unidades`) : 'Sin control'}`}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -1009,7 +1045,7 @@ export default function ProductosPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">{form.ventaGranel ? 'Precio por gramo' : 'Precio'}</label>
+                  <label className="block text-sm text-gray-400 mb-1">{form.ventaGranel ? `Precio por ${ETIQUETA_UNIDAD_GRANEL[form.unidadGranel].toLowerCase().replace(/s$/, '')}` : 'Precio'}</label>
                   <input
                     type="number"
                     value={form.precio}
@@ -1087,16 +1123,43 @@ export default function ProductosPage() {
                     <label className="block text-sm text-gray-400">Código de barras o SKU<input value={form.codigoBarras} onChange={(e) => setForm({ ...form, codigoBarras: e.target.value })} placeholder="Escanea o escribe el código" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
                     <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={form.controlaStock} onChange={(e) => setForm({ ...form, controlaStock: e.target.checked })} /> Controlar existencias</label>
                     <div className="grid grid-cols-2 gap-3">
-                      <label className="text-sm text-gray-400">Existencias actuales{form.ventaGranel ? ' (gramos)' : ''}<input type="number" min="0" step="1" value={form.stockActual} onChange={(e) => setForm({ ...form, stockActual: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
-                      <label className="text-sm text-gray-400">Mínimo para alerta{form.ventaGranel ? ' (gramos)' : ''}<input type="number" min="0" step="1" value={form.stockMinimo} onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
+                      <label className="text-sm text-gray-400">Existencias actuales{form.ventaGranel ? ` (${ETIQUETA_UNIDAD_GRANEL[form.unidadGranel].toLowerCase()})` : ''}<input type="number" min="0" step={form.ventaGranel ? '0.01' : '1'} value={form.stockActual} onChange={(e) => setForm({ ...form, stockActual: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
+                      <label className="text-sm text-gray-400">Mínimo para alerta{form.ventaGranel ? ` (${ETIQUETA_UNIDAD_GRANEL[form.unidadGranel].toLowerCase()})` : ''}<input type="number" min="0" step={form.ventaGranel ? '0.01' : '1'} value={form.stockMinimo} onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
                     </div>
                     <p className="text-xs text-gray-500">Las existencias se reducen al registrar la venta. Edita este valor al recibir mercancía.</p>
                     <label className="flex items-start gap-2 rounded-lg border border-gray-700 bg-gray-800/50 p-3 text-sm text-gray-300">
                       <input type="checkbox" checked={form.ventaGranel} onChange={(e) => setForm({ ...form, ventaGranel: e.target.checked })} className="mt-0.5" />
-                      <span>Se vende al granel (por gramos)
-                        <span className="block text-xs text-gray-500">El cajero pesa la cantidad exacta que pide el cliente. El precio de arriba pasa a ser por gramo y las existencias se cuentan en gramos. Puede combinarse con presentaciones empacadas (ej. bolsas de 250 g).</span>
+                      <span>Se vende al granel (por peso o volumen)
+                        <span className="block text-xs text-gray-500">El cajero pesa o mide la cantidad exacta que pide el cliente. El precio y las existencias de arriba pasan a ser por la unidad elegida abajo. Puede combinarse con presentaciones empacadas (ej. bolsas de 250 g).</span>
                       </span>
                     </label>
+                    {form.ventaGranel && (
+                      <label className="block text-sm text-gray-400">Unidad de medida
+                        <select
+                          value={form.unidadGranel}
+                          onChange={(e) => {
+                            const nuevaUnidad = e.target.value;
+                            const factorAnterior = FACTOR_UNIDAD_GRANEL[form.unidadGranel] || 1;
+                            const factorNuevo = FACTOR_UNIDAD_GRANEL[nuevaUnidad] || 1;
+                            const precioBase = Number(form.precio || 0) / factorAnterior;
+                            const stockBase = Number(form.stockActual || 0) * factorAnterior;
+                            const stockMinBase = Number(form.stockMinimo || 0) * factorAnterior;
+                            setForm({
+                              ...form,
+                              unidadGranel: nuevaUnidad,
+                              precio: String(precioBase * factorNuevo),
+                              stockActual: String(stockBase / factorNuevo),
+                              stockMinimo: String(stockMinBase / factorNuevo),
+                            });
+                          }}
+                          className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
+                        >
+                          {Object.entries(ETIQUETA_UNIDAD_GRANEL).map(([valor, etiqueta]) => (
+                            <option key={valor} value={valor}>{etiqueta}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     <label className="flex items-start gap-2 rounded-lg border border-gray-700 bg-gray-800/50 p-3 text-sm text-gray-300">
                       <input type="checkbox" checked={form.esCombo} onChange={(e) => setForm({ ...form, esCombo: e.target.checked, controlaStock: e.target.checked ? false : form.controlaStock })} className="mt-0.5" />
                       <span>Es una canasta/combo (agrupa varios productos)

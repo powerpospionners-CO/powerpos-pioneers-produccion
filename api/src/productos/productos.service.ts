@@ -44,6 +44,11 @@ const SINONIMOS_COLUMNAS: Record<string, string[]> = {
 
 const VALORES_AFIRMATIVOS = new Set(['si', 'x', 'true', '1', 'yes']);
 
+// Unidades válidas para `unidadGranel` — precio y stockActual siempre se
+// guardan en la unidad base de la familia (g o ml); kg/l son solo para que
+// el admin cargue y vea el producto en la unidad que le resulte más natural.
+const UNIDADES_GRANEL = new Set(['g', 'kg', 'ml', 'l']);
+
 @Injectable()
 export class ProductosService {
   constructor(
@@ -77,6 +82,9 @@ export class ProductosService {
     if (datos.categoriaId !== undefined) {
       const categoria = await this.prisma.categoria.findFirst({ where: { id: Number(datos.categoriaId), empresaId, activo: true }, select: { id: true } });
       if (!categoria) throw new BadRequestException('La categoría no pertenece a esta empresa');
+    }
+    if (datos.unidadGranel !== undefined && datos.unidadGranel !== null && !UNIDADES_GRANEL.has(datos.unidadGranel)) {
+      throw new BadRequestException('La unidad de medida para venta a granel debe ser g, kg, ml o l');
     }
   }
 

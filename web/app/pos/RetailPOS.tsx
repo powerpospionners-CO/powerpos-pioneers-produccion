@@ -17,7 +17,7 @@ import { guardarCajaOffline, guardarCatalogoOffline, leerCajaOffline, leerCatalo
 type Presentacion = { id: number; nombre: string; factorUnidades: number; precio: string; codigoBarras?: string | null };
 type Producto = {
   id: number; nombre: string; precio: string; codigoBarras?: string | null;
-  disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number; ventaGranel?: boolean;
+  disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number; ventaGranel?: boolean; unidadGranel?: string | null;
   categoria: { id: number; nombre: string; icono?: string; parentId?: number | null };
   presentaciones?: Presentacion[];
 };
@@ -30,10 +30,17 @@ type Producto = {
 type ItemVendible = {
   key: string; productoId: number; presentacionId: number | null;
   nombre: string; precio: number; codigoBarras: string | null;
-  controlaStock: boolean; factorUnidades: number; stockBase: number; porGramo: boolean;
+  controlaStock: boolean; factorUnidades: number; stockBase: number; porGramo: boolean; unidadGranel: string;
   categoria: { icono?: string; nombre?: string };
 };
 type Linea = { item: ItemVendible; cantidad: number };
+// El precio y el stock de un producto al granel siempre están guardados en
+// la unidad base de su familia (gramos o mililitros) — en el POS el cajero
+// pesa/mide y escribe la cantidad en esa unidad base, aunque en Productos
+// el admin haya elegido cargarlo en kg o L. Esto solo traduce esa elección
+// a la unidad base correcta para mostrarla (ej. "ml" en vez de "g" para un
+// líquido), sin convertir números.
+const UNIDAD_BASE_GRANEL: Record<string, string> = { g: 'g', kg: 'g', ml: 'ml', l: 'ml' };
 type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalVentas?: number; totalEfectivo?: number; totalEsperado?: number };
 
 export default function RetailPOS() {
@@ -195,6 +202,7 @@ export default function RetailPOS() {
         factorUnidades: 1,
         stockBase: producto.stockActual,
         porGramo: true,
+        unidadGranel: UNIDAD_BASE_GRANEL[producto.unidadGranel || 'g'] || 'g',
         categoria: producto.categoria,
       });
     }
@@ -211,6 +219,7 @@ export default function RetailPOS() {
         factorUnidades: p.factorUnidades,
         stockBase: producto.stockActual,
         porGramo: false,
+        unidadGranel: 'g',
         categoria: producto.categoria,
       })));
     }
@@ -232,6 +241,7 @@ export default function RetailPOS() {
         factorUnidades: 1,
         stockBase: producto.stockActual,
         porGramo: false,
+        unidadGranel: 'g',
         categoria: producto.categoria,
       });
     }
@@ -468,9 +478,9 @@ export default function RetailPOS() {
                   <div className="text-2xl">{item.categoria?.icono || '📦'}</div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-white">{item.nombre}</div>
-                    <div className="text-xs text-gray-500">{item.codigoBarras || item.categoria?.nombre}{item.controlaStock ? ` · Existencias: ${Math.floor(item.stockBase / item.factorUnidades)}${item.porGramo ? ' g' : ''}` : ''}</div>
+                    <div className="text-xs text-gray-500">{item.codigoBarras || item.categoria?.nombre}{item.controlaStock ? ` · Existencias: ${Math.floor(item.stockBase / item.factorUnidades)}${item.porGramo ? ` ${item.unidadGranel}` : ''}` : ''}</div>
                   </div>
-                  <div className="font-bold text-orange-500">{moneda(item.precio)}{item.porGramo ? '/g' : ''}</div>
+                  <div className="font-bold text-orange-500">{moneda(item.precio)}{item.porGramo ? `/${item.unidadGranel}` : ''}</div>
                 </button>
               ))}
               {!visible.length && <div className="py-14 text-center text-gray-400">No hay productos con existencias que coincidan.</div>}
@@ -483,7 +493,7 @@ export default function RetailPOS() {
                   <div className="flex justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-white">{item.nombre}</div>
-                      <div className="text-xs text-gray-400">{moneda(item.precio)} {item.porGramo ? 'por gramo' : 'por unidad'}</div>
+                      <div className="text-xs text-gray-400">{moneda(item.precio)} {item.porGramo ? `por ${item.unidadGranel === 'ml' ? 'mililitro' : 'gramo'}` : 'por unidad'}</div>
                     </div>
                     <button aria-label={`Quitar ${item.nombre}`} onClick={() => setCarrito((actual) => actual.filter((linea) => linea.item.key !== item.key))} className="shrink-0 text-gray-400 hover:text-red-400"><Trash2 size={16} /></button>
                   </div>
@@ -504,7 +514,7 @@ export default function RetailPOS() {
                         onFocus={(e) => e.target.select()}
                         className="w-14 rounded bg-gray-900 border border-gray-700 py-1 text-center text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
-                      {item.porGramo && <span className="text-xs text-gray-400">g</span>}
+                      {item.porGramo && <span className="text-xs text-gray-400">{item.unidadGranel}</span>}
                       <button aria-label={`Aumentar ${item.nombre}`} onClick={() => cambiarCantidad(item, 1)} className="rounded bg-gray-700 p-1"><Plus size={15} /></button>
                     </div>
                     <strong>{moneda(item.precio * cantidad)}</strong>

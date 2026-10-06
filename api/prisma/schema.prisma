@@ -200,6 +200,12 @@ model Producto {
   // las presentaciones — el cajero simplemente escribe los gramos en el
   // campo de cantidad del POS.
   ventaGranel   Boolean  @default(false)
+  // Unidad en la que el admin carga y ve el stock/precio de un producto a
+  // granel: "g" o "kg" (familia de peso) / "ml" o "l" (familia de volumen).
+  // `precio` y `stockActual` SIEMPRE quedan guardados en la unidad base de
+  // esa familia (gramos o mililitros) — kg/l solo se convierten al mostrar
+  // o al guardar desde el formulario. null = gramos, por compatibilidad.
+  unidadGranel  String?
   // Es una canasta/combo: se vende como un solo producto pero está armado
   // con otros productos existentes (ver ComboComponente). Al venderla se
   // descuenta el stock de cada componente, no el de este producto — por eso
