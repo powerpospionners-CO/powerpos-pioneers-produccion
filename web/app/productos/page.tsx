@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
@@ -668,6 +668,12 @@ export default function ProductosPage() {
     }
   };
 
+  const quitarImagen = async (producto: Producto) => {
+    if (!window.confirm(`¿Quitar la imagen de "${producto.nombre}"? El producto queda sin foto.`)) return;
+    await api.patch(`/productos/${producto.id}`, { imagen: null });
+    cargarDatos();
+  };
+
   const eliminar = async (id: number) => {
     abrirConfirmacion(
       'Eliminar producto',
@@ -928,6 +934,15 @@ export default function ProductosPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
+                      {producto.imagen && (
+                        <button
+                          onClick={() => quitarImagen(producto)}
+                          title="Quitar imagen"
+                          className="text-gray-500 hover:text-yellow-400 transition-colors"
+                        >
+                          <ImageOff size={16} />
+                        </button>
+                      )}
                       <button
                         onClick={() => abrirModal(producto)}
                         className="text-gray-500 hover:text-white transition-colors"
