@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Plus, Trash2, X, Banknote, CreditCard, ArrowLeftRight, Smartphone } from 'lucide-react';
 import { moneda } from '@/lib/formato';
-import CalculadoraBilletes from './CalculadoraBilletes';
+import MontoRecibido from './MontoRecibido';
 
 const METODOS = [
   { value: 'EFECTIVO', label: 'Efectivo', icono: Banknote },
@@ -133,7 +133,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
             </div>
             <div className="min-w-0">
               {metodoUnico === 'EFECTIVO' ? (
-                <CalculadoraBilletes key="unico" objetivo={total} onCambiar={setRecibidoUnico} />
+                <MontoRecibido key="unico" objetivo={total} onCambiar={setRecibidoUnico} />
               ) : (
                 <div className="flex min-h-96 flex-col items-center justify-center rounded-2xl border border-gray-700 bg-gray-950 p-5 text-center sm:p-8">
                   <MarcaPago metodo={metodoUnico === 'TRANSFERENCIA' ? bancoTransferencia : metodoUnico} grande />
@@ -193,7 +193,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
               {Math.abs(resta) > 0.01 ? `Falta asignar ${moneda(resta)}` : 'Los pagos cubren el total ✓'}
             </div>
             {indiceEfectivoMixto >= 0 && (
-              <CalculadoraBilletes key={`mixto-${indiceEfectivoMixto}`} objetivo={montoEfectivoMixto} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
+              <MontoRecibido key={`mixto-${indiceEfectivoMixto}`} objetivo={montoEfectivoMixto} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
             )}
           </div>
         )}
