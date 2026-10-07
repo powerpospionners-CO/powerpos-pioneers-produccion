@@ -49,7 +49,10 @@ self.addEventListener('fetch', (event) => {
           // quedar bloqueado y el clone() falla.
           if (respuesta.ok) {
             const copia = respuesta.clone();
-            caches.open(VERSION).then((cache) => cache.put(request, copia));
+            // Guardar en caché es solo una optimización en segundo plano: si
+            // la conexión se corta mientras se guarda, no debe romper nada
+            // ni ensuciar la consola — la página ya recibió la respuesta real.
+            caches.open(VERSION).then((cache) => cache.put(request, copia)).catch(() => {});
           }
           return respuesta;
         }).catch(() => cacheada);
