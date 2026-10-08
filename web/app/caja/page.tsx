@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { moneda } from '@/lib/formato';
+import { useNotificar } from '@/components/Notificaciones';
 
 type CajaCerrada = {
   id: number;
@@ -40,7 +41,9 @@ const ETIQUETAS_METODO: Record<string, string> = {
 };
 
 export default function CajaHistorialPage() {
+  const { aviso } = useNotificar();
   const [cajas, setCajas] = useState<CajaCerrada[]>([]);
+  const [reimprimiendo, setReimprimiendo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resumen, setResumen] = useState<Resumen | null>(null);
@@ -70,6 +73,19 @@ export default function CajaHistorialPage() {
     } catch {
       setError('No se pudo cargar el detalle de esa caja.');
     } finally { setCargandoResumen(false); }
+  };
+
+  const reimprimirCierre = async () => {
+    if (!resumen) return;
+    setReimprimiendo(true);
+    try {
+      const { data } = await api.post(`/caja/${resumen.id}/reimprimir-cierre`);
+      aviso(data.impreso ? 'Se mandó la colilla a la impresora de nuevo.' : `No se pudo imprimir: ${data.motivo || 'revisa que el agente de impresión esté conectado'}.`, data.impreso ? 'exito' : 'error');
+    } catch (e: any) {
+      aviso(e?.response?.data?.message || 'No se pudo reimprimir el cierre.', 'error');
+    } finally {
+      setReimprimiendo(false);
+    }
   };
 
   const abrirCorreccion = () => {
@@ -183,9 +199,14 @@ export default function CajaHistorialPage() {
                     </div>
                   )}
                   {resumen.estado === 'CERRADA' && !corrigiendo && (
-                    <button type="button" onClick={abrirCorreccion} className="mt-3 w-full rounded-lg border border-gray-700 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-white">
-                      Corregir conteo (el cajero se equivocó)
-                    </button>
+                    <div className="mt-3 flex gap-2">
+                      <button type="button" disabled={reimprimiendo} onClick={reimprimirCierre} className="flex-1 rounded-lg border border-gray-700 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-white disabled:opacity-50">
+                        {reimprimiendo ? 'Enviando...' : 'Reimprimir colilla'}
+                      </button>
+                      <button type="button" onClick={abrirCorreccion} className="flex-1 rounded-lg border border-gray-700 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-white">
+                        Corregir conteo
+                      </button>
+                    </div>
                   )}
                   {corrigiendo && (
                     <div className="mt-3 space-y-2 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">

@@ -463,6 +463,17 @@ export class CajaService {
     };
   }
 
+  // Reintenta mandar la tirilla de cierre a la impresora (ej. porque falló
+  // en el momento del cierre). Usa el mismo resumen que ya se calcula para
+  // la pantalla de detalle, así que siempre coincide con lo que se ve ahí.
+  async reimprimirCierre(cajaId: number, empresaId: number) {
+    const resumen = await this.obtenerResumenCaja(cajaId, empresaId);
+    if (resumen.estado !== 'CERRADA') {
+      throw new BadRequestException('Esta caja todavía no se ha cerrado');
+    }
+    return this.impresion.imprimirCierreCaja(resumen, empresaId);
+  }
+
   // Corrige el conteo de una caja YA cerrada (ej. el cajero contó mal o
   // marcó $0 sin contar). Solo admin/gerente, y siempre queda un evento en
   // el historial con el motivo y el valor anterior para no perder el rastro.

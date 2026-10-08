@@ -52,6 +52,12 @@ export class CajaController {
     return this.cajaService.obtenerResumenCaja(+id, req.user.empresaId);
   }
 
+  @Post(':id/reimprimir-cierre')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  reimprimirCierre(@Param('id') id: string, @Request() req: any) {
+    return this.cajaService.reimprimirCierre(+id, req.user.empresaId);
+  }
+
   @Patch(':id/corregir')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   corregir(@Param('id') id: string, @Body() body: any, @Request() req: any) {
