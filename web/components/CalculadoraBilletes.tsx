@@ -57,7 +57,20 @@ export default function CalculadoraBilletes({ objetivo, onCambiar }: { objetivo:
             </button>
             <div className="mt-1 flex items-center justify-center gap-2">
               <button type="button" aria-label={`Quitar ${moneda(d.valor)}`} disabled={!conteo[d.valor]} onClick={() => sumar(d.valor, -1)} className="h-11 w-11 shrink-0 touch-manipulation rounded-lg bg-gray-800 text-xl text-gray-300 hover:text-white active:bg-gray-700 disabled:opacity-30">−</button>
-              <span aria-label={`Cantidad de ${moneda(d.valor)}`} className="min-w-5 text-center text-base font-semibold tabular-nums text-white">{conteo[d.valor] || 0}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                aria-label={`Cantidad de ${moneda(d.valor)}`}
+                value={conteo[d.valor] || ''}
+                onChange={(e) => {
+                  const valor = e.target.value === '' ? 0 : Math.max(0, Math.floor(Number(e.target.value)) || 0);
+                  setConteo((prev) => ({ ...prev, [d.valor]: valor }));
+                }}
+                onFocus={(e) => e.target.select()}
+                placeholder="0"
+                className="h-11 w-14 shrink-0 rounded-lg border border-gray-700 bg-gray-900 text-center text-base font-semibold tabular-nums text-white focus:border-orange-500 focus:outline-none"
+              />
               <button type="button" aria-label={`Agregar ${moneda(d.valor)}`} onClick={() => sumar(d.valor, 1)} className="h-11 w-11 shrink-0 touch-manipulation rounded-lg bg-gray-800 text-xl text-gray-300 hover:text-white active:bg-gray-700">+</button>
             </div>
           </div>
