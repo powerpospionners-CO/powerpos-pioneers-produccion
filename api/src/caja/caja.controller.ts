@@ -58,6 +58,13 @@ export class CajaController {
     return this.cajaService.reimprimirCierre(+id, req.user.empresaId);
   }
 
+  // Sin @Roles propio: cualquiera de la clase (incluye CAJERO) puede
+  // reimprimir su propio último cierre, sin necesitar al admin.
+  @Post('reimprimir-mi-cierre')
+  reimprimirMiCierre(@Request() req: any) {
+    return this.cajaService.reimprimirMiUltimoCierre(req.user.id, req.user.empresaId);
+  }
+
   @Patch(':id/corregir')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   corregir(@Param('id') id: string, @Body() body: any, @Request() req: any) {

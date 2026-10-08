@@ -5,6 +5,7 @@ import { Lock, Unlock, X } from 'lucide-react';
 import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
 import CalculadoraBilletes from './CalculadoraBilletes';
+import { useNotificar } from './Notificaciones';
 
 type Caja = {
   id: number;
@@ -21,9 +22,23 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
   cajaBloqueadaPorUsuario?: boolean;
   onCambio: () => void;
 }) {
+  const { aviso } = useNotificar();
   const [montoInicial, setMontoInicial] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
+  const [reimprimiendo, setReimprimiendo] = useState(false);
+
+  const reimprimirMiCierre = async () => {
+    setReimprimiendo(true);
+    try {
+      const { data } = await api.post('/caja/reimprimir-mi-cierre');
+      aviso(data.impreso ? 'Se mandó la colilla a la impresora de nuevo.' : `No se pudo imprimir: ${data.motivo || 'revisa que el agente de impresión esté conectado'}.`, data.impreso ? 'exito' : 'error');
+    } catch (e: any) {
+      aviso(e?.response?.data?.message || 'No se pudo reimprimir el cierre.', 'error');
+    } finally {
+      setReimprimiendo(false);
+    }
+  };
   const [modalCierre, setModalCierre] = useState(false);
   const [montoFinal, setMontoFinal] = useState(0);
   const [confirmoCero, setConfirmoCero] = useState(false);
@@ -67,6 +82,11 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
           </button>
         </div>
         {error && <p className="mt-2 text-center text-xs text-red-300">{error}</p>}
+        <p className="mt-2 text-center text-xs">
+          <button type="button" disabled={reimprimiendo} onClick={reimprimirMiCierre} className="text-red-200/80 underline hover:text-white disabled:opacity-50">
+            {reimprimiendo ? 'Enviando…' : '¿No te imprimió el cierre anterior? Reimprimir'}
+          </button>
+        </p>
       </div>
     );
   }

@@ -474,6 +474,19 @@ export class CajaService {
     return this.impresion.imprimirCierreCaja(resumen, empresaId);
   }
 
+  // Autoservicio para el cajero: reimprime su propio último cierre, sin
+  // necesitar al admin ni acceso al historial completo (que sí muestra los
+  // cierres de todos los cajeros). Solo busca entre sus propias cajas.
+  async reimprimirMiUltimoCierre(usuarioId: number, empresaId: number) {
+    const caja = await this.prisma.caja.findFirst({
+      where: { usuarioId, estado: 'CERRADA', sucursal: { empresaId } },
+      orderBy: { cerradaEn: 'desc' },
+      select: { id: true },
+    });
+    if (!caja) throw new NotFoundException('No se encontró ningún cierre tuyo para reimprimir');
+    return this.reimprimirCierre(caja.id, empresaId);
+  }
+
   // Corrige el conteo de una caja YA cerrada (ej. el cajero contó mal o
   // marcó $0 sin contar). Solo admin/gerente, y siempre queda un evento en
   // el historial con el motivo y el valor anterior para no perder el rastro.
