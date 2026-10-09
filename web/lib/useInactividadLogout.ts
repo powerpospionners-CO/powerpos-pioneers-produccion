@@ -23,7 +23,16 @@ export function useInactividadLogout() {
 
   useEffect(() => {
     let temporizador: ReturnType<typeof setTimeout>;
+    // Sin internet, nunca cerrar por inactividad: un corte de luz/wifi deja
+    // al cajero quieto frente a la pantalla (esperando, averiguando qué
+    // pasó) sin que eso signifique que abandonó el mostrador, y una vez
+    // cerrada la sesión no hay cómo volver a entrar sin conexión. Se
+    // reintenta el chequeo más adelante en vez de cerrar la sesión a ciegas.
     const cerrarPorInactividad = () => {
+      if (!navigator.onLine) {
+        reiniciarTemporizador();
+        return;
+      }
       logoutRef.current();
       irALoginGenerico(routerRef.current);
     };
