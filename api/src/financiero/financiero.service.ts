@@ -86,6 +86,15 @@ export class FinancieroService {
       if (filtros.fechaHasta) where.fecha.lte = new Date(filtros.fechaHasta);
     }
 
+    // El límite de 100 solo tiene sentido cuando no hay rango de fechas (para
+    // no traer el historial completo por accidente) — una vez hay fechaDesde
+    // o fechaHasta, el propio rango ya acota el resultado, y capar encima de
+    // eso esconde movimientos reales en meses con muchas ventas (cada venta
+    // genera su propio ingreso + costo de venta, así que el tope de 100 se
+    // llenaba de eso y dejaba por fuera egresos de días anteriores del mismo
+    // rango, aunque sí cumplían el filtro de fecha).
+    const sinLimite = filtros?.completo || filtros?.fechaDesde || filtros?.fechaHasta;
+
     return this.prisma.movimientoFinanciero.findMany({
       where,
       include: {
@@ -93,7 +102,7 @@ export class FinancieroService {
         pedido: { select: { numero: true } },
       },
       orderBy: { fecha: 'desc' },
-      take: filtros?.completo ? undefined : 100,
+      take: sinLimite ? undefined : 100,
     });
   }
 
