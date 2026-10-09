@@ -2,7 +2,7 @@
 
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Ban, Boxes, CircleDollarSign, List, Pencil, Receipt, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Ban, Boxes, CircleDollarSign, List, Pencil, Printer, Receipt, RefreshCw, X } from 'lucide-react';
 import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -51,6 +51,7 @@ export default function RetailDashboard() {
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
   const [ventaDetalle, setVentaDetalle] = useState<DetalleVenta | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [reimprimiendoId, setReimprimiendoId] = useState<number | null>(null);
   // "Ventas recientes" se puede consultar por cualquier día, no solo hoy.
   const [fechaSeleccionada, setFechaSeleccionada] = useState(() => fechaLocalISO(new Date()));
   const [ventasFecha, setVentasFecha] = useState<Venta[]>([]);
@@ -113,6 +114,22 @@ export default function RetailDashboard() {
     }
   };
 
+  const reimprimirTicket = async (venta: Venta) => {
+    setReimprimiendoId(venta.id);
+    try {
+      const { data } = await api.get(`/pedidos/${venta.id}`);
+      const impresion = await api.post('/impresion/ticket', data);
+      aviso(
+        impresion.data?.impreso ? 'Se mandó el ticket a la impresora de nuevo.' : `No se pudo imprimir: ${impresion.data?.motivo || 'revisa que el agente de impresión esté conectado'}.`,
+        impresion.data?.impreso ? 'exito' : 'error',
+      );
+    } catch (e: any) {
+      aviso(e?.response?.data?.message || 'No se pudo reimprimir el ticket.', 'error');
+    } finally {
+      setReimprimiendoId(null);
+    }
+  };
+
   const guardarPago = async (pago: PagoConfirmado) => {
     if (!ventaEditar) return;
     setError('');
@@ -148,7 +165,7 @@ export default function RetailDashboard() {
       <div className="mt-4 max-h-[28rem] overflow-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-gray-800 text-gray-400"><tr><th className="pb-3">Venta</th><th className="pb-3">Fecha</th><th className="pb-3">Pago</th><th className="pb-3 text-right">Total</th><th className="pb-3 text-right">Acciones</th></tr></thead>
-          <tbody>{ventasFecha.map((v) => <tr key={v.id} className={`border-b border-gray-800 ${v.estado === 'ANULADO' ? 'opacity-40' : ''}`}><td className="py-3">{v.numero}</td><td>{new Date(v.creadoEn).toLocaleString('es-CO')}</td><td>{v.estado === 'ANULADO' ? 'ANULADO' : v.metodoPago}</td><td className="text-right font-semibold">{moneda(Number(v.total))}</td><td className="text-right"><span className="inline-flex gap-2"><button type="button" title="Ver productos" onClick={() => verProductos(v)} className="text-gray-500 hover:text-blue-400"><List size={15} /></button>{v.estado !== 'ANULADO' && <><button type="button" title="Editar medio de pago" onClick={() => setVentaEditar(v)} className="text-gray-500 hover:text-orange-400"><Pencil size={15} /></button><button type="button" title="Anular venta" onClick={() => anular(v)} className="text-gray-500 hover:text-red-400"><Ban size={15} /></button></>}</span></td></tr>)}</tbody>
+          <tbody>{ventasFecha.map((v) => <tr key={v.id} className={`border-b border-gray-800 ${v.estado === 'ANULADO' ? 'opacity-40' : ''}`}><td className="py-3">{v.numero}</td><td>{new Date(v.creadoEn).toLocaleString('es-CO')}</td><td>{v.estado === 'ANULADO' ? 'ANULADO' : v.metodoPago}</td><td className="text-right font-semibold">{moneda(Number(v.total))}</td><td className="text-right"><span className="inline-flex gap-2"><button type="button" title="Ver productos" onClick={() => verProductos(v)} className="text-gray-500 hover:text-blue-400"><List size={15} /></button><button type="button" title="Reimprimir ticket" disabled={reimprimiendoId === v.id} onClick={() => reimprimirTicket(v)} className="text-gray-500 hover:text-green-400 disabled:opacity-40"><Printer size={15} /></button>{v.estado !== 'ANULADO' && <><button type="button" title="Editar medio de pago" onClick={() => setVentaEditar(v)} className="text-gray-500 hover:text-orange-400"><Pencil size={15} /></button><button type="button" title="Anular venta" onClick={() => anular(v)} className="text-gray-500 hover:text-red-400"><Ban size={15} /></button></>}</span></td></tr>)}</tbody>
         </table>
         {!cargandoVentasFecha && !ventasFecha.length && <p className="py-8 text-center text-gray-400">No hay ventas ese día.</p>}
         {cargandoVentasFecha && <p className="py-8 text-center text-gray-500">Cargando…</p>}

@@ -2,7 +2,7 @@
 
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
-import { Ban, List, Pencil, Receipt, X } from 'lucide-react';
+import { Ban, List, Pencil, Printer, Receipt, X } from 'lucide-react';
 import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
 import ModalCobro, { PagoConfirmado } from './ModalCobro';
@@ -33,6 +33,7 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
   const [error, setError] = useState('');
   const [ventaDetalle, setVentaDetalle] = useState<DetalleVenta | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [reimprimiendoId, setReimprimiendoId] = useState<number | null>(null);
 
   const verProductos = async (venta: Venta) => {
     setCargandoDetalle(true);
@@ -43,6 +44,22 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
       aviso('No se pudo cargar el detalle de esa venta.', 'error');
     } finally {
       setCargandoDetalle(false);
+    }
+  };
+
+  const reimprimirTicket = async (venta: Venta) => {
+    setReimprimiendoId(venta.id);
+    try {
+      const { data } = await api.get(`/pedidos/${venta.id}`);
+      const impresion = await api.post('/impresion/ticket', data);
+      aviso(
+        impresion.data?.impreso ? 'Se mandó el ticket a la impresora de nuevo.' : `No se pudo imprimir: ${impresion.data?.motivo || 'revisa que el agente de impresión esté conectado'}.`,
+        impresion.data?.impreso ? 'exito' : 'error',
+      );
+    } catch (e: any) {
+      aviso(e?.response?.data?.message || 'No se pudo reimprimir el ticket.', 'error');
+    } finally {
+      setReimprimiendoId(null);
     }
   };
 
@@ -100,6 +117,7 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
                   <td className="py-2 pr-2 text-right font-semibold text-white">{moneda(Number(v.total))}</td>
                   <td className="py-2 text-right">
                     <button type="button" title="Ver productos" onClick={() => verProductos(v)} className="mr-2 text-gray-500 hover:text-blue-400"><List size={13} /></button>
+                    <button type="button" title="Reimprimir ticket" disabled={reimprimiendoId === v.id} onClick={() => reimprimirTicket(v)} className="mr-2 text-gray-500 hover:text-green-400 disabled:opacity-40"><Printer size={13} /></button>
                     {puedeGestionar && v.estado !== 'ANULADO' && (
                       <>
                         <button type="button" title="Editar medio de pago" onClick={() => setVentaEditar(v)} className="mr-2 text-gray-500 hover:text-orange-400"><Pencil size={13} /></button>
