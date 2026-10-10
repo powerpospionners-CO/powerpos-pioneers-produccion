@@ -17,6 +17,7 @@ function rutaPorRol(rol: string) {
     case 'CAJERO': return '/pos';
     case 'COCINERO': return '/cocina';
     case 'DOMICILIARIO': return '/domicilios';
+    case 'DISTRIBUIDOR': return '/distribuidor';
     default: return '/pos';
   }
 }

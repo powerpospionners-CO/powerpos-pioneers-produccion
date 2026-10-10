@@ -13,7 +13,7 @@ export class AuthService {
   async login(email: string, password: string) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { email },
-      include: { empresa: true, sucursal: true },
+      include: { empresa: true, sucursal: true, distribuidor: true },
     });
 
     if (!usuario || !usuario.activo || (usuario.empresa && !usuario.empresa.activo && usuario.rol !== 'SUPERADMIN')) {
@@ -52,6 +52,9 @@ export class AuthService {
         consumoEmpleadosHabilitado: usuario.empresa?.consumoEmpleadosHabilitado,
         catalogoHabilitado: usuario.empresa?.catalogoHabilitado,
         tiendaSlug: usuario.empresa?.tiendaSlug,
+        distribuidorId: usuario.distribuidorId,
+        distribuidorCodigo: usuario.distribuidor?.codigo,
+        distribuidorComision: usuario.distribuidor ? Number(usuario.distribuidor.porcentajeComision) : undefined,
       },
     };
   }

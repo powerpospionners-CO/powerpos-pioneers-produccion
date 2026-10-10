@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet, Truck } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 
@@ -20,7 +20,9 @@ const ITEMS = [
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
   { href: '/reportes', label: 'Reportes', icon: BarChart3 },
+  { href: '/distribuidores', label: 'Distribuidores', icon: Truck },
   { href: '/configuracion', label: 'Config', icon: Settings },
+  { href: '/distribuidor', label: 'Mis pedidos', icon: Truck },
 ];
 
 export default function Navbar() {
@@ -50,8 +52,10 @@ export default function Navbar() {
     if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;
     if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
+    if (item.href === '/distribuidor') return usuario?.rol === 'DISTRIBUIDOR';
     if (usuario?.rol === 'DOMICILIARIO') return item.href === '/domicilios';
     if (usuario?.rol === 'CAJERO') return item.href === '/pos';
+    if (usuario?.rol === 'DISTRIBUIDOR') return item.href === '/distribuidor';
     if (esAdminOGerente) return true;
     return usuario?.permisos?.[item.href.replace('/', '')] !== false;
   });

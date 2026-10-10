@@ -69,6 +69,9 @@ model Empresa {
   consumosEmpleados ConsumoEmpleado[]
   ingredientes Ingrediente[]
   catalogoProductos CatalogoProducto[]
+  distribuidores Distribuidor[]
+  pedidosDistribuidor PedidoDistribuidor[]
+  liquidacionesDistribuidor LiquidacionDistribuidor[]
 
   @@map("empresas")
 }
@@ -120,6 +123,8 @@ model Sucursal {
   cajas       Caja[]
   movimientos MovimientoFinanciero[]
   consumosEmpleados ConsumoEmpleado[]
+  distribuidores Distribuidor[]
+  pedidosDistribuidor PedidoDistribuidor[]
 
   @@map("sucursales")
 }
@@ -135,6 +140,7 @@ enum RolUsuario {
   CAJERO
   COCINERO
   DOMICILIARIO
+  DISTRIBUIDOR
 }
 
 model Usuario {
@@ -150,9 +156,13 @@ model Usuario {
   activo        Boolean    @default(true)
   creadoEn      DateTime   @default(now())
   actualizadoEn DateTime   @updatedAt
+  // Solo tiene valor cuando rol = DISTRIBUIDOR: es la cuenta de acceso de
+  // ese perfil de distribuidor (uno a uno). El resto de roles no lo usan.
+  distribuidorId Int?      @unique
 
   empresa     Empresa?               @relation(fields: [empresaId], references: [id])
   sucursal    Sucursal?              @relation(fields: [sucursalId], references: [id])
+  distribuidor Distribuidor?         @relation(fields: [distribuidorId], references: [id])
   pedidos     Pedido[]
   cajas       Caja[]
   eventos     EventoCaja[]
@@ -161,6 +171,7 @@ model Usuario {
   lotesPreparacion LotePreparacion[]
   auditorias  Auditoria[]
   consumosEmpleados ConsumoEmpleado[]
+  liquidacionesDistribuidor LiquidacionDistribuidor[]
 
   @@map("usuarios")
 }
@@ -230,6 +241,7 @@ model Producto {
   adicionales         ProductoAdicional[]
   preparaciones       ProductoPreparacion[]
   detallesPedido      DetallePedido[]
+  detallesPedidoDistribuidor DetallePedidoDistribuidor[]
   consumoEmpleadoItems ConsumoEmpleadoItem[]
   movimientosInventario MovimientoInventario[]
   presentaciones      ProductoPresentacion[]
@@ -629,6 +641,107 @@ model DetallePedidoAdicional {
 }
 
 // ==========================================
+// DISTRIBUIDORES (venden a nombre de la empresa en su zona, con su propio
+// código y acceso; ganan una comisión % sobre cada pedido que registran y
+// se les liquida por periodo)
+// ==========================================
+
+model Distribuidor {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  codigo    String
+  nombre    String
+  zona      String?
+  // % fijo que se aplica a cada pedido que este distribuidor registre.
+  porcentajeComision Decimal @db.Decimal(5, 2)
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  empresa       Empresa                    @relation(fields: [empresaId], references: [id])
+  sucursal      Sucursal                   @relation(fields: [sucursalId], references: [id])
+  usuario       Usuario?
+  pedidos       PedidoDistribuidor[]
+  liquidaciones LiquidacionDistribuidor[]
+
+  @@unique([empresaId, codigo])
+  @@map("distribuidores")
+}
+
+enum EstadoPedidoDistribuidor {
+  ENTREGADO
+  ANULADO
+}
+
+model PedidoDistribuidor {
+  id             Int                       @id @default(autoincrement())
+  numero         String                    @unique
+  empresaId      Int
+  sucursalId     Int
+  distribuidorId Int
+  clienteReferencia String?
+  estado         EstadoPedidoDistribuidor  @default(ENTREGADO)
+  total          Decimal                   @db.Decimal(10, 2)
+  // Snapshot del % y el monto de comisión al momento del pedido: si luego
+  // cambia el % del distribuidor, los pedidos ya hechos no deben moverse.
+  comisionPorcentaje Decimal               @db.Decimal(5, 2)
+  comisionMonto  Decimal                   @db.Decimal(10, 2)
+  liquidacionId  Int?
+  creadoEn       DateTime                  @default(now())
+
+  empresa      Empresa                    @relation(fields: [empresaId], references: [id])
+  sucursal     Sucursal                   @relation(fields: [sucursalId], references: [id])
+  distribuidor Distribuidor               @relation(fields: [distribuidorId], references: [id])
+  liquidacion  LiquidacionDistribuidor?   @relation(fields: [liquidacionId], references: [id])
+  detalles     DetallePedidoDistribuidor[]
+
+  @@map("pedidos_distribuidor")
+}
+
+model DetallePedidoDistribuidor {
+  id             Int     @id @default(autoincrement())
+  pedidoId       Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+
+  presentacionId     Int?
+  presentacionNombre String?
+  factorUnidades     Int     @default(1)
+
+  pedido   PedidoDistribuidor @relation(fields: [pedidoId], references: [id])
+  producto Producto           @relation(fields: [productoId], references: [id])
+
+  @@map("detalle_pedidos_distribuidor")
+}
+
+// Liquidación mensual: agrupa todos los pedidos de un distribuidor en un
+// periodo y deja un solo registro de cuánto se le pagó, enlazado al egreso
+// que queda en Financiero para que el cuadre del negocio lo refleje.
+model LiquidacionDistribuidor {
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  distribuidorId  Int
+  usuarioId       Int
+  periodoDesde    DateTime
+  periodoHasta    DateTime
+  cantidadPedidos Int
+  totalVentas     Decimal  @db.Decimal(10, 2)
+  totalComision   Decimal  @db.Decimal(10, 2)
+  movimientoFinancieroId Int? @unique
+  creadoEn        DateTime @default(now())
+
+  empresa      Empresa                @relation(fields: [empresaId], references: [id])
+  distribuidor Distribuidor           @relation(fields: [distribuidorId], references: [id])
+  usuario      Usuario                @relation(fields: [usuarioId], references: [id])
+  movimientoFinanciero MovimientoFinanciero? @relation(fields: [movimientoFinancieroId], references: [id])
+  pedidos      PedidoDistribuidor[]
+
+  @@map("liquidaciones_distribuidor")
+}
+
+// ==========================================
 // CAJA
 // ==========================================
 
@@ -704,6 +817,7 @@ enum CategoriaMovimiento {
   ARRIENDO
   MANTENIMIENTO
   IMPUESTOS
+  COMISION_DISTRIBUIDOR
   OTROS
 }
 
@@ -725,6 +839,7 @@ model MovimientoFinanciero {
   sucursal Sucursal @relation(fields: [sucursalId], references: [id])
   usuario  Usuario  @relation(fields: [usuarioId], references: [id])
   pedido   Pedido?  @relation(fields: [pedidoId], references: [id])
+  liquidacionDistribuidor LiquidacionDistribuidor?
 
   @@map("movimientos_financieros")
 }

@@ -17,6 +17,9 @@ interface Usuario {
   consumoEmpleadosHabilitado?: boolean;
   catalogoHabilitado?: boolean;
   tiendaSlug?: string;
+  distribuidorId?: number;
+  distribuidorCodigo?: string;
+  distribuidorComision?: number;
 }
 
 interface AuthStore {

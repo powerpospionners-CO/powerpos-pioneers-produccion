@@ -25,6 +25,7 @@ import { SuperadminModule } from './superadmin/superadmin.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { ConsumoEmpleadosModule } from './consumo-empleados/consumo-empleados.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
+import { DistribuidoresModule } from './distribuidores/distribuidores.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { CatalogoModule } from './catalogo/catalogo.module';
     AuditoriaModule,
     ConsumoEmpleadosModule,
     CatalogoModule,
+    DistribuidoresModule,
   ],
   controllers: [AppController],
   providers: [AppService],
