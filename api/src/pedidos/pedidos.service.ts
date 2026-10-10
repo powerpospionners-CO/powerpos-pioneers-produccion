@@ -94,7 +94,12 @@ export class PedidosService {
       if (existente) return existente;
     }
 
-    if (!Array.isArray(items) || items.length < 1 || items.length > 100 || items.some(i => !Number.isInteger(i.cantidad) || i.cantidad < 1 || i.cantidad > 999 || !Number.isInteger(i.productoId))) throw new BadRequestException('Productos o cantidades no válidos');
+    // El tope de la cantidad no puede ser el mismo para unidades que para
+    // venta al granel: ahí "cantidad" son gramos/mililitros (ej. 2000 = 2kg),
+    // así que un límite pensado para unidades (999) bloqueaba ventas al
+    // granel normales. Se sube para dar cabida a varios kilos/litros y
+    // seguir descartando valores absurdos por error de digitación.
+    if (!Array.isArray(items) || items.length < 1 || items.length > 100 || items.some(i => !Number.isInteger(i.cantidad) || i.cantidad < 1 || i.cantidad > 999999 || !Number.isInteger(i.productoId))) throw new BadRequestException('Productos o cantidades no válidos');
     const empresa = await db.empresa.findFirst({ where: { id: empresaId, activo: true } });
     if (!empresa) throw new NotFoundException('Empresa no disponible');
     const esRestaurante = empresa.tipoNegocio === 'RESTAURANTE';
