@@ -99,15 +99,15 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
   if (!cajaId) return null;
 
   return (
-    <div className="border-t border-gray-800 bg-gray-900/60">
-      <button type="button" onClick={() => setAbierto((v) => !v)} className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white">
+    <div className="pos-ventas-turno border-t border-gray-800 bg-gray-900/60">
+      <button type="button" onClick={() => setAbierto((v) => !v)} className="pos-ventas-turno-toggle flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white">
         <Receipt size={15} /> Ventas de este turno {abierto ? '▲' : '▼'}
       </button>
       {abierto && (
         <div className="max-h-64 overflow-y-auto px-4 pb-3">
           {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
           {!ventas.length && <p className="py-3 text-center text-sm text-gray-500">Aún no hay ventas en este turno.</p>}
-          <table className="w-full text-left text-xs">
+          <table className="pos-ventas-turno-tabla w-full text-left text-xs">
             <tbody>
               {ventas.map((v) => (
                 <tr key={v.id} className={`border-b border-gray-800 ${v.estado === 'ANULADO' ? 'opacity-40' : ''}`}>

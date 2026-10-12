@@ -72,6 +72,37 @@
   opacity: 1 !important;
   cursor: not-allowed !important;
 }
+:root[data-theme="claro"] .pos-ventas-turno {
+  border-color: #cbd5e1 !important;
+  background-color: #fff !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-toggle {
+  color: #334155 !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-toggle:hover {
+  color: #0f172a !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla tr:not(.opacity-40) {
+  opacity: 1 !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla td {
+  color: #334155 !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla td.text-gray-500 {
+  color: #475569 !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla td.text-white {
+  color: #0f172a !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla button {
+  color: #475569 !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla button:hover {
+  color: #c2410c !important;
+}
+:root[data-theme="claro"] .pos-ventas-turno-tabla tr.opacity-40 {
+  opacity: 0.65 !important;
+}
 
 body {
   background: var(--background);
