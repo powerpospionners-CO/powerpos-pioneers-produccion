@@ -172,6 +172,25 @@ export class PedidosService {
       if (!producto.disponible) {
         throw new BadRequestException(`${producto.nombre} no está disponible`);
       }
+      let varianteSabor: string | null = null;
+      if (item.codigoVarianteId !== undefined && item.codigoVarianteId !== null) {
+        if (item.presentacionId) {
+          throw new BadRequestException('Un código por sabor no puede combinarse con una presentación');
+        }
+        if (!Number.isInteger(item.codigoVarianteId) || item.codigoVarianteId < 1) {
+          throw new BadRequestException('La variante del producto no es válida');
+        }
+        const variante = await db.productoCodigoBarras.findFirst({
+          where: {
+            id: item.codigoVarianteId,
+            empresaId,
+            productoId: producto.id,
+          },
+          select: { sabor: true },
+        });
+        if (!variante) throw new NotFoundException('El sabor seleccionado no está disponible para este producto');
+        varianteSabor = variante.sabor;
+      }
       if (!esRestaurante && ((Array.isArray(item.adicionales) && item.adicionales.length > 0) || (Array.isArray(item.exclusiones) && item.exclusiones.length > 0))) {
         throw new BadRequestException('Las recetas y adicionales solo se usan en restaurantes');
       }
@@ -249,6 +268,7 @@ export class PedidosService {
         subtotal: itemSubtotal,
         presentacionId: presentacion?.id ?? null,
         presentacionNombre: presentacion?.nombre ?? null,
+        varianteSabor,
         factorUnidades,
         precioUnitario,
       });
@@ -325,6 +345,7 @@ export class PedidosService {
             precioUnitario: item.precioUnitario,
             presentacionId: item.presentacionId,
             presentacionNombre: item.presentacionNombre,
+            varianteSabor: item.varianteSabor,
             factorUnidades: item.factorUnidades,
             subtotal: item.subtotal,
             exclusiones: item.exclusiones,

@@ -140,6 +140,18 @@ export class ProductosController {
     return this.productosService.eliminarPresentacion(+id, +presentacionId, req.user.empresaId);
   }
 
+  @Post(':id/codigos-barras')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  agregarCodigoBarras(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.productosService.agregarCodigoBarras(+id, body, req.user.empresaId);
+  }
+
+  @Delete(':id/codigos-barras/:codigoId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  eliminarCodigoBarras(@Param('id') id: string, @Param('codigoId') codigoId: string, @Request() req: any) {
+    return this.productosService.eliminarCodigoBarras(+id, +codigoId, req.user.empresaId);
+  }
+
   @Post(':id/combo-componentes')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   agregarComponenteCombo(@Param('id') id: string, @Body() body: any, @Request() req: any) {

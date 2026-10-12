@@ -12,6 +12,7 @@ function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado
       findFirst: jest.fn().mockResolvedValue({ id: 5, nombre: 'Arroz', precio: 10000, disponible: true, activo: true, controlaStock: true, ingredientes: [], adicionales: [] }),
       updateMany: jest.fn().mockResolvedValue({ count: stockActualizado }),
     },
+    productoCodigoBarras: { findFirst: jest.fn().mockResolvedValue(null) },
     pedido: {
       count: jest.fn().mockResolvedValue(0),
       findUnique: jest.fn().mockResolvedValue(null),
@@ -41,6 +42,38 @@ describe('Pedidos comerciales', () => {
     const { db, service } = escenario('SUPERMERCADO', 0);
     await expect(service.crearEnTransaccion(venta, 3, 1, db)).rejects.toThrow(BadRequestException);
     expect(db.movimientoFinanciero.create).not.toHaveBeenCalled();
+  });
+
+  it('registra el sabor escaneado en la venta y comparte el inventario del producto', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    db.productoCodigoBarras.findFirst.mockResolvedValue({ sabor: 'Mango' });
+    await service.crearEnTransaccion({
+      sucursalId: 2,
+      metodoPago: 'EFECTIVO',
+      items: [{ productoId: 5, codigoVarianteId: 12, cantidad: 1 }],
+    }, 3, 1, db);
+
+    const detalles = db.pedido.create.mock.calls[0][0].data.detalles.create;
+    expect(detalles[0]).toEqual(expect.objectContaining({ productoId: 5, varianteSabor: 'Mango', precioUnitario: 10000 }));
+    expect(db.producto.updateMany).toHaveBeenCalledWith({
+      where: { id: 5, empresaId: 1, stockActual: { gte: 1 } },
+      data: { stockActual: { decrement: 1 } },
+    });
+  });
+
+  it('rechaza una variante que no pertenece al producto y empresa de la venta', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    await expect(service.crearEnTransaccion({
+      sucursalId: 2,
+      metodoPago: 'EFECTIVO',
+      items: [{ productoId: 5, codigoVarianteId: 12, cantidad: 1 }],
+    }, 3, 1, db)).rejects.toThrow('El sabor seleccionado no está disponible');
+
+    expect(db.productoCodigoBarras.findFirst).toHaveBeenCalledWith({
+      where: { id: 12, empresaId: 1, productoId: 5 },
+      select: { sabor: true },
+    });
+    expect(db.pedido.create).not.toHaveBeenCalled();
   });
 
   it('mantiene el estado de cocina para restaurantes', async () => {

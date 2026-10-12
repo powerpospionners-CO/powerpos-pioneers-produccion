@@ -15,11 +15,12 @@ import { encolarVentaPendiente, generarClaveVenta, listarVentasFallidas, listarV
 import { guardarCajaOffline, guardarCatalogoOffline, leerCajaOffline, leerCatalogoOffline } from '@/lib/cacheOfflinePos';
 
 type Presentacion = { id: number; nombre: string; factorUnidades: number; precio: string; codigoBarras?: string | null };
+type CodigoBarrasVariante = { id: number; codigoBarras: string; sabor: string };
 type Producto = {
   id: number; nombre: string; precio: string; codigoBarras?: string | null;
   disponible: boolean; controlaStock: boolean; stockActual: number; stockMinimo: number; ventaGranel?: boolean; unidadGranel?: string | null;
   categoria: { id: number; nombre: string; icono?: string; parentId?: number | null };
-  presentaciones?: Presentacion[];
+  presentaciones?: Presentacion[]; codigosBarras?: CodigoBarrasVariante[];
 };
 // Una forma concreta de vender un producto: el producto tal cual, una de
 // sus presentaciones (ej. "Tarro" vs "Unidad"), o su versión al granel
@@ -28,7 +29,7 @@ type Producto = {
 // unidades base consume una venta de este ítem. Un producto al granel
 // puede además tener presentaciones empacadas: no son excluyentes.
 type ItemVendible = {
-  key: string; productoId: number; presentacionId: number | null;
+  key: string; productoId: number; presentacionId: number | null; codigoVarianteId: number | null; sabor?: string | null;
   nombre: string; precio: number; codigoBarras: string | null;
   controlaStock: boolean; factorUnidades: number; stockBase: number; porGramo: boolean; unidadGranel: string;
   categoria: { icono?: string; nombre?: string };
@@ -195,6 +196,7 @@ export default function RetailPOS() {
         key: `${producto.id}:granel`,
         productoId: producto.id,
         presentacionId: null,
+        codigoVarianteId: null,
         nombre: tienePresentaciones ? `${producto.nombre} (al granel)` : producto.nombre,
         precio: Number(producto.precio),
         codigoBarras: producto.codigoBarras || null,
@@ -212,6 +214,7 @@ export default function RetailPOS() {
         key: `${producto.id}:${p.id}`,
         productoId: producto.id,
         presentacionId: p.id,
+        codigoVarianteId: null,
         nombre: `${producto.nombre} — ${p.nombre}`,
         precio: Number(p.precio),
         codigoBarras: p.codigoBarras || null,
@@ -234,6 +237,7 @@ export default function RetailPOS() {
         key: `${producto.id}`,
         productoId: producto.id,
         presentacionId: null,
+        codigoVarianteId: null,
         nombre: tienePresentaciones ? `${producto.nombre} (unidad)` : producto.nombre,
         precio: Number(producto.precio),
         codigoBarras: producto.codigoBarras || null,
@@ -244,6 +248,19 @@ export default function RetailPOS() {
         unidadGranel: 'g',
         categoria: producto.categoria,
       });
+      const itemBase = items[items.length - 1];
+      if (!producto.ventaGranel && itemBase) {
+        for (const variante of producto.codigosBarras || []) {
+          items.push({
+            ...itemBase,
+            key: `${producto.id}:codigo:${variante.id}`,
+            nombre: `${producto.nombre} — ${variante.sabor}`,
+            codigoBarras: variante.codigoBarras,
+            codigoVarianteId: variante.id,
+            sabor: variante.sabor,
+          });
+        }
+      }
     }
 
     return items;
@@ -334,7 +351,7 @@ export default function RetailPOS() {
       sucursalId: usuario?.sucursalId,
       metodoPago: pago.metodoPago,
       pagos: pago.pagos,
-      items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, cantidad })),
+      items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, codigoVarianteId: item.codigoVarianteId, cantidad })),
       descuento,
       cambio: pago.cambio,
       claveIdempotencia: generarClaveVenta(),
@@ -411,7 +428,7 @@ export default function RetailPOS() {
       ? pedido.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
       : [`PAGO  ${pedido.metodoPago}`];
     const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${pedido.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
-      ...(pedido.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
+      ...(pedido.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.varianteSabor ? ` — ${d.varianteSabor}` : ''}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
       '--------------------------------', `TOTAL  ${moneda(Number(pedido.total))}`, ...pagos, 'Gracias por su compra'];
     const pre = ventana.document.createElement('pre');
     pre.style.cssText = 'font:14px/1.5 monospace;white-space:pre-wrap;padding:20px;';

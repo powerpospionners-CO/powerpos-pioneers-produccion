@@ -24,7 +24,7 @@ interface Pedido {
   creadoEn: string;
   usuario: { nombre: string };
   cliente?: { nombre: string };
-  detalles: { cantidad: number; producto: { nombre: string } }[];
+  detalles: { cantidad: number; varianteSabor?: string | null; producto: { nombre: string } }[];
 }
 
 const COLORES = ['#FF6B35', '#f7931e', '#3b82f6', '#10b981', '#a855f7', '#ec4899', '#facc15'];
@@ -561,7 +561,7 @@ function RestauranteDashboard() {
                       </span>
                     </div>
                     <div className="text-gray-500 text-xs mb-2">
-                      {pedido.detalles.map(d => `${d.cantidad}x ${d.producto.nombre}`).join(', ')}
+                      {pedido.detalles.map(d => `${d.cantidad}x ${d.producto.nombre}${d.varianteSabor ? ` — ${d.varianteSabor}` : ''}`).join(', ')}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-gray-600">
                       <span>{pedido.usuario?.nombre}</span>

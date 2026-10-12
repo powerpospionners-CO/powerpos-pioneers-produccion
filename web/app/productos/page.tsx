@@ -59,6 +59,12 @@ interface Presentacion {
   codigoBarras?: string | null;
 }
 
+interface CodigoBarrasVariante {
+  id: number;
+  codigoBarras: string;
+  sabor: string;
+}
+
 interface Producto {
   id: number;
   nombre: string;
@@ -81,6 +87,76 @@ interface Producto {
   ingredientes: { ingrediente: { id: number; nombre: string; unidad: string }; cantidad: string }[];
   adicionales: { adicional: { id: number; nombre: string; precio: string } }[];
   presentaciones?: Presentacion[];
+  codigosBarras?: CodigoBarrasVariante[];
+}
+
+function SeccionCodigosBarras({ producto, onCambio }: { producto: Producto; onCambio: (producto: Producto) => void }) {
+  const { confirmar } = useNotificar();
+  const [codigoBarras, setCodigoBarras] = useState('');
+  const [sabor, setSabor] = useState('');
+  const [error, setError] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const codigos = producto.codigosBarras || [];
+
+  const recargar = async () => {
+    const { data } = await api.get(`/productos/${producto.id}`);
+    onCambio(data);
+  };
+
+  const agregar = async () => {
+    if (!codigoBarras.trim() || !sabor.trim()) return;
+    setOcupado(true);
+    setError('');
+    try {
+      await api.post(`/productos/${producto.id}/codigos-barras`, {
+        codigoBarras: codigoBarras.trim(),
+        sabor: sabor.trim(),
+      });
+      setCodigoBarras('');
+      setSabor('');
+      await recargar();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'No se pudo agregar el código de barras.');
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const quitar = async (codigo: CodigoBarrasVariante) => {
+    if (!(await confirmar(`Se quitará el código ${codigo.codigoBarras} (${codigo.sabor}).`, { titulo: 'Quitar código alternativo', textoConfirmar: 'Sí, quitar', peligroso: true }))) return;
+    setError('');
+    try {
+      await api.delete(`/productos/${producto.id}/codigos-barras/${codigo.id}`);
+      await recargar();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'No se pudo quitar el código de barras.');
+    }
+  };
+
+  return (
+    <section className="space-y-3 rounded-xl border border-gray-800 p-3">
+      <div>
+        <p className="text-sm font-semibold text-gray-300">Códigos de barras por sabor</p>
+        <p className="text-xs text-gray-500">Escanea cada sabor para identificarlo en la venta. Todos usan el precio y las existencias de este producto; no son presentaciones.</p>
+      </div>
+      {codigos.length > 0 && (
+        <ul className="space-y-2">
+          {codigos.map((codigo) => (
+            <li key={codigo.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm">
+              <span className="min-w-0 truncate text-gray-200">{codigo.sabor} · {codigo.codigoBarras}</span>
+              <button type="button" onClick={() => quitar(codigo)} aria-label={`Quitar sabor ${codigo.sabor}`} className="shrink-0 text-gray-400 hover:text-red-400"><Trash2 size={14} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} maxLength={80} placeholder="Código de barras" className="min-w-0 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <input value={sabor} onChange={(e) => setSabor(e.target.value)} maxLength={80} placeholder="Sabor (ej. Mango)" className="min-w-0 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
+        <button type="button" disabled={ocupado || !codigoBarras.trim() || !sabor.trim()} onClick={agregar} className="rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{ocupado ? 'Guardando…' : 'Agregar'}</button>
+      </div>
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+    </section>
+  );
 }
 
 // Para un producto a granel, precio y stock siempre se guardan en la
@@ -1140,6 +1216,7 @@ export default function ProductosPage() {
                       </div>
                     </div>
                     <label className="block text-sm text-gray-400">Código de barras o SKU<input value={form.codigoBarras} onChange={(e) => setForm({ ...form, codigoBarras: e.target.value })} placeholder="Escanea o escribe el código" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>
+                    {editando && <SeccionCodigosBarras producto={editando} onCambio={(actualizado) => { setEditando(actualizado); setProductos((prev) => prev.map((p) => p.id === actualizado.id ? actualizado : p)); }} />}
                     <label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={form.controlaStock} onChange={(e) => setForm({ ...form, controlaStock: e.target.checked })} /> Controlar existencias</label>
                     <div className="grid grid-cols-2 gap-3">
                       <label className="text-sm text-gray-400">Existencias actuales{form.ventaGranel ? ` (${ETIQUETA_UNIDAD_GRANEL[form.unidadGranel].toLowerCase()})` : ''}<input type="number" min="0" step={form.ventaGranel ? '0.01' : '1'} value={form.stockActual} onChange={(e) => setForm({ ...form, stockActual: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /></label>

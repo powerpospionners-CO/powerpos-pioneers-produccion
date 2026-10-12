@@ -77,6 +77,16 @@ export class ProductosService {
           select: { id: true },
         });
         if (existente) throw new ConflictException('El código de barras ya está asignado a otro producto');
+        const variante = await this.prisma.productoCodigoBarras.findFirst({
+          where: { empresaId, codigoBarras: datos.codigoBarras },
+          select: { id: true },
+        });
+        if (variante) throw new ConflictException('El código de barras ya está asignado a un sabor de producto');
+        const presentacion = await this.prisma.productoPresentacion.findFirst({
+          where: { codigoBarras: datos.codigoBarras, producto: { empresaId } },
+          select: { id: true },
+        });
+        if (presentacion) throw new ConflictException('El código de barras ya está asignado a una presentación');
       }
     }
     if (datos.categoriaId !== undefined) {
@@ -158,6 +168,7 @@ export class ProductosService {
           include: { adicional: { include: { ingrediente: true } } },
         },
         preparaciones: { include: { preparacion: true } },
+        codigosBarras: { orderBy: { id: 'asc' } },
       },
     });
   }
@@ -194,10 +205,16 @@ export class ProductosService {
     const mapaCategorias = new Map<string, number>(
       categoriasExistentes.map((c) => [NORMALIZAR_ENCABEZADO(c.nombre), c.id]),
     );
-    const codigosBarrasExistentes = new Set(
-      (await this.prisma.producto.findMany({ where: { empresaId, codigoBarras: { not: null } }, select: { codigoBarras: true } }))
-        .map((p) => p.codigoBarras as string),
-    );
+    const [productosConCodigo, presentacionesConCodigo, variantesConCodigo] = await Promise.all([
+      this.prisma.producto.findMany({ where: { empresaId, codigoBarras: { not: null } }, select: { codigoBarras: true } }),
+      this.prisma.productoPresentacion.findMany({ where: { producto: { empresaId }, codigoBarras: { not: null } }, select: { codigoBarras: true } }),
+      this.prisma.productoCodigoBarras.findMany({ where: { empresaId }, select: { codigoBarras: true } }),
+    ]);
+    const codigosBarrasExistentes = new Set([
+      ...productosConCodigo.map((p) => p.codigoBarras as string),
+      ...presentacionesConCodigo.map((p) => p.codigoBarras as string),
+      ...variantesConCodigo.map((p) => p.codigoBarras),
+    ]);
 
     let creados = 0;
     const errores: { fila: number; motivo: string }[] = [];
@@ -311,6 +328,7 @@ export class ProductosService {
         },
         preparaciones: { include: { preparacion: true } },
         presentaciones: { where: { activo: true }, orderBy: { orden: 'asc' } },
+        codigosBarras: { orderBy: { id: 'asc' } },
         componentesCombo: { include: { producto: { select: { id: true, nombre: true, costo: true } } } },
       },
       orderBy: { nombre: 'asc' },
@@ -348,6 +366,7 @@ export class ProductosService {
         },
         preparaciones: { include: { preparacion: true } },
         presentaciones: { where: { activo: true }, orderBy: { orden: 'asc' } },
+        codigosBarras: { orderBy: { id: 'asc' } },
         componentesCombo: { include: { producto: { select: { id: true, nombre: true, costo: true } } } },
       },
     });
@@ -440,6 +459,7 @@ export class ProductosService {
           include: { adicional: { include: { ingrediente: true } } },
         },
         preparaciones: { include: { preparacion: true } },
+        codigosBarras: { orderBy: { id: 'asc' } },
       },
     });
   }
@@ -562,6 +582,8 @@ export class ProductosService {
       if (codigoBarras.length > 80) throw new BadRequestException('El código de barras es demasiado largo');
       const enProducto = await this.prisma.producto.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } });
       if (enProducto) throw new ConflictException('El código de barras ya está asignado a otro producto');
+      const enVariante = await this.prisma.productoCodigoBarras.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } });
+      if (enVariante) throw new ConflictException('El código de barras ya está asignado a un sabor de producto');
       const enPresentacion = await this.prisma.productoPresentacion.findFirst({
         where: { codigoBarras, producto: { empresaId }, ...(presentacionId ? { id: { not: presentacionId } } : {}) },
         select: { id: true },
@@ -601,6 +623,43 @@ export class ProductosService {
     const presentacion = await this.prisma.productoPresentacion.findFirst({ where: { id: presentacionId, productoId } });
     if (!presentacion) throw new NotFoundException('Presentación no encontrada');
     return this.prisma.productoPresentacion.update({ where: { id: presentacionId }, data: { activo: false } });
+  }
+
+  async agregarCodigoBarras(productoId: number, datos: any, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const codigoBarras = String(datos.codigoBarras || '').trim();
+    const sabor = String(datos.sabor || '').trim();
+    if (!codigoBarras) throw new BadRequestException('El código de barras es obligatorio');
+    if (codigoBarras.length > 80) throw new BadRequestException('El código de barras es demasiado largo');
+    if (!sabor) throw new BadRequestException('El sabor es obligatorio');
+    if (sabor.length > 80) throw new BadRequestException('El sabor no puede superar 80 caracteres');
+
+    const [producto, variante, presentacion] = await Promise.all([
+      this.prisma.producto.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } }),
+      this.prisma.productoCodigoBarras.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } }),
+      this.prisma.productoPresentacion.findFirst({ where: { codigoBarras, producto: { empresaId } }, select: { id: true } }),
+    ]);
+    if (producto || variante || presentacion) {
+      throw new ConflictException('El código de barras ya está registrado en esta empresa');
+    }
+
+    try {
+      return await this.prisma.productoCodigoBarras.create({
+        data: { empresaId, productoId, codigoBarras, sabor },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') throw new ConflictException('El código de barras ya está registrado en esta empresa');
+      throw e;
+    }
+  }
+
+  async eliminarCodigoBarras(productoId: number, codigoId: number, empresaId: number) {
+    await this.obtener(productoId, empresaId);
+    const codigo = await this.prisma.productoCodigoBarras.findFirst({
+      where: { id: codigoId, productoId, empresaId },
+    });
+    if (!codigo) throw new NotFoundException('Código de barras no encontrado');
+    return this.prisma.productoCodigoBarras.delete({ where: { id: codigoId } });
   }
 
   // Componentes de un combo/canasta (ej. "Canasta básica" = 2 lb tomate + 1

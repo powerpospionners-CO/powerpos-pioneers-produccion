@@ -245,6 +245,7 @@ model Producto {
   consumoEmpleadoItems ConsumoEmpleadoItem[]
   movimientosInventario MovimientoInventario[]
   presentaciones      ProductoPresentacion[]
+  codigosBarras       ProductoCodigoBarras[]
   lotes               LoteProducto[]
   componentesCombo    ComboComponente[]     @relation("ComboPadre")
   usadoEnCombos       ComboComponente[]     @relation("ComboComponente")
@@ -252,6 +253,21 @@ model Producto {
   @@unique([empresaId, codigoBarras])
 
   @@map("productos")
+}
+
+model ProductoCodigoBarras {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  productoId   Int
+  codigoBarras String
+  sabor        String
+  creadoEn     DateTime @default(now())
+
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@unique([empresaId, codigoBarras])
+  @@index([productoId])
+  @@map("producto_codigos_barras")
 }
 
 // Un producto de un combo/canasta (ej. "Canasta básica" = 2 lb tomate + 1 lb
@@ -615,6 +631,7 @@ model DetallePedido {
   // aunque luego se edite o desactive la presentación.
   presentacionId     Int?
   presentacionNombre String?
+  varianteSabor      String?
   factorUnidades     Int     @default(1)
 
   pedido       Pedido                   @relation(fields: [pedidoId], references: [id])

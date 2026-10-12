@@ -19,6 +19,7 @@ type DetalleVenta = {
     precioUnitario: string;
     subtotal: string;
     presentacionNombre: string | null;
+    varianteSabor: string | null;
     producto: { nombre: string };
     adicionales: { nombre: string; precio: string; cantidad: number; subtotal: string }[];
   }[];
@@ -158,7 +159,7 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
                 {ventaDetalle.detalles.map((d) => (
                   <div key={d.id} className="rounded-lg border border-gray-800 p-3 text-sm">
                     <div className="flex justify-between text-gray-200">
-                      <span>{d.cantidad}x {d.producto.nombre}{d.presentacionNombre ? ` — ${d.presentacionNombre}` : ''}</span>
+                      <span>{d.cantidad}x {d.producto.nombre}{d.varianteSabor ? ` — ${d.varianteSabor}` : ''}{d.presentacionNombre ? ` — ${d.presentacionNombre}` : ''}</span>
                       <strong className="text-white">{moneda(Number(d.subtotal))}</strong>
                     </div>
                     <p className="text-xs text-gray-500">{moneda(Number(d.precioUnitario))} c/u</p>

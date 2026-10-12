@@ -463,7 +463,9 @@ export class ImpresionService {
     const total = Number(pedido.total ?? 0);
     for (const detalle of pedido.detalles || []) {
       const subtotalItem = Number(detalle.subtotal ?? (Number(detalle.precioUnitario ?? detalle.precio ?? 0) * Number(detalle.cantidad ?? 1)));
-      const nombreItem = detalle.presentacionNombre ? `${detalle.producto?.nombre || 'Producto'} (${detalle.presentacionNombre})` : (detalle.producto?.nombre || 'Producto');
+      const nombreBase = detalle.producto?.nombre || 'Producto';
+      const nombreConSabor = detalle.varianteSabor ? `${nombreBase} — ${detalle.varianteSabor}` : nombreBase;
+      const nombreItem = detalle.presentacionNombre ? `${nombreConSabor} (${detalle.presentacionNombre})` : nombreConSabor;
       lineas.push(`${detalle.cantidad}x ${this.recortarTexto(nombreItem, 29)}\n`);
       lineas.push(`${this.moneda(subtotalItem).padStart(32, ' ')}\n`);
       if (detalle.exclusiones?.length) {
