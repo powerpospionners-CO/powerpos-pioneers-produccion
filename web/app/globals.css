@@ -51,6 +51,27 @@
 :root[data-theme="claro"] .bg-green-500.text-white,
 :root[data-theme="claro"] .bg-teal-900.text-white,
 :root[data-theme="claro"] .from-orange-400.text-white { color: #fff !important; }
+:root[data-theme="claro"] .pos-caja-abierta,
+:root[data-theme="claro"] div.pos-caja-abierta {
+  border-color: #86efac !important;
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
+}
+:root[data-theme="claro"] .pos-caja-cerrar {
+  border-color: #86efac !important;
+  color: #166534 !important;
+}
+:root[data-theme="claro"] .pos-caja-cerrar:hover {
+  background-color: #bbf7d0 !important;
+}
+:root[data-theme="claro"] button:disabled,
+:root[data-theme="claro"] .pos-accion-deshabilitada:disabled {
+  border-color: #cbd5e1 !important;
+  background-color: #e2e8f0 !important;
+  color: #475569 !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+}
 
 body {
   background: var(--background);

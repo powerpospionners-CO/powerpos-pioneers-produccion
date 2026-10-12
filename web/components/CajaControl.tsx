@@ -95,9 +95,9 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
 
   return (
     <>
-      <div className="border-b border-green-500/20 bg-green-500/5 px-4 py-2 text-center text-sm text-green-300">
+      <div className="pos-caja-abierta border-b border-green-500/20 bg-green-500/5 px-4 py-2 text-center text-sm text-green-300">
         <Unlock size={13} className="mr-1 inline" /> Caja abierta · {caja.usuario?.nombre || 'cajero'} · base {moneda(Number(caja.montoInicial))}
-        <button type="button" onClick={() => { setMontoFinal(0); setConfirmoCero(false); setError(''); setModalCierre(true); }} className="ml-3 rounded-lg border border-green-500/30 px-3 py-1 text-xs font-semibold text-green-200 hover:bg-green-500/10">
+        <button type="button" onClick={() => { setMontoFinal(0); setConfirmoCero(false); setError(''); setModalCierre(true); }} className="pos-caja-cerrar ml-3 rounded-lg border border-green-500/30 px-3 py-1 text-xs font-semibold text-green-200 hover:bg-green-500/10">
           Cerrar caja
         </button>
       </div>

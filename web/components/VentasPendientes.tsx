@@ -47,7 +47,7 @@ export default function VentasPendientes<T>({ clave, datos, total, vacia, bloque
   };
   return <section className="my-3 rounded-xl border border-gray-700 bg-gray-950 p-3" aria-label="Ventas pendientes">
     <div className="flex gap-2">
-      <button type="button" disabled={!clave || vacia || bloqueado} onClick={guardar} className="min-h-12 flex-1 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white disabled:opacity-40">Guardar y atender otro</button>
+      <button type="button" disabled={!clave || vacia || bloqueado} onClick={guardar} className="pos-accion-deshabilitada min-h-12 flex-1 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white disabled:opacity-40">Guardar y atender otro</button>
       <button type="button" onClick={() => setListaAbierta(v => !v)} aria-expanded={listaAbierta} className="min-h-12 rounded-lg border border-gray-600 px-3 text-sm text-white">Pendientes ({ventas.length})</button>
     </div>
     {!vacia && <input aria-label="Nombre de la venta pendiente" maxLength={80} value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre del cliente o referencia (opcional)" className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-sm text-white" />}
@@ -58,7 +58,7 @@ export default function VentasPendientes<T>({ clave, datos, total, vacia, bloque
       {!ventas.length && <p className="text-sm text-gray-400">No hay ventas pendientes.</p>}
       {ventas.map(venta => <div key={venta.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-800 p-3">
         <div className="min-w-0"><p className="break-words text-sm font-semibold text-white">{venta.nombre}</p><p className="text-xs text-gray-400">{new Date(venta.fecha).toLocaleString('es-CO')} · ${venta.total.toLocaleString('es-CO')}</p></div>
-        <button type="button" disabled={!vacia || bloqueado} onClick={() => recuperar(venta.id)} className="min-h-12 rounded-lg bg-orange-500 px-3 text-sm font-semibold text-white disabled:opacity-40">Recuperar</button>
+        <button type="button" disabled={!vacia || bloqueado} onClick={() => recuperar(venta.id)} className="pos-accion-deshabilitada min-h-12 rounded-lg bg-orange-500 px-3 text-sm font-semibold text-white disabled:opacity-40">Recuperar</button>
       </div>)}
     </div>}
   </section>;
