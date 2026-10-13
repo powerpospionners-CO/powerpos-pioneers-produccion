@@ -558,6 +558,12 @@ export class ImpresionService {
     lineas.push(
       '--------------------------------\n',
       `BASE INICIAL: ${Number(resumen.montoInicial).toFixed(0)}\n`,
+      ...(resumen.retiroEfectivo
+        ? [
+            `EFECTIVO RETIRADO: ${Number(resumen.retiroEfectivo.montoRetirado).toFixed(0)}\n`,
+            `VENTAS PARA RECAUDO: ${Number(resumen.retiroEfectivo.montoEsperado).toFixed(0)}\n`,
+          ]
+        : []),
       `EFECTIVO ESPERADO: ${Number(resumen.montoEsperado).toFixed(0)}\n`,
       `EFECTIVO CONTADO: ${Number(resumen.montoFinal).toFixed(0)}\n`,
       `DIFERENCIA: ${Number(resumen.diferencia).toFixed(0)}\n`,

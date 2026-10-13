@@ -48,6 +48,7 @@ model Empresa {
   consumoEmpleadosHabilitado Boolean @default(false)
   catalogoHabilitado Boolean @default(false)
   catalogoFotosPublicas Boolean @default(true)
+  recaudoEfectivoHabilitado Boolean @default(false)
   tiendaSlug String @unique @default(uuid())
   tiendaConfig Json @default("{}")
   fidelizacionConfig Json @default("{}")
@@ -71,6 +72,8 @@ model Empresa {
   catalogoProductos CatalogoProducto[]
   distribuidores Distribuidor[]
   pedidosDistribuidor PedidoDistribuidor[]
+  retirosEfectivoCaja RetiroEfectivoCaja[]
+  consignacionesEfectivo ConsignacionEfectivo[]
   liquidacionesDistribuidor LiquidacionDistribuidor[]
 
   @@map("empresas")
@@ -115,6 +118,7 @@ model Sucursal {
   direccion String?
   telefono  String?
   activo    Boolean  @default(true)
+  baseEfectivoCaja Decimal? @db.Decimal(10, 2)
   creadoEn  DateTime @default(now())
 
   empresa     Empresa                @relation(fields: [empresaId], references: [id])
@@ -122,6 +126,8 @@ model Sucursal {
   pedidos     Pedido[]
   cajas       Caja[]
   movimientos MovimientoFinanciero[]
+  retirosEfectivoCaja RetiroEfectivoCaja[]
+  consignacionesEfectivo ConsignacionEfectivo[]
   consumosEmpleados ConsumoEmpleado[]
   distribuidores Distribuidor[]
   pedidosDistribuidor PedidoDistribuidor[]
@@ -167,6 +173,8 @@ model Usuario {
   cajas       Caja[]
   eventos     EventoCaja[]
   movimientos MovimientoFinanciero[]
+  retirosEfectivoCaja RetiroEfectivoCaja[]
+  consignacionesEfectivo ConsignacionEfectivo[]
   movimientosInventario MovimientoInventario[]
   lotesPreparacion LotePreparacion[]
   auditorias  Auditoria[]
@@ -782,8 +790,51 @@ model Caja {
   usuario  Usuario      @relation(fields: [usuarioId], references: [id])
   pedidos  Pedido[]
   eventos  EventoCaja[]
+  retiroEfectivo RetiroEfectivoCaja?
 
   @@map("cajas")
+}
+
+model RetiroEfectivoCaja {
+  id             Int      @id @default(autoincrement())
+  empresaId      Int
+  sucursalId     Int
+  cajaId         Int      @unique
+  usuarioId      Int
+  montoEsperado  Decimal  @db.Decimal(10, 2)
+  montoRetirado  Decimal  @db.Decimal(10, 2)
+  creadoEn       DateTime @default(now())
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  caja     Caja     @relation(fields: [cajaId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([sucursalId, creadoEn])
+  @@map("retiros_efectivo_caja")
+}
+
+model ConsignacionEfectivo {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  sucursalId         Int
+  usuarioId          Int
+  periodoInicio      DateTime @db.Date
+  periodoFin         DateTime @db.Date
+  ventasEfectivo     Decimal  @db.Decimal(10, 2)
+  efectivoRecaudado  Decimal  @db.Decimal(10, 2)
+  montoConsignado    Decimal  @db.Decimal(10, 2)
+  fechaConsignacion  DateTime @default(now())
+  referencia         String?
+  creadoEn           DateTime @default(now())
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@unique([sucursalId, periodoInicio])
+  @@index([empresaId, periodoInicio])
+  @@map("consignaciones_efectivo")
 }
 
 // ==========================================

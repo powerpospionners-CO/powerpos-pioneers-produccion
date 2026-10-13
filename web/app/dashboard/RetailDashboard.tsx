@@ -10,7 +10,8 @@ import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
 
-type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalEsperado?: number };
+type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalEsperado?: number; totalEfectivo?: number; recaudoEfectivoHabilitado?: boolean; baseEfectivoCaja?: number | null };
+type ConfiguracionRecaudo = { habilitado: boolean; baseEfectivoCaja: number | null };
 type Producto = { id: number; nombre: string; codigoBarras?: string; controlaStock: boolean; stockActual: number; stockMinimo: number };
 type Venta = { id: number; numero: string; total: string; metodoPago: string; creadoEn: string; estado: string; pagos?: { metodoPago: string; monto: string }[] };
 type Cajero = { id: number; nombre: string; rol: string };
@@ -47,6 +48,8 @@ export default function RetailDashboard() {
   const [cajeroId, setCajeroId] = useState('');
   const [base, setBase] = useState('');
   const [contado, setContado] = useState('');
+  const [montoRetirado, setMontoRetirado] = useState('');
+  const [configuracionRecaudo, setConfiguracionRecaudo] = useState<ConfiguracionRecaudo | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
@@ -59,10 +62,17 @@ export default function RetailDashboard() {
   const [cargandoVentasFecha, setCargandoVentasFecha] = useState(false);
 
   const cargar = async () => {
-    const [p, v, c, u] = await Promise.allSettled([api.get('/productos'), api.get('/pedidos'), api.get('/caja/abierta'), api.get('/usuarios')]);
+    const [p, v, c, u, recaudo] = await Promise.allSettled([api.get('/productos'), api.get('/pedidos'), api.get('/caja/abierta'), api.get('/usuarios'), api.get('/caja/recaudo/configuracion')]);
     if (p.status === 'fulfilled') setProductos(p.value.data);
     if (v.status === 'fulfilled') setVentas(v.value.data);
     setCaja(c.status === 'fulfilled' ? c.value.data : null);
+    if (c.status === 'fulfilled' && c.value.data?.recaudoEfectivoHabilitado) {
+      setMontoRetirado(String(c.value.data.totalEfectivo || 0));
+    }
+    if (recaudo.status === 'fulfilled') {
+      setConfiguracionRecaudo(recaudo.value.data);
+      if (recaudo.value.data.baseEfectivoCaja !== null) setBase(String(recaudo.value.data.baseEfectivoCaja));
+    }
     if (u.status === 'fulfilled') {
       const elegibles = u.value.data.filter((x: Cajero) => ['CAJERO', 'ADMIN_EMPRESA', 'GERENTE'].includes(x.rol));
       setCajeros(elegibles);
@@ -82,6 +92,10 @@ export default function RetailDashboard() {
   useEffect(() => { void cargarVentasFecha(fechaSeleccionada); }, [fechaSeleccionada]);
 
   const abrirCaja = async () => {
+    if (configuracionRecaudo?.habilitado && configuracionRecaudo.baseEfectivoCaja === null) {
+      setError('Un administrador debe configurar la base fija antes de abrir caja.');
+      return;
+    }
     if (!cajeroId || base === '' || Number(base) < 0) return;
     setOcupado(true); setError('');
     try { await api.post('/caja/abrir', { montoInicial: Number(base), cajeroId: Number(cajeroId) }); setBase(''); await cargar(); }
@@ -91,7 +105,15 @@ export default function RetailDashboard() {
   const cerrarCaja = async () => {
     if (!caja || contado === '' || Number(contado) < 0) return;
     setOcupado(true); setError('');
-    try { await api.post(`/caja/${caja.id}/cerrar`, { montoFinal: Number(contado) }); setContado(''); await cargar(); }
+    try {
+      await api.post(`/caja/${caja.id}/cerrar`, {
+        montoFinal: Number(contado),
+        ...(caja.recaudoEfectivoHabilitado ? { montoRetirado: Number(montoRetirado) } : {}),
+      });
+      setContado('');
+      setMontoRetirado('');
+      await cargar();
+    }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo cerrar la caja.'); }
     finally { setOcupado(false); }
   };
@@ -151,7 +173,36 @@ export default function RetailDashboard() {
       { icon: Boxes, title: 'Productos', value: String(productos.length), detail: 'En tu catálogo' },
       { icon: AlertTriangle, title: 'Existencias bajas', value: String(bajos.length), detail: 'En o bajo el mínimo' },
     ].map(({ icon: Icon, title, value, detail }) => <div key={title} className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><Icon size={21} className="text-orange-500" /><p className="mt-4 text-sm text-gray-400">{title}</p><p className="mt-1 text-2xl font-bold text-white">{value}</p><p className="mt-1 text-xs text-gray-500">{detail}</p></div>)}</div>
-    <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><h2 className="text-lg font-bold">Caja de la sucursal</h2>{caja ? <div className="mt-4 space-y-4"><p className="text-sm text-green-400">Abierta · asignada a {caja.usuario?.nombre || 'cajero'}</p><p className="text-sm text-gray-400">Base inicial: {moneda(Number(caja.montoInicial))}</p><label className="block text-sm text-gray-400">Dinero contado al cerrar<input type="number" min="0" value={contado} onChange={(e) => setContado(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white" /></label><button onClick={cerrarCaja} disabled={ocupado || contado === ''} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white disabled:opacity-50">Cerrar caja</button></div> : <div className="mt-4 space-y-4"><p className="text-sm text-gray-400">Abre la caja antes de registrar ventas.</p><label className="block text-sm text-gray-400">Asignar a<select value={cajeroId} onChange={(e) => setCajeroId(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white">{cajeros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></label><label className="block text-sm text-gray-400">Base de efectivo<input type="number" min="0" value={base} onChange={(e) => setBase(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white" /></label><button onClick={abrirCaja} disabled={ocupado || !cajeroId || base === ''} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white disabled:opacity-50">Abrir caja</button></div>}</section>
+    <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+      <h2 className="text-lg font-bold">Caja de la sucursal</h2>
+      {caja ? (
+        <div className="mt-4 space-y-4">
+          <p className="text-sm text-green-400">Abierta · asignada a {caja.usuario?.nombre || 'cajero'}</p>
+          <p className="text-sm text-gray-400">Base inicial: {moneda(Number(caja.montoInicial))}</p>
+          {caja.recaudoEfectivoHabilitado && (
+            <label className="block text-sm text-gray-400">Efectivo retirado para recaudo (ventas: {moneda(caja.totalEfectivo || 0)})
+              <input type="number" min="0" max={caja.totalEfectivo || 0} step="0.01" value={montoRetirado} onChange={(e) => setMontoRetirado(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white" />
+            </label>
+          )}
+          <label className="block text-sm text-gray-400">Dinero contado al cerrar
+            <input type="number" min="0" value={contado} onChange={(e) => setContado(e.target.value)} placeholder={String(caja.recaudoEfectivoHabilitado ? Number(caja.montoInicial) + Number(caja.totalEfectivo || 0) - Number(montoRetirado || 0) : caja.totalEsperado || 0)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white" />
+          </label>
+          <button onClick={cerrarCaja} disabled={ocupado || contado === '' || (caja.recaudoEfectivoHabilitado && (montoRetirado === '' || Number(montoRetirado) > Number(caja.totalEfectivo || 0)))} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white disabled:opacity-50">Cerrar caja</button>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <p className="text-sm text-gray-400">Abre la caja antes de registrar ventas.</p>
+          <label className="block text-sm text-gray-400">Asignar a
+            <select value={cajeroId} onChange={(e) => setCajeroId(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white">{cajeros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
+          </label>
+          <label className="block text-sm text-gray-400">Base de efectivo
+            <input type="number" min="0" value={base} readOnly={configuracionRecaudo?.habilitado && configuracionRecaudo.baseEfectivoCaja !== null} onChange={(e) => setBase(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-white read-only:opacity-70" />
+          </label>
+          {configuracionRecaudo?.habilitado && configuracionRecaudo.baseEfectivoCaja === null && <p className="text-xs text-yellow-200">Configura la base fija desde “Recaudo semanal” antes de abrir caja.</p>}
+          <button onClick={abrirCaja} disabled={ocupado || !cajeroId || base === '' || (!!configuracionRecaudo?.habilitado && configuracionRecaudo.baseEfectivoCaja === null)} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white disabled:opacity-50">Abrir caja</button>
+        </div>
+      )}
+    </section>
       <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5"><h2 className="text-lg font-bold">Productos por reponer</h2><div className="mt-4 max-h-72 space-y-2 overflow-y-auto">{bajos.length ? bajos.map((p) => <div key={p.id} className="flex justify-between gap-3 rounded-lg bg-gray-800 p-3 text-sm"><div><strong>{p.nombre}</strong><p className="text-xs text-gray-500">{p.codigoBarras || 'Sin código de barras'}</p></div><span className="text-yellow-400">{p.stockActual} / mín. {p.stockMinimo}</span></div>) : <p className="text-sm text-gray-400">No hay productos en el nivel mínimo.</p>}</div></section></div>
     <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">

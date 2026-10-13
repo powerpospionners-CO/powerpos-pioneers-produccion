@@ -22,6 +22,10 @@ El Excel `stiven.xlsx` contiene 499 presentaciones y coincide con los 499 regist
 
 Las 271 rutas bajo `web/public/catalogo-imagenes/` ya están asociadas a los registros. Reemplazar los recursos conserva IDs, precios, vínculos y la disponibilidad exclusiva del catálogo por empresa. Las fotografías son de referencia; la presentación se toma de cada ficha. La selección de fuentes queda registrada en el manifiesto de imágenes.
 
+## Recaudo semanal de efectivo — Enchila Market Pereira
+
+La migración `20261013120000_recaudo_efectivo_semanal` habilita el recaudo únicamente para la empresa cuyo nombre es `ENCHILA MARKET PEREIRA` e inicializa en $150.000 COP la base fija de sus sucursales. Al cierre, se registra el efectivo retirado de las ventas y se cuenta lo que queda en gaveta; la base fija no entra en el monto semanal. El panel resume los retiros de lunes a domingo y guarda una consignación por semana con fecha, referencia y diferencia.
+
 ## Verificación al publicar
 
 1. Compilar API y web y ejecutar las pruebas del backend.

@@ -7,7 +7,12 @@ function escenario() {
     usuarioId: 3,
     estado: 'ABIERTA',
     montoInicial: 100,
-    sucursal: { empresaId: 4, nombre: 'Principal' },
+    sucursal: {
+      empresaId: 4,
+      nombre: 'Principal',
+      baseEfectivoCaja: null,
+      empresa: { recaudoEfectivoHabilitado: false },
+    },
     usuario: { nombre: 'Cajero' },
     pedidos: [
       { estado: 'ENTREGADO', metodoPago: 'EFECTIVO', total: 200 },
@@ -18,7 +23,10 @@ function escenario() {
   };
   const db: any = {
     $executeRaw: jest.fn().mockResolvedValue(1),
-    sucursal: { findFirst: jest.fn().mockResolvedValue(caja.sucursal) },
+    sucursal: {
+      findFirst: jest.fn().mockResolvedValue(caja.sucursal),
+      update: jest.fn().mockImplementation(async ({ data }) => ({ ...caja.sucursal, ...data })),
+    },
     usuario: { findFirst: jest.fn().mockResolvedValue({ id: 3 }) },
     caja: {
       findUnique: jest.fn().mockResolvedValue(caja),
@@ -30,6 +38,8 @@ function escenario() {
         .mockImplementation(async ({ data }) => ({ ...caja, ...data })),
     },
     eventoCaja: { create: jest.fn().mockResolvedValue({}) },
+    retiroEfectivoCaja: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+    consignacionEfectivo: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
   };
   db.$transaction = jest.fn(async (fn) => fn(db));
   const notificaciones = { enviarAlerta: jest.fn().mockResolvedValue({}) };
@@ -60,6 +70,43 @@ describe('Conciliación de caja', () => {
     expect(await service.obtenerCajaAbierta(2, 4)).toMatchObject({
       totalEsperado: 300,
     });
+  });
+  it('registra el retiro de ventas y deja la base fija en el arqueo', async () => {
+    const { service, db, caja } = escenario();
+    caja.sucursal.baseEfectivoCaja = 100;
+    caja.sucursal.empresa.recaudoEfectivoHabilitado = true;
+    const resultado = await service.cerrarCaja(
+      1,
+      { montoRetirado: 200, montoFinal: 100 },
+      3,
+      false,
+      4,
+    );
+    expect(resultado).toMatchObject({
+      totalEfectivo: 200,
+      montoEsperado: 100,
+      diferencia: 0,
+    });
+    expect(db.retiroEfectivoCaja.create).toHaveBeenCalledWith({
+      data: {
+        empresaId: 4,
+        sucursalId: 2,
+        cajaId: 1,
+        usuarioId: 3,
+        montoEsperado: 200,
+        montoRetirado: 200,
+      },
+    });
+  });
+  it('rechaza registrar un retiro superior a las ventas en efectivo', async () => {
+    const { service, db, caja } = escenario();
+    caja.sucursal.baseEfectivoCaja = 100;
+    caja.sucursal.empresa.recaudoEfectivoHabilitado = true;
+    await expect(
+      service.cerrarCaja(1, { montoRetirado: 201, montoFinal: 100 }, 3, false, 4),
+    ).rejects.toThrow('no puede superar');
+    expect(db.caja.update).not.toHaveBeenCalled();
+    expect(db.retiroEfectivoCaja.create).not.toHaveBeenCalled();
   });
   it('rechaza un conteo inválido sin cerrar ni registrar eventos', async () => {
     const { service, db } = escenario();
@@ -171,5 +218,74 @@ describe('Corrección de cierre de caja', () => {
     await expect(
       service.corregirCierre(1, 300, '  ', 3, 4),
     ).rejects.toThrow('motivo');
+  });
+});
+
+describe('Recaudo semanal de efectivo', () => {
+  it('suma retiros de lunes a domingo sin incluir la base inicial', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-13T15:00:00.000Z'));
+    try {
+      const { service, db, caja } = escenario();
+      caja.sucursal.empresa.recaudoEfectivoHabilitado = true;
+      caja.sucursal.baseEfectivoCaja = 100;
+      db.retiroEfectivoCaja.findMany.mockResolvedValue([
+        {
+          id: 8,
+          cajaId: 12,
+          montoEsperado: 500,
+          montoRetirado: 500,
+          creadoEn: new Date('2026-10-05T20:00:00.000Z'),
+          usuario: { nombre: 'Cajero' },
+          caja: { cerradaEn: new Date('2026-10-05T20:00:00.000Z'), usuario: { nombre: 'Cajero' } },
+        },
+        {
+          id: 9,
+          cajaId: 13,
+          montoEsperado: 300,
+          montoRetirado: 280,
+          creadoEn: new Date('2026-10-11T20:00:00.000Z'),
+          usuario: { nombre: 'Cajero' },
+          caja: { cerradaEn: new Date('2026-10-11T20:00:00.000Z'), usuario: { nombre: 'Cajero' } },
+        },
+      ]);
+
+      const resumen = await service.obtenerRecaudoSemanal('2026-10-05', 2, 4);
+
+      expect(resumen).toMatchObject({
+        periodoInicio: '2026-10-05',
+        periodoFin: '2026-10-11',
+        baseEfectivoCaja: 100,
+        semanaCompleta: true,
+        ventasEfectivo: 800,
+        efectivoRecaudado: 780,
+        diferenciaRecaudo: -20,
+        retiros: [
+          { esperado: 500, retirado: 500, diferencia: 0 },
+          { esperado: 300, retirado: 280, diferencia: -20 },
+        ],
+        consignacion: null,
+      });
+      expect(db.retiroEfectivoCaja.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            sucursalId: 2,
+            empresaId: 4,
+            creadoEn: {
+              gte: new Date('2026-10-05T05:00:00.000Z'),
+              lt: new Date('2026-10-12T05:00:00.000Z'),
+            },
+          },
+        }),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('rechaza semanas que no comienzan el lunes', async () => {
+    const { service } = escenario();
+    await expect(
+      service.obtenerRecaudoSemanal('2026-10-06', 2, 4),
+    ).rejects.toThrow('iniciar un lunes');
   });
 });

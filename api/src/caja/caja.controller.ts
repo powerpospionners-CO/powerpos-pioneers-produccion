@@ -65,6 +65,45 @@ export class CajaController {
     return this.cajaService.reimprimirMiUltimoCierre(req.user.id, req.user.empresaId);
   }
 
+  @Get('recaudo/configuracion')
+  configuracionRecaudo(@Request() req: any) {
+    return this.cajaService.obtenerConfiguracionRecaudo(
+      req.user.sucursalId,
+      req.user.empresaId,
+    );
+  }
+
+  @Patch('recaudo/configuracion')
+  @Roles('ADMIN_EMPRESA')
+  configurarBaseRecaudo(@Body() body: any, @Request() req: any) {
+    return this.cajaService.configurarBaseEfectivo(
+      body.baseEfectivoCaja,
+      req.user.sucursalId,
+      req.user.empresaId,
+    );
+  }
+
+  @Get('recaudo/semanal')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  recaudoSemanal(@Request() req: any, @Query('periodoInicio') periodoInicio?: string) {
+    return this.cajaService.obtenerRecaudoSemanal(
+      periodoInicio,
+      req.user.sucursalId,
+      req.user.empresaId,
+    );
+  }
+
+  @Post('recaudo/consignar')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  consignar(@Body() body: any, @Request() req: any) {
+    return this.cajaService.registrarConsignacionEfectivo(
+      body,
+      req.user.sucursalId,
+      req.user.empresaId,
+      req.user.id,
+    );
+  }
+
   @Patch(':id/corregir')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   corregir(@Param('id') id: string, @Body() body: any, @Request() req: any) {

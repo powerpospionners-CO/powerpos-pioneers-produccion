@@ -34,6 +34,7 @@ type Resumen = {
   cantidadVentas: number;
   ventasPorMetodoPago: { metodo: string; total: number }[];
   productosVendidos: { nombre: string; cantidad: number; total: number }[];
+  retiroEfectivo: { montoEsperado: number; montoRetirado: number; diferencia: number; creadoEn: string } | null;
 };
 
 const ETIQUETAS_METODO: Record<string, string> = {
@@ -191,6 +192,13 @@ export default function CajaHistorialPage() {
 
                 <div className="rounded-xl border border-gray-800 p-3">
                   <div className="flex justify-between text-gray-300"><span>Base inicial</span><span>{moneda(resumen.montoInicial)}</span></div>
+                  {resumen.retiroEfectivo && (
+                    <>
+                      <div className="flex justify-between text-gray-300"><span>Ventas en efectivo para recaudo</span><span>{moneda(resumen.retiroEfectivo.montoEsperado)}</span></div>
+                      <div className="flex justify-between text-gray-300"><span>Efectivo retirado</span><span>{moneda(resumen.retiroEfectivo.montoRetirado)}</span></div>
+                      {resumen.retiroEfectivo.diferencia !== 0 && <div className="flex justify-between text-yellow-300"><span>Diferencia del retiro</span><span>{moneda(resumen.retiroEfectivo.diferencia)}</span></div>}
+                    </>
+                  )}
                   <div className="flex justify-between text-gray-300"><span>Efectivo esperado</span><span>{moneda(resumen.montoEsperado)}</span></div>
                   <div className="flex justify-between text-gray-300"><span>Efectivo contado</span><span>{resumen.montoFinal !== null ? moneda(resumen.montoFinal) : '—'}</span></div>
                   {resumen.diferencia !== null && (

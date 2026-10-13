@@ -17,6 +17,7 @@ El super admin configura cada empresa como restaurante, supermercado, tienda u o
 - **Restaurante:** conserva el POS con recetas, adicionales, comandas y cocina KDS.
 - **Supermercado, tienda y comercio:** usan un POS comercial con búsqueda por nombre o código de barras, carrito, caja, pago, recibo y existencias por producto. Las ventas quedan entregadas al cobrarse y no pasan por cocina.
 - **Códigos de barras por sabor:** un producto puede tener varios códigos alternativos con su sabor (por ejemplo, Pulparindo Mango o Sandía). Al escanear se identifica el sabor en la venta y el recibo, conservando un solo producto, precio e inventario compartido; no requiere crear presentaciones.
+- **Recaudo de efectivo semanal (Enchila Market Pereira):** al cerrar cada día se registra el efectivo retirado de la gaveta, se deja la base fija de cambio y se concilia el efectivo contado. El panel de recaudo suma esos retiros de lunes a domingo y permite registrar la consignación del lunes siguiente, con fecha, referencia y diferencias. La base fija se configura por sucursal y no se incluye en el valor semanal consignado.
 - **Super admin:** elige el tipo al crear la empresa y puede cambiarlo en su configuración. Al cambiar una empresa existente a comercio, revisa los códigos y existencias de sus productos antes de vender.
 - **Tema:** el botón de sol/luna en la barra superior permite alternar claro y oscuro; la preferencia se guarda en el navegador.
 

@@ -15,6 +15,7 @@ const ITEMS = [
   { href: '/fidelizacion', label: 'Puntos', icon: Users },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/caja', label: 'Cajas', icon: Wallet },
+  { href: '/caja/recaudo', label: 'Recaudo semanal', icon: Wallet },
   { href: '/productos', label: 'Productos', icon: Package },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
   { href: '/clientes', label: 'Clientes', icon: Users },
@@ -32,11 +33,13 @@ export default function Navbar() {
   const { tema, cambiarTema } = useTema();
   const [pendientesWeb, setPendientesWeb] = useState(0);
   const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
+  const [recaudoEfectivoHabilitado, setRecaudoEfectivoHabilitado] = useState(false);
   useEffect(() => {
     if (!usuario?.empresaId) return;
     api.get('/empresa').then((respuesta) => {
       if (respuesta.data?.tipoNegocio && respuesta.data.tipoNegocio !== usuario.tipoNegocio) setTipoNegocio(respuesta.data.tipoNegocio);
       setLogoEmpresa(respuesta.data?.logo || null);
+      setRecaudoEfectivoHabilitado(!!respuesta.data?.recaudoEfectivoHabilitado);
     }).catch(() => undefined);
   }, [usuario?.empresaId, usuario?.tipoNegocio, setTipoNegocio]);
   useEffect(() => {
@@ -49,6 +52,7 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
+    if (item.href === '/caja/recaudo') return esAdminOGerente && recaudoEfectivoHabilitado;
     if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;
     if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
