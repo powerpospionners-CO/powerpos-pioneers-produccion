@@ -38,6 +38,22 @@ describe('Pedidos comerciales', () => {
     expect(db.movimientoFinanciero.create).toHaveBeenCalledTimes(1);
   });
 
+  it('guarda como Unidad la venta base de productos con presentaciones', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    db.producto.findFirst.mockResolvedValue({
+      id: 5, nombre: 'Dulce', precio: 1000, disponible: true, activo: true,
+      controlaStock: true, ingredientes: [], adicionales: [], presentaciones: [{ id: 9 }],
+    });
+    await service.crearEnTransaccion(venta, 3, 1, db);
+
+    const detalles = db.pedido.create.mock.calls[0][0].data.detalles.create;
+    expect(detalles[0]).toEqual(expect.objectContaining({
+      presentacionId: null,
+      presentacionNombre: 'Unidad',
+      factorUnidades: 1,
+    }));
+  });
+
   it('rechaza stock insuficiente antes de registrar el ingreso', async () => {
     const { db, service } = escenario('SUPERMERCADO', 0);
     await expect(service.crearEnTransaccion(venta, 3, 1, db)).rejects.toThrow(BadRequestException);

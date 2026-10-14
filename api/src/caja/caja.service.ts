@@ -78,22 +78,24 @@ export class CajaService {
     return this.desglosePorMetodo(pedidos).find((d) => d.metodo === 'EFECTIVO')?.total || 0;
   }
 
-  // Agrupa por nombre de producto para el resumen/tirilla de cierre. No usa
-  // el id del producto porque, para el reporte, dos ventas del mismo nombre
-  // deben sumarse aunque el producto se haya editado entre una y otra.
-  private productosVendidos(pedidos: { detalles?: { cantidad: number; subtotal: any; producto?: { nombre: string } | null }[] }[]) {
-    const mapa = new Map<string, { cantidad: number; total: number }>();
+  // Agrupa por nombre y presentación para que las ventas por unidad no se
+  // mezclen con las de caja/tarro, incluso si ocurrieron antes de editar el
+  // producto y comparten el nombre actual.
+  private productosVendidos(pedidos: { detalles?: { cantidad: number; subtotal: any; presentacionNombre?: string | null; producto?: { nombre: string } | null }[] }[]) {
+    const mapa = new Map<string, { nombre: string; presentacionNombre: string | null; cantidad: number; total: number }>();
     for (const p of pedidos) {
       for (const d of p.detalles || []) {
         const nombre = d.producto?.nombre || 'Producto';
-        const actual = mapa.get(nombre) || { cantidad: 0, total: 0 };
+        const presentacionNombre = d.presentacionNombre ?? null;
+        const clave = JSON.stringify([nombre, presentacionNombre]);
+        const actual = mapa.get(clave) || { nombre, presentacionNombre, cantidad: 0, total: 0 };
         actual.cantidad += d.cantidad;
         actual.total += Number(d.subtotal);
-        mapa.set(nombre, actual);
+        mapa.set(clave, actual);
       }
     }
     return Array.from(mapa.entries())
-      .map(([nombre, v]) => ({ nombre, cantidad: v.cantidad, total: v.total }))
+      .map(([, v]) => v)
       .sort((a, b) => b.total - a.total);
   }
 

@@ -33,7 +33,7 @@ type Resumen = {
   totalVentas: number;
   cantidadVentas: number;
   ventasPorMetodoPago: { metodo: string; total: number }[];
-  productosVendidos: { nombre: string; cantidad: number; total: number }[];
+  productosVendidos: { nombre: string; presentacionNombre: string | null; cantidad: number; total: number }[];
   retiroEfectivo: { montoEsperado: number; montoRetirado: number; diferencia: number; creadoEn: string } | null;
 };
 
@@ -240,7 +240,7 @@ export default function CajaHistorialPage() {
                     <p className="mb-2 font-semibold text-gray-300">Productos vendidos</p>
                     <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-gray-800 p-3">
                       {resumen.productosVendidos.map((p) => (
-                        <div key={p.nombre} className="flex justify-between text-gray-300"><span>{p.cantidad}x {p.nombre}</span><strong className="text-white">{moneda(p.total)}</strong></div>
+                        <div key={`${p.nombre}:${p.presentacionNombre || ''}`} className="flex justify-between text-gray-300"><span>{p.cantidad}x {p.nombre}{p.presentacionNombre ? ` (${p.presentacionNombre})` : ''}</span><strong className="text-white">{moneda(p.total)}</strong></div>
                       ))}
                     </div>
                   </div>

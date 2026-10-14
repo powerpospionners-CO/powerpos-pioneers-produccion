@@ -574,7 +574,10 @@ export class ImpresionService {
         'PRODUCTOS VENDIDOS\n',
       );
       for (const p of resumen.productosVendidos) {
-        lineas.push(`${p.cantidad}x ${p.nombre}\n`);
+        const nombre = p.presentacionNombre
+          ? `${p.nombre} (${p.presentacionNombre})`
+          : p.nombre;
+        lineas.push(`${p.cantidad}x ${nombre}\n`);
       }
     }
     lineas.push('--------------------------------\n', '\n\n');

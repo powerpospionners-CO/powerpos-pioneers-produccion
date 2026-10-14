@@ -1,7 +1,7 @@
 import { CajaService } from './caja.service';
 
 function escenario() {
-  const caja = {
+  const caja: any = {
     id: 1,
     sucursalId: 2,
     usuarioId: 3,
@@ -70,6 +70,28 @@ describe('Conciliación de caja', () => {
     expect(await service.obtenerCajaAbierta(2, 4)).toMatchObject({
       totalEsperado: 300,
     });
+  });
+  it('separa en el cierre las unidades de las cajas y suma cada presentación', async () => {
+    const { service, caja } = escenario();
+    caja.pedidos = [
+      {
+        estado: 'ENTREGADO',
+        metodoPago: 'EFECTIVO',
+        total: 300,
+        detalles: [
+          { cantidad: 2, subtotal: 200, presentacionNombre: 'Unidad', producto: { nombre: 'Dulce' } },
+          { cantidad: 1, subtotal: 100, presentacionNombre: 'Caja', producto: { nombre: 'Dulce' } },
+          { cantidad: 3, subtotal: 300, presentacionNombre: 'Unidad', producto: { nombre: 'Dulce' } },
+        ],
+      },
+    ];
+
+    const resultado = await service.cerrarCaja(1, { montoFinal: 400 }, 3, false, 4);
+
+    expect(resultado.productosVendidos).toEqual([
+      { nombre: 'Dulce', presentacionNombre: 'Unidad', cantidad: 5, total: 500 },
+      { nombre: 'Dulce', presentacionNombre: 'Caja', cantidad: 1, total: 100 },
+    ]);
   });
   it('registra el retiro de ventas y deja la base fija en el arqueo', async () => {
     const { service, db, caja } = escenario();

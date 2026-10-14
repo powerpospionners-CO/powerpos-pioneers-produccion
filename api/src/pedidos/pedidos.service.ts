@@ -160,6 +160,10 @@ export class PedidosService {
           adicionales: {
             include: { adicional: { include: { ingrediente: true } } },
           },
+          presentaciones: {
+            where: { activo: true },
+            select: { id: true },
+          },
         },
       });
 
@@ -267,7 +271,11 @@ export class PedidosService {
         adicionales: adicionalesValidados,
         subtotal: itemSubtotal,
         presentacionId: presentacion?.id ?? null,
-        presentacionNombre: presentacion?.nombre ?? null,
+        presentacionNombre:
+          presentacion?.nombre ??
+          (!producto.ventaGranel && (producto.presentaciones?.length ?? 0) > 0
+            ? 'Unidad'
+            : null),
         varianteSabor,
         factorUnidades,
         precioUnitario,
