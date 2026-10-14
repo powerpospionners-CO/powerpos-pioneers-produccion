@@ -229,6 +229,29 @@ export class ImpresionService {
     return String(texto ?? '').slice(0, ancho).padEnd(ancho, ' ');
   }
 
+  private envolverDireccion(direccion: string, ancho = 32) {
+    let restante = String(direccion ?? '').replace(/\s+/g, ' ').trim();
+    if (!restante) return [];
+
+    const lineas: string[] = [];
+    let prefijo = 'DIR: ';
+    while (restante) {
+      const capacidad = ancho - prefijo.length;
+      if (restante.length <= capacidad) {
+        lineas.push(`${prefijo}${restante}\n`);
+        break;
+      }
+
+      let corte = restante.lastIndexOf(' ', capacidad);
+      if (corte <= 0) corte = capacidad;
+      lineas.push(`${prefijo}${restante.slice(0, corte)}\n`);
+      restante = restante.slice(corte).trimStart();
+      prefijo = '     ';
+    }
+
+    return lineas;
+  }
+
   // 'es-CO' solo define el formato (DD/MM/AAAA), no la zona horaria — sin
   // esto, en un servidor que corre en UTC la tirilla sale con la hora 5
   // horas adelantada a la hora real de Colombia.
@@ -447,7 +470,7 @@ export class ImpresionService {
       `${this.centrarTexto(pedido.numero, 32)}\n`,
     );
     if (empresa?.nit) lineas.push(`${this.centrarTexto(`NIT ${empresa.nit}`, 32)}\n`);
-    if (empresa?.direccion) lineas.push(`${this.centrarTexto(empresa.direccion, 32)}\n`);
+    if (empresa?.direccion) lineas.push(...this.envolverDireccion(empresa.direccion));
     if (empresa?.telefono) lineas.push(`${this.centrarTexto(`Tel ${empresa.telefono}`, 32)}\n`);
     lineas.push('================================\n');
     lineas.push(`Fecha: ${this.fechaBogota(new Date())}\n`);
