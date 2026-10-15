@@ -23,12 +23,12 @@ export class FinancieroController {
 
   @Patch('movimiento/:id')
   editar(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.financieroService.editarMovimiento(+id, body, req.user.empresaId);
+    return this.financieroService.editarMovimiento(+id, body, req.user.empresaId, req.user.id);
   }
 
   @Delete('movimiento/:id')
   eliminar(@Param('id') id: string, @Request() req: any) {
-    return this.financieroService.eliminarMovimiento(+id, req.user.empresaId);
+    return this.financieroService.eliminarMovimiento(+id, req.user.empresaId, req.user.id);
   }
 
   @Get('movimientos')

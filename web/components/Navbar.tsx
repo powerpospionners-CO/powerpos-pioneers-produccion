@@ -20,6 +20,7 @@ const ITEMS = [
   { href: '/inventario', label: 'Inventario', icon: Boxes },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
+  { href: '/compras', label: 'Compras', icon: ShoppingCart },
   { href: '/reportes', label: 'Reportes', icon: BarChart3 },
   { href: '/distribuidores', label: 'Distribuidores', icon: Truck },
   { href: '/configuracion', label: 'Config', icon: Settings },
@@ -43,6 +44,7 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/inventario': 'inventario',
   '/clientes': 'clientes',
   '/financiero': 'financiero',
+  '/compras': 'financiero',
   '/reportes': 'reportes',
   '/configuracion': 'configuracion',
 };
@@ -75,6 +77,7 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
+    if (item.href === '/compras' && !esAdminOGerente) return false;
     if (item.href === '/caja/recaudo') return esAdminOGerente && recaudoEfectivoHabilitado;
     if (item.href === '/distribuidores') return esAdminOGerente && distribuidoresHabilitado;
     if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;

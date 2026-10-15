@@ -7,37 +7,60 @@ export class FinancieroService {
   constructor(private prisma: PrismaService) {}
 
   async registrarMovimiento(datos: any, usuarioId: number, empresaId: number, sucursalId: number) {
+    if (datos.categoria === 'COMPRA_MERCANCIA') {
+      throw new BadRequestException('Registra la compra de mercancía desde el módulo Compras para actualizar el inventario');
+    }
     const sucursal = await this.prisma.sucursal.findFirst({ where: { id: sucursalId, empresaId, activo: true }, select: { id: true } });
     if (!sucursal) throw new BadRequestException('La sucursal no pertenece a esta empresa');
     if (datos.pedidoId) {
       const pedido = await this.prisma.pedido.findFirst({ where: { id: Number(datos.pedidoId), sucursal: { empresaId } }, select: { id: true } });
       if (!pedido) throw new BadRequestException('La venta no pertenece a esta empresa');
     }
-    return this.prisma.movimientoFinanciero.create({
-      data: {
-        empresaId,
-        sucursalId,
-        usuarioId,
-        tipo: datos.tipo,
-        categoria: datos.categoria,
-        descripcion: datos.descripcion,
-        monto: datos.monto,
-        pedidoId: datos.pedidoId || null,
-        comprobante: datos.comprobante || null,
-        fecha: datos.fecha ? new Date(datos.fecha) : new Date(),
-      },
-      include: {
-        usuario: { select: { nombre: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const movimiento = await tx.movimientoFinanciero.create({
+        data: {
+          empresaId,
+          sucursalId,
+          usuarioId,
+          tipo: datos.tipo,
+          categoria: datos.categoria,
+          descripcion: datos.descripcion,
+          monto: datos.monto,
+          pedidoId: datos.pedidoId || null,
+          comprobante: datos.comprobante || null,
+          fecha: datos.fecha ? new Date(datos.fecha) : new Date(),
+        },
+        include: { usuario: { select: { nombre: true } } },
+      });
+      await tx.auditoria.create({
+        data: {
+          empresaId,
+          usuarioId,
+          accion: 'CREAR',
+          entidad: 'MOVIMIENTO_FINANCIERO',
+          entidadId: movimiento.id,
+          detalle: {
+            tipo: movimiento.tipo,
+            categoria: movimiento.categoria,
+            descripcion: movimiento.descripcion,
+            monto: Number(movimiento.monto),
+            fecha: movimiento.fecha.toISOString(),
+          },
+        },
+      });
+      return movimiento;
     });
   }
 
   // Solo los egresos que el admin registró a mano (sin pedidoId) se pueden
   // editar — los ingresos de ventas y el costo de venta se generan solos al
   // registrar un pedido, y editarlos a mano rompería el cuadre con Caja.
-  async editarMovimiento(id: number, datos: any, empresaId: number) {
+  async editarMovimiento(id: number, datos: any, empresaId: number, usuarioId: number) {
     const movimiento = await this.prisma.movimientoFinanciero.findFirst({ where: { id, empresaId } });
     if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+    if (movimiento.compraGastoId !== null) {
+      throw new ForbiddenException('Este movimiento está vinculado a Compras y no se puede editar aquí');
+    }
     if (movimiento.tipo !== 'EGRESO' || movimiento.pedidoId !== null) {
       throw new ForbiddenException('Solo se pueden editar los egresos registrados manualmente, no los generados por una venta');
     }
@@ -57,21 +80,68 @@ export class FinancieroService {
     if (datos.comprobante !== undefined) data.comprobante = datos.comprobante || null;
     if (datos.fecha !== undefined) data.fecha = new Date(datos.fecha);
 
-    return this.prisma.movimientoFinanciero.update({
-      where: { id },
-      data,
-      include: { usuario: { select: { nombre: true } } },
+    return this.prisma.$transaction(async (tx) => {
+      const actualizado = await tx.movimientoFinanciero.update({
+        where: { id },
+        data,
+        include: { usuario: { select: { nombre: true } } },
+      });
+      await tx.auditoria.create({
+        data: {
+          empresaId,
+          usuarioId,
+          accion: 'EDITAR',
+          entidad: 'MOVIMIENTO_FINANCIERO',
+          entidadId: id,
+          detalle: {
+            anterior: {
+              categoria: movimiento.categoria,
+              descripcion: movimiento.descripcion,
+              monto: Number(movimiento.monto),
+              fecha: movimiento.fecha.toISOString(),
+            },
+            nuevo: {
+              categoria: actualizado.categoria,
+              descripcion: actualizado.descripcion,
+              monto: Number(actualizado.monto),
+              fecha: actualizado.fecha.toISOString(),
+            },
+          },
+        },
+      });
+      return actualizado;
     });
   }
 
   // Mismo criterio que editar: solo egresos registrados a mano.
-  async eliminarMovimiento(id: number, empresaId: number) {
+  async eliminarMovimiento(id: number, empresaId: number, usuarioId: number) {
     const movimiento = await this.prisma.movimientoFinanciero.findFirst({ where: { id, empresaId } });
     if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+    if (movimiento.compraGastoId !== null) {
+      throw new ForbiddenException('Este movimiento está vinculado a Compras y no se puede eliminar aquí');
+    }
     if (movimiento.tipo !== 'EGRESO' || movimiento.pedidoId !== null) {
       throw new ForbiddenException('Solo se pueden eliminar los egresos registrados manualmente, no los generados por una venta');
     }
-    await this.prisma.movimientoFinanciero.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditoria.create({
+        data: {
+          empresaId,
+          usuarioId,
+          accion: 'ELIMINAR',
+          entidad: 'MOVIMIENTO_FINANCIERO',
+          entidadId: id,
+          detalle: {
+            tipo: movimiento.tipo,
+            categoria: movimiento.categoria,
+            descripcion: movimiento.descripcion,
+            monto: Number(movimiento.monto),
+            fecha: movimiento.fecha.toISOString(),
+          },
+        },
+      });
+      await tx.movimientoFinanciero.delete({ where: { id } });
+    });
     return { ok: true };
   }
 
@@ -160,7 +230,13 @@ export class FinancieroService {
       .filter(m => m.tipo === 'EGRESO' && m.categoria !== 'VENTA')
       .reduce((acc, m) => acc + Number(m.monto), 0);
 
-    const utilidad = totalIngresos - totalEgresos;
+    const totalComprasInventario = movimientos
+      .filter(m => m.tipo === 'EGRESO' && ['COMPRA_MERCANCIA', 'COMPRA_INSUMOS'].includes(m.categoria))
+      .reduce((acc, m) => acc + Number(m.monto), 0);
+
+    // Las compras aumentan el inventario y salen de caja, pero su costo se
+    // reconoce en la utilidad mediante COSTO_VENTA cuando se vende el producto.
+    const utilidad = totalIngresos - totalEgresos + totalComprasInventario;
 
     const porCategoria = movimientos.reduce((acc: any, m) => {
       if (!acc[m.categoria]) acc[m.categoria] = { ingreso: 0, egreso: 0 };
@@ -186,6 +262,7 @@ export class FinancieroService {
     return {
       totalIngresos,
       totalEgresos,
+      totalComprasInventario,
       utilidad,
       porCategoria,
       totalVentasHoy,
@@ -210,6 +287,7 @@ export class FinancieroService {
       [],
       ['Total ingresos', resumen.totalIngresos],
       ['Total egresos', resumen.totalEgresos],
+      ['Compras de inventario (incluidas en egresos)', resumen.totalComprasInventario],
       ['Utilidad neta', resumen.utilidad],
       [],
       ['Ventas por forma de pago'],

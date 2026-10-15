@@ -27,6 +27,7 @@ import { ConsumoEmpleadosModule } from './consumo-empleados/consumo-empleados.mo
 import { CatalogoModule } from './catalogo/catalogo.module';
 import { DistribuidoresModule } from './distribuidores/distribuidores.module';
 import { SuscripcionesModule } from './suscripciones/suscripciones.module';
+import { ComprasModule } from './compras/compras.module';
 import { PlanAccessInterceptor } from './suscripciones/plan-access.interceptor';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
@@ -58,6 +59,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
     CatalogoModule,
     DistribuidoresModule,
     SuscripcionesModule,
+    ComprasModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_INTERCEPTOR, useClass: PlanAccessInterceptor }],

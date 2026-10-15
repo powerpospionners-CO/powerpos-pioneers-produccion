@@ -24,6 +24,7 @@ const RUTAS_POR_MODULO: Array<[string, string]> = [
   ['/inventario', 'inventario'],
   ['/clientes', 'clientes'],
   ['/financiero', 'financiero'],
+  ['/compras', 'financiero'],
   ['/reportes', 'reportes'],
   ['/preparaciones', 'cocina'],
   ['/tareas', 'cocina'],

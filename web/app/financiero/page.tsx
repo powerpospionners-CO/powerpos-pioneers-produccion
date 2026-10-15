@@ -2,7 +2,7 @@
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit, Trash2 } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit, Trash2, Boxes } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 
@@ -259,7 +259,7 @@ export default function FinancieroPage() {
           </div>
 
           {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <div className="flex items-center gap-3 mb-3">
                 <div className="bg-green-500/10 p-2 rounded-lg">
@@ -278,6 +278,17 @@ export default function FinancieroPage() {
                 <span className="text-gray-400 text-sm">Total egresos</span>
               </div>
               <div className="text-2xl font-bold text-white">${resumen?.totalEgresos?.toLocaleString() || 0}</div>
+            </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="bg-blue-500/10 p-2 rounded-lg">
+                  <Boxes size={18} className="text-blue-300" />
+                </div>
+                <span className="text-gray-400 text-sm">Compras de inventario</span>
+              </div>
+              <div className="text-2xl font-bold text-white">${resumen?.totalComprasInventario?.toLocaleString() || 0}</div>
+              <div className="text-gray-500 text-xs mt-1">Salen de la cuenta; el costo se reconoce al vender</div>
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -410,7 +421,7 @@ export default function FinancieroPage() {
             ) : (
               <div className="divide-y divide-gray-800">
                 {movimientosFiltrados.map((mov) => {
-                  const esEditable = mov.tipo === 'EGRESO' && !mov.pedidoId;
+                  const esEditable = mov.tipo === 'EGRESO' && !mov.pedidoId && !mov.compraGastoId;
                   return (
                     <div key={mov.id} className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
