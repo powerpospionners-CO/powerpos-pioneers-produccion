@@ -20,6 +20,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.error === 'SUBSCRIPTION_EXPIRED' &&
+      typeof window !== 'undefined' &&
+      window.location.pathname !== '/suscripcion'
+    ) {
+      window.location.href = '/suscripcion';
+    }
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       window.localStorage.removeItem('token');
       window.localStorage.removeItem('usuario');

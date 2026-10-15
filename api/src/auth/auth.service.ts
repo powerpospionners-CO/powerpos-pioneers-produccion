@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { sumarMeses } from '../suscripciones/fechas';
 
 @Injectable()
 export class AuthService {
@@ -88,6 +89,8 @@ export class AuthService {
         nit: datos.empresa.nit,
         email: datos.empresa.email,
         telefono: datos.empresa.telefono,
+        suscripcionVenceEn: new Date(),
+        soporteIncluidoHasta: sumarMeses(new Date(), 3),
         sucursales: {
           create: {
             nombre: 'Sucursal Principal',

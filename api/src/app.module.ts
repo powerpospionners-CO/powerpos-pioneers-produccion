@@ -26,6 +26,9 @@ import { AuditoriaModule } from './auditoria/auditoria.module';
 import { ConsumoEmpleadosModule } from './consumo-empleados/consumo-empleados.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
 import { DistribuidoresModule } from './distribuidores/distribuidores.module';
+import { SuscripcionesModule } from './suscripciones/suscripciones.module';
+import { PlanAccessInterceptor } from './suscripciones/plan-access.interceptor';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -54,8 +57,9 @@ import { DistribuidoresModule } from './distribuidores/distribuidores.module';
     ConsumoEmpleadosModule,
     CatalogoModule,
     DistribuidoresModule,
+    SuscripcionesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_INTERCEPTOR, useClass: PlanAccessInterceptor }],
 })
 export class AppModule {}

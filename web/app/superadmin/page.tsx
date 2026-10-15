@@ -47,7 +47,20 @@ interface Empresa {
   facturacionElectronicaHabilitada: boolean;
   consumoEmpleadosHabilitado: boolean;
   catalogoHabilitado: boolean;
+  distribuidoresHabilitado: boolean;
+  recaudoEfectivoHabilitado: boolean;
+  suscripcionVenceEn: string | null;
+  pagoExonerado: boolean;
+  motivoExoneracion: string | null;
+  soporteIncluidoHasta: string | null;
+  soportePagadoHasta: string | null;
   _count: { usuarios: number; sucursales: number };
+}
+
+interface PreciosPlanes {
+  soporteMensual: number;
+  descuentoAnualMeses: number;
+  planes: Array<{ plan: Plan; mensual: number; anual: number }>;
 }
 
 interface Resumen {
@@ -78,6 +91,9 @@ export default function SuperadminPage() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [preciosPlanes, setPreciosPlanes] = useState<PreciosPlanes | null>(null);
+  const [formPrecios, setFormPrecios] = useState({ inicialMensual: 29900, mediumMensual: 49900, premiumMensual: 89900, soporteMensual: 19900, descuentoAnualMeses: 1 });
+  const [guardandoPrecios, setGuardandoPrecios] = useState(false);
   const [seleccionada, setSeleccionada] = useState<Empresa | null>(null);
   const [plan, setPlan] = useState<Plan>('BASICO');
   const [tipoNegocio, setTipoNegocio] = useState<TipoNegocio>('RESTAURANTE');
@@ -86,6 +102,8 @@ export default function SuperadminPage() {
   const [facturacionHabilitada, setFacturacionHabilitada] = useState(false);
   const [consumoEmpleadosHabilitado, setConsumoEmpleadosHabilitado] = useState(false);
   const [catalogoHabilitado, setCatalogoHabilitado] = useState(false);
+  const [distribuidoresHabilitado, setDistribuidoresHabilitado] = useState(false);
+  const [recaudoEfectivoHabilitado, setRecaudoEfectivoHabilitado] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -108,6 +126,12 @@ export default function SuperadminPage() {
   const [editandoAdminId, setEditandoAdminId] = useState<number | null>(null);
   const [formAdmin, setFormAdmin] = useState({ nombre: '', email: '', password: '', activo: true });
   const [guardandoAdmin, setGuardandoAdmin] = useState(false);
+  const [pagoExonerado, setPagoExonerado] = useState(false);
+  const [motivoExoneracion, setMotivoExoneracion] = useState('');
+  const [vencimiento, setVencimiento] = useState('');
+  const [soporteIncluidoHasta, setSoporteIncluidoHasta] = useState('');
+  const [soportePagadoHasta, setSoportePagadoHasta] = useState('');
+  const [guardandoSuscripcion, setGuardandoSuscripcion] = useState(false);
 
   const cargarAdministradores = async (empresaId: number) => {
     try {
@@ -150,20 +174,36 @@ export default function SuperadminPage() {
     setFacturacionHabilitada(Boolean(empresa.facturacionElectronicaHabilitada));
     setConsumoEmpleadosHabilitado(Boolean(empresa.consumoEmpleadosHabilitado));
     setCatalogoHabilitado(Boolean(empresa.catalogoHabilitado));
+    setDistribuidoresHabilitado(Boolean(empresa.distribuidoresHabilitado));
+    setRecaudoEfectivoHabilitado(Boolean(empresa.recaudoEfectivoHabilitado));
+    setPagoExonerado(Boolean(empresa.pagoExonerado));
+    setMotivoExoneracion(empresa.motivoExoneracion || '');
+    setVencimiento(empresa.suscripcionVenceEn?.slice(0, 10) || '');
+    setSoporteIncluidoHasta(empresa.soporteIncluidoHasta?.slice(0, 10) || '');
+    setSoportePagadoHasta(empresa.soportePagadoHasta?.slice(0, 10) || '');
   };
 
   const cargarDatos = async () => {
     setCargando(true);
     setError('');
     try {
-      const [resumenRes, empresasRes, auditoriaRes] = await Promise.all([
+      const [resumenRes, empresasRes, auditoriaRes, preciosRes] = await Promise.all([
         api.get('/superadmin/resumen'),
         api.get('/superadmin/empresas'),
         api.get('/superadmin/auditoria'),
+        api.get('/superadmin/planes'),
       ]);
       setResumen(resumenRes.data);
       setEmpresas(empresasRes.data);
       setAuditoria(auditoriaRes.data);
+      setPreciosPlanes(preciosRes.data);
+      setFormPrecios({
+        inicialMensual: preciosRes.data.planes.find((item: { plan: Plan }) => item.plan === 'BASICO')?.mensual ?? 29900,
+        mediumMensual: preciosRes.data.planes.find((item: { plan: Plan }) => item.plan === 'MEDIUM')?.mensual ?? 49900,
+        premiumMensual: preciosRes.data.planes.find((item: { plan: Plan }) => item.plan === 'PREMIUM')?.mensual ?? 89900,
+        soporteMensual: preciosRes.data.soporteMensual,
+        descuentoAnualMeses: preciosRes.data.descuentoAnualMeses,
+      });
       if (seleccionada) {
         const actualizada = empresasRes.data.find((empresa: Empresa) => empresa.id === seleccionada.id);
         if (actualizada) seleccionarEmpresa(actualizada);
@@ -197,10 +237,59 @@ export default function SuperadminPage() {
     if (!seleccionada) return;
     setGuardando(true);
     try {
-      await api.patch(`/superadmin/empresas/${seleccionada.id}/configuracion`, { plan, tipoNegocio, permisos, modoPreparacion, facturacionElectronicaHabilitada: facturacionHabilitada, consumoEmpleadosHabilitado, catalogoHabilitado });
+      await api.patch(`/superadmin/empresas/${seleccionada.id}/configuracion`, {
+        plan,
+        tipoNegocio,
+        permisos,
+        modoPreparacion,
+        facturacionElectronicaHabilitada: facturacionHabilitada,
+        consumoEmpleadosHabilitado,
+        catalogoHabilitado,
+        distribuidoresHabilitado,
+        recaudoEfectivoHabilitado,
+      });
       await cargarDatos();
+      aviso('Configuracion de la empresa guardada.', 'exito');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'No fue posible guardar la configuracion.');
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const guardarPreciosPlanes = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setGuardandoPrecios(true);
+    setError('');
+    try {
+      const { data } = await api.patch('/superadmin/planes', formPrecios);
+      setPreciosPlanes(data);
+      aviso('Precios de planes actualizados.', 'exito');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'No fue posible actualizar los precios.');
+    } finally {
+      setGuardandoPrecios(false);
+    }
+  };
+
+  const guardarSuscripcion = async () => {
+    if (!seleccionada) return;
+    setGuardandoSuscripcion(true);
+    setError('');
+    try {
+      await api.patch(`/superadmin/empresas/${seleccionada.id}/suscripcion`, {
+        pagoExonerado,
+        motivoExoneracion: motivoExoneracion.trim() || null,
+        suscripcionVenceEn: vencimiento || null,
+        soporteIncluidoHasta: soporteIncluidoHasta || null,
+        soportePagadoHasta: soportePagadoHasta || null,
+      });
+      await cargarDatos();
+      aviso('Suscripcion actualizada.', 'exito');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'No fue posible actualizar la suscripcion.');
+    } finally {
+      setGuardandoSuscripcion(false);
     }
   };
 
@@ -342,10 +431,34 @@ export default function SuperadminPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5"><Users size={19} className="text-blue-400" /><p className="text-slate-400 text-xs mt-4">Usuarios activos</p><p className="text-2xl font-black mt-1">{resumen?.usuariosActivos || 0}</p></div>
         </div>
 
+        <form onSubmit={guardarPreciosPlanes} className="bg-slate-900 border border-orange-500/30 rounded-xl p-5 space-y-4">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-orange-400">Configuracion global SaaS</p><h3 className="mt-1 text-xl font-bold">Planes: precios mensuales y anuales</h3><p className="text-slate-400 text-sm mt-1">Estos precios se muestran en la pantalla de suscripcion de cada empresa. El plan anual cubre 12 meses.</p></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {([
+              ['BASICO', 'Inicial', 'inicialMensual'],
+              ['MEDIUM', 'Medium', 'mediumMensual'],
+              ['PREMIUM', 'Premium', 'premiumMensual'],
+            ] as const).map(([planId, nombre, campo]) => {
+              const anual = formPrecios[campo] * (12 - formPrecios.descuentoAnualMeses);
+              const formatear = (valor: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(valor);
+              return <div key={planId} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                <h4 className="font-bold">{nombre}</h4>
+                <label className="mt-3 block text-xs text-slate-400">Precio mensual<input type="number" min="0" step="1" required value={formPrecios[campo]} onChange={(event) => setFormPrecios((actual) => ({ ...actual, [campo]: Number(event.target.value) }))} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white" /></label>
+                <p className="mt-3 text-sm text-slate-400">Precio anual (12 meses)</p><p className="font-bold text-orange-300">{formatear(anual)}</p>
+              </div>;
+            })}
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <label className="text-sm text-slate-300">Soporte opcional por mes<input type="number" min="0" step="1" required value={formPrecios.soporteMensual} onChange={(event) => setFormPrecios((actual) => ({ ...actual, soporteMensual: Number(event.target.value) }))} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white" /></label>
+            <label className="text-sm text-slate-300">Descuento anual<select value={formPrecios.descuentoAnualMeses} onChange={(event) => setFormPrecios((actual) => ({ ...actual, descuentoAnualMeses: Number(event.target.value) }))} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white"><option value={0}>Sin descuento</option><option value={1}>Descontar 1 mensualidad</option><option value={2}>Descontar 2 mensualidades</option></select></label>
+          </div>
+          <div className="flex justify-end"><button disabled={guardandoPrecios} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg px-4 py-2 font-semibold"><Save size={15} /> {guardandoPrecios ? 'Guardando...' : 'Guardar precios de planes'}</button></div>
+        </form>
+
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between"><h3 className="font-bold">Empresas y planes</h3><span className="text-slate-500 text-sm">{empresas.length} cuentas</span></div>
-            {cargando ? <div className="p-10 text-center text-slate-500">Cargando empresas...</div> : <div className="divide-y divide-slate-800">{empresas.map((empresa) => <button key={empresa.id} onClick={() => seleccionarEmpresa(empresa)} className={`w-full text-left px-5 py-4 hover:bg-slate-800/50 ${seleccionada?.id === empresa.id ? 'bg-orange-500/10 border-l-2 border-orange-500' : ''}`}><div className="flex items-center justify-between gap-4"><div><div className="font-semibold">{empresa.nombre}</div><div className="text-slate-500 text-xs mt-1">NIT {empresa.nit} · {TIPOS_NEGOCIO.find((tipo) => tipo.value === empresa.tipoNegocio)?.label || 'Restaurante'} · {empresa._count.usuarios} usuarios · {empresa._count.sucursales} sucursales</div></div><div className="text-right"><span className={`text-xs font-bold ${empresa.plan === 'PREMIUM' ? 'text-violet-300' : empresa.plan === 'MEDIUM' ? 'text-blue-300' : 'text-slate-300'}`}>{empresa.plan}</span><div className={`text-xs mt-2 ${empresa.activo ? 'text-emerald-400' : 'text-red-400'}`}>{empresa.activo ? 'Activa' : 'Inactiva'}</div></div></div></button>)}</div>}
+            {cargando ? <div className="p-10 text-center text-slate-500">Cargando empresas...</div> : <div className="divide-y divide-slate-800">{empresas.map((empresa) => <button key={empresa.id} onClick={() => seleccionarEmpresa(empresa)} className={`w-full text-left px-5 py-4 hover:bg-slate-800/50 ${seleccionada?.id === empresa.id ? 'bg-orange-500/10 border-l-2 border-orange-500' : ''}`}><div className="flex items-center justify-between gap-4"><div><div className="font-semibold">{empresa.nombre}</div><div className="text-slate-500 text-xs mt-1">NIT {empresa.nit} · {TIPOS_NEGOCIO.find((tipo) => tipo.value === empresa.tipoNegocio)?.label || 'Restaurante'} · {empresa._count.usuarios} usuarios · {empresa._count.sucursales} sucursales</div></div><div className="text-right"><span className={`text-xs font-bold ${empresa.plan === 'PREMIUM' ? 'text-violet-300' : empresa.plan === 'MEDIUM' ? 'text-blue-300' : 'text-slate-300'}`}>{empresa.plan === 'BASICO' ? 'Inicial' : empresa.plan}</span><div className={`text-xs mt-2 ${empresa.pagoExonerado ? 'text-blue-300' : empresa.suscripcionVenceEn && new Date(empresa.suscripcionVenceEn).getTime() < Date.now() ? 'text-amber-300' : 'text-emerald-400'}`}>{empresa.pagoExonerado ? 'Exonerada' : empresa.suscripcionVenceEn ? `Vence ${new Date(empresa.suscripcionVenceEn).toLocaleDateString('es-CO')}` : 'Sin vencimiento'}</div><div className={`text-xs mt-1 ${empresa.activo ? 'text-emerald-400' : 'text-red-400'}`}>{empresa.activo ? 'Activa' : 'Inactiva'}</div></div></div></button>)}</div>}
           </div>
 
           <aside className="bg-slate-900 border border-slate-800 rounded-xl p-5 h-fit">
@@ -356,7 +469,7 @@ export default function SuperadminPage() {
               <select value={tipoNegocio} onChange={(event) => setTipoNegocio(event.target.value as TipoNegocio)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white">{TIPOS_NEGOCIO.map((tipo) => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select>
               <p className="text-slate-500 text-xs mt-2">Restaurante conserva cocina, recetas y comandas. Los demás tipos usan el POS comercial y existencias por producto. Si cambias una empresa existente, revisa sus productos y existencias antes de vender.</p>
               <label className="block text-sm text-slate-400 mt-6 mb-2">Plan comercial</label>
-              <select value={plan} onChange={(event) => aplicarPlan(event.target.value as Plan)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white"><option value="BASICO">Basico</option><option value="MEDIUM">Medium</option><option value="PREMIUM">Premium</option></select>
+              <select value={plan} onChange={(event) => aplicarPlan(event.target.value as Plan)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white"><option value="BASICO">Inicial</option><option value="MEDIUM">Medium</option><option value="PREMIUM">Premium</option></select>
               <p className="text-slate-500 text-xs mt-2">El plan sirve como base; puedes ajustar los modulos permitidos.</p>
               {tipoNegocio === 'RESTAURANTE' && <><label className="block text-sm text-slate-400 mt-5 mb-2">Preparacion de pedidos</label>
               <select value={modoPreparacion} onChange={(event) => setModoPreparacion(event.target.value as 'KDS' | 'COMANDAS')} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white">
@@ -370,7 +483,29 @@ export default function SuperadminPage() {
               <p className="text-slate-500 text-xs mt-2">Permite registrar la comida que se le da al personal. No se contabiliza como venta, pero sí descuenta inventario.</p></>}
               <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm mt-4"><span>Catálogo de productos</span><input type="checkbox" checked={catalogoHabilitado} onChange={(event) => setCatalogoHabilitado(event.target.checked)} className="h-4 w-4 accent-orange-500" /></label>
               <p className="text-slate-500 text-xs mt-2">Catálogo tipo folleto (independiente del inventario) para compartir con distribuidores. Actívalo solo si la empresa lo pidió.</p>
+              <div className="mt-6 border-t border-slate-800 pt-5 space-y-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Funciones opcionales por empresa</p>
+                <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm">
+                  <span><span className="block font-medium">Módulo de distribuidores</span><span className="text-xs text-slate-500">Pedidos y liquidaciones de distribuidores.</span></span>
+                  <input type="checkbox" checked={distribuidoresHabilitado} onChange={(event) => setDistribuidoresHabilitado(event.target.checked)} className="h-4 w-4 accent-orange-500" />
+                </label>
+                <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm">
+                  <span><span className="block font-medium">Recaudo semanal de efectivo</span><span className="text-xs text-slate-500">Seguimiento de retiros y consignaciones semanales.</span></span>
+                  <input type="checkbox" checked={recaudoEfectivoHabilitado} onChange={(event) => setRecaudoEfectivoHabilitado(event.target.checked)} className="h-4 w-4 accent-orange-500" />
+                </label>
+              </div>
               <div className="mt-6 space-y-2">{MODULOS.filter((modulo) => tipoNegocio === 'RESTAURANTE' || modulo.id !== 'cocina').map((modulo) => <label key={modulo.id} className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm"><span>{modulo.label}</span><input type="checkbox" checked={Boolean(permisos[modulo.id])} onChange={(event) => setPermisos((actuales) => ({ ...actuales, [modulo.id]: event.target.checked }))} className="h-4 w-4 accent-orange-500" /></label>)}</div>
+              <button type="button" onClick={guardarConfiguracion} disabled={guardando} className="w-full mt-6 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2"><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar plan y funciones'}</button>
+              <div className="mt-6 border-t border-slate-800 pt-5 space-y-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Suscripcion y soporte</p>
+                <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm"><span>Exonerar pago del plan</span><input type="checkbox" checked={pagoExonerado} onChange={(event) => setPagoExonerado(event.target.checked)} className="h-4 w-4 accent-orange-500" /></label>
+                <p className="text-xs text-slate-500">La exoneracion no cubre soporte opcional ni desarrollos personalizados.</p>
+                {pagoExonerado && <label className="block text-sm text-slate-300">Motivo<input value={motivoExoneracion} onChange={(event) => setMotivoExoneracion(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>}
+                <label className="block text-sm text-slate-300">Vencimiento del plan<input type="date" value={vencimiento} onChange={(event) => setVencimiento(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>
+                <label className="block text-sm text-slate-300">Soporte incluido hasta<input type="date" value={soporteIncluidoHasta} onChange={(event) => setSoporteIncluidoHasta(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>
+                <label className="block text-sm text-slate-300">Soporte pagado hasta<input type="date" value={soportePagadoHasta} onChange={(event) => setSoportePagadoHasta(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>
+                <button type="button" onClick={guardarSuscripcion} disabled={guardandoSuscripcion} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5">{guardandoSuscripcion ? 'Guardando...' : 'Guardar suscripcion'}</button>
+              </div>
               <div className="mt-6 border-t border-slate-800 pt-5">
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Administradores de la empresa</p>
                 {adminsEmpresa.length === 0 ? (
@@ -412,7 +547,6 @@ export default function SuperadminPage() {
                   </div>
                 )}
               </div>
-              <button onClick={guardarConfiguracion} disabled={guardando} className="w-full mt-6 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2"><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar configuracion'}</button>
             </>}
           </aside>
         </div>
@@ -425,7 +559,7 @@ export default function SuperadminPage() {
         </div>
       </section>
 
-      {mostrarCrear && <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><form onSubmit={crearEmpresa} className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5"><div className="flex items-center justify-between"><div><p className="text-orange-400 text-xs uppercase tracking-wider">Alta de cuenta</p><h2 className="text-2xl font-black">Nueva empresa</h2></div><button type="button" onClick={() => setMostrarCrear(false)} className="text-slate-400 hover:text-white"><X size={20} /></button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{([['nombre', 'Nombre de la empresa'], ['nit', 'NIT'], ['email', 'Email de empresa'], ['telefono', 'Telefono'], ['direccion', 'Direccion']] as const).map(([campo, etiqueta]) => <label key={campo} className="text-sm text-slate-300">{etiqueta}<input required={['nombre', 'nit', 'email', 'adminNombre', 'adminEmail', 'adminPassword'].includes(campo)} type={campo.toLowerCase().includes('email') ? 'email' : 'text'} value={nuevaEmpresa[campo]} onChange={(event) => setNuevaEmpresa((actual) => ({ ...actual, [campo]: event.target.value }))} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white" /></label>)}</div><label className="block text-sm text-slate-300">Tipo de negocio<select value={tipoNegocioNuevo} onChange={(event) => setTipoNegocioNuevo(event.target.value as TipoNegocio)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white">{TIPOS_NEGOCIO.map((tipo) => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label><section className="space-y-3"><h3>Administradores de la empresa</h3>{administradores.map((admin,i)=><div key={i} className="grid gap-3 md:grid-cols-3">{(['nombre','email','password'] as const).map(campo=><label key={campo}>{campo==='password'?'Contraseña':campo}<input required type={campo==='password'?'password':campo==='email'?'email':'text'} value={admin[campo]} onChange={e=>setAdministradores(actual=>actual.map((a,j)=>i===j?{...a,[campo]:e.target.value}:a))} className="mt-1 w-full rounded bg-slate-800 p-2"/></label>)}</div>)}{administradores.length<3&&<button type="button" onClick={()=>setAdministradores(a=>[...a,{nombre:'',email:'',password:''}])}>+ Agregar administrador</button>}</section><label className="block text-sm text-slate-300">Plan inicial<select value={planNuevo} onChange={(event) => setPlanNuevo(event.target.value as Plan)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white"><option value="BASICO">Basico</option><option value="MEDIUM">Medium</option><option value="PREMIUM">Premium</option></select></label><div className="flex justify-end gap-3"><button type="button" onClick={() => setMostrarCrear(false)} className="border border-slate-700 text-slate-300 rounded-lg px-4 py-2">Cancelar</button><button disabled={creando} className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg px-4 py-2">{creando ? 'Creando...' : 'Crear empresa'}</button></div></form></div>}
+      {mostrarCrear && <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><form onSubmit={crearEmpresa} className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5"><div className="flex items-center justify-between"><div><p className="text-orange-400 text-xs uppercase tracking-wider">Alta de cuenta</p><h2 className="text-2xl font-black">Nueva empresa</h2></div><button type="button" onClick={() => setMostrarCrear(false)} className="text-slate-400 hover:text-white"><X size={20} /></button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{([['nombre', 'Nombre de la empresa'], ['nit', 'NIT'], ['email', 'Email de empresa'], ['telefono', 'Telefono'], ['direccion', 'Direccion']] as const).map(([campo, etiqueta]) => <label key={campo} className="text-sm text-slate-300">{etiqueta}<input required={['nombre', 'nit', 'email', 'adminNombre', 'adminEmail', 'adminPassword'].includes(campo)} type={campo.toLowerCase().includes('email') ? 'email' : 'text'} value={nuevaEmpresa[campo]} onChange={(event) => setNuevaEmpresa((actual) => ({ ...actual, [campo]: event.target.value }))} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white" /></label>)}</div><label className="block text-sm text-slate-300">Tipo de negocio<select value={tipoNegocioNuevo} onChange={(event) => setTipoNegocioNuevo(event.target.value as TipoNegocio)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white">{TIPOS_NEGOCIO.map((tipo) => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label><section className="space-y-3"><h3>Administradores de la empresa</h3>{administradores.map((admin,i)=><div key={i} className="grid gap-3 md:grid-cols-3">{(['nombre','email','password'] as const).map(campo=><label key={campo}>{campo==='password'?'Contraseña':campo}<input required type={campo==='password'?'password':campo==='email'?'email':'text'} value={admin[campo]} onChange={e=>setAdministradores(actual=>actual.map((a,j)=>i===j?{...a,[campo]:e.target.value}:a))} className="mt-1 w-full rounded bg-slate-800 p-2"/></label>)}</div>)}{administradores.length<3&&<button type="button" onClick={() => setAdministradores(a=>[...a,{nombre:'',email:'',password:''}])}>+ Agregar administrador</button>}</section><label className="block text-sm text-slate-300">Plan inicial<select value={planNuevo} onChange={(event) => setPlanNuevo(event.target.value as Plan)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white"><option value="BASICO">Inicial</option><option value="MEDIUM">Medium</option><option value="PREMIUM">Premium</option></select></label><div className="flex justify-end gap-3"><button type="button" onClick={() => setMostrarCrear(false)} className="border border-slate-700 text-slate-300 rounded-lg px-4 py-2">Cancelar</button><button disabled={creando} className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg px-4 py-2">{creando ? 'Creando...' : 'Crear empresa'}</button></div></form></div>}
       {mostrarEditar && <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><form onSubmit={guardarEmpresa} className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-xl p-6 space-y-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">Editar empresa</h2><button type="button" onClick={() => setMostrarEditar(false)} aria-label="Cerrar"><X size={20} /></button></div>{error && <p className="text-red-300 text-sm">{error}</p>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{([['nombre', 'Nombre'], ['nit', 'NIT'], ['email', 'Correo'], ['telefono', 'Teléfono'], ['direccion', 'Dirección']] as const).map(([campo, etiqueta]) => <label key={campo} className="text-sm text-slate-300">{etiqueta}<input required={['nombre', 'nit', 'email'].includes(campo)} type={campo === 'email' ? 'email' : 'text'} value={datosEdicion[campo]} onChange={(event) => setDatosEdicion((actual) => ({ ...actual, [campo]: event.target.value }))} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white" /></label>)}</div><div className="flex justify-end gap-3"><button type="button" onClick={() => setMostrarEditar(false)} className="px-4 py-2 border border-slate-700 rounded-lg">Cancelar</button><button disabled={editando} className="px-4 py-2 bg-orange-500 rounded-lg font-bold disabled:opacity-50">{editando ? 'Guardando...' : 'Guardar cambios'}</button></div></form></div>}
       {confirmarEliminar && seleccionada && <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><div role="dialog" aria-modal="true" aria-labelledby="titulo-eliminar" className="bg-slate-900 border border-red-900 rounded-2xl w-full max-w-md p-6 space-y-4"><h2 id="titulo-eliminar" className="text-xl font-bold">Eliminar {seleccionada.nombre}</h2><p className="text-slate-300 text-sm">Esta acción elimina definitivamente una cuenta sin datos cargados ni actividad. Si ya tiene datos, desactívala para conservar el historial.</p><div className="flex justify-end gap-3"><button type="button" onClick={() => setConfirmarEliminar(false)} className="px-4 py-2 border border-slate-700 rounded-lg">Cancelar</button><button type="button" disabled={eliminando} onClick={eliminarEmpresa} className="px-4 py-2 bg-red-700 rounded-lg font-bold disabled:opacity-50">{eliminando ? 'Eliminando...' : 'Eliminar empresa'}</button></div></div></div>}
     </main>

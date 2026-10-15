@@ -4,6 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TipoNegocio } from '@prisma/client';
+import { sumarMeses } from '../suscripciones/fechas';
 
 const tiposNegocio = Object.values(TipoNegocio);
 
@@ -67,6 +68,8 @@ export class SuperadminService {
         tipoNegocio,
         plan,
         permisos,
+        suscripcionVenceEn: new Date(),
+        soporteIncluidoHasta: sumarMeses(new Date(), 3),
         sucursales: { create: { nombre: 'Sucursal Principal', direccion: empresa.direccion || null, telefono: empresa.telefono || null } },
       },
       include: { sucursales: true },
@@ -219,6 +222,8 @@ export class SuperadminService {
       facturacionElectronicaHabilitada?: boolean;
       consumoEmpleadosHabilitado?: boolean;
       catalogoHabilitado?: boolean;
+      distribuidoresHabilitado?: boolean;
+      recaudoEfectivoHabilitado?: boolean;
       tipoNegocio?: TipoNegocio;
     },
     usuarioId?: number,
@@ -237,8 +242,10 @@ export class SuperadminService {
         ...(datos.facturacionElectronicaHabilitada !== undefined ? { facturacionElectronicaHabilitada: datos.facturacionElectronicaHabilitada } : {}),
         ...(datos.consumoEmpleadosHabilitado !== undefined ? { consumoEmpleadosHabilitado: datos.consumoEmpleadosHabilitado } : {}),
         ...(datos.catalogoHabilitado !== undefined ? { catalogoHabilitado: datos.catalogoHabilitado } : {}),
+        ...(datos.distribuidoresHabilitado !== undefined ? { distribuidoresHabilitado: datos.distribuidoresHabilitado } : {}),
+        ...(datos.recaudoEfectivoHabilitado !== undefined ? { recaudoEfectivoHabilitado: datos.recaudoEfectivoHabilitado } : {}),
       },
-      select: { id: true, nombre: true, plan: true, tipoNegocio: true, permisos: true, modoPreparacion: true, facturacionElectronicaHabilitada: true, consumoEmpleadosHabilitado: true, catalogoHabilitado: true, activo: true },
+      select: { id: true, nombre: true, plan: true, tipoNegocio: true, permisos: true, modoPreparacion: true, facturacionElectronicaHabilitada: true, consumoEmpleadosHabilitado: true, catalogoHabilitado: true, distribuidoresHabilitado: true, recaudoEfectivoHabilitado: true, activo: true },
     });
     await this.auditoria.registrar({ accion: 'CONFIGURAR', entidad: 'EMPRESA', entidadId: id, usuarioId, detalle: datos });
     return actualizada;

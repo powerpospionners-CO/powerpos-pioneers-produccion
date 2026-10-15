@@ -3,12 +3,35 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { SuperadminService } from './superadmin.service';
+import { PlanesService } from '../suscripciones/planes.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPERADMIN')
 @Controller('superadmin')
 export class SuperadminController {
-  constructor(private readonly superadminService: SuperadminService) {}
+  constructor(
+    private readonly superadminService: SuperadminService,
+    private readonly planesService: PlanesService,
+  ) {}
+
+  @Get('planes')
+  planes() {
+    return this.planesService.obtenerPrecios();
+  }
+
+  @Patch('planes')
+  actualizarPlanes(
+    @Body() body: {
+      inicialMensual?: number;
+      mediumMensual?: number;
+      premiumMensual?: number;
+      soporteMensual?: number;
+      descuentoAnualMeses?: number;
+    },
+    @Request() req: any,
+  ) {
+    return this.planesService.actualizarPrecios(body, req.user.id);
+  }
 
   @Get('resumen')
   resumen() {
@@ -69,10 +92,27 @@ export class SuperadminController {
       facturacionElectronicaHabilitada?: boolean;
       consumoEmpleadosHabilitado?: boolean;
       catalogoHabilitado?: boolean;
+      distribuidoresHabilitado?: boolean;
+      recaudoEfectivoHabilitado?: boolean;
       tipoNegocio?: 'RESTAURANTE' | 'SUPERMERCADO' | 'TIENDA' | 'COMERCIO';
     },
     @Request() req: any,
   ) {
     return this.superadminService.actualizarConfiguracion(+id, body, req.user.id);
+  }
+
+  @Patch('empresas/:id/suscripcion')
+  actualizarSuscripcion(
+    @Param('id') id: string,
+    @Body() body: {
+      pagoExonerado?: boolean;
+      motivoExoneracion?: string | null;
+      suscripcionVenceEn?: string | null;
+      soporteIncluidoHasta?: string | null;
+      soportePagadoHasta?: string | null;
+    },
+    @Request() req: any,
+  ) {
+    return this.planesService.actualizarEmpresa(+id, body, req.user.id);
   }
 }

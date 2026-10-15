@@ -18,6 +18,17 @@ enum PlanEmpresa {
   PREMIUM
 }
 
+enum PeriodicidadPlan {
+  MENSUAL
+  ANUAL
+}
+
+enum EstadoPagoPlan {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
 enum ModoPreparacion {
   KDS
   COMANDAS
@@ -49,6 +60,12 @@ model Empresa {
   catalogoHabilitado Boolean @default(false)
   catalogoFotosPublicas Boolean @default(true)
   recaudoEfectivoHabilitado Boolean @default(false)
+  distribuidoresHabilitado Boolean @default(false)
+  suscripcionVenceEn DateTime?
+  pagoExonerado Boolean @default(false)
+  motivoExoneracion String?
+  soporteIncluidoHasta DateTime?
+  soportePagadoHasta DateTime?
   tiendaSlug String @unique @default(uuid())
   tiendaConfig Json @default("{}")
   fidelizacionConfig Json @default("{}")
@@ -75,8 +92,45 @@ model Empresa {
   retirosEfectivoCaja RetiroEfectivoCaja[]
   consignacionesEfectivo ConsignacionEfectivo[]
   liquidacionesDistribuidor LiquidacionDistribuidor[]
+  pagosPlan PagoPlan[]
 
   @@map("empresas")
+}
+
+model ConfiguracionPlanes {
+  id                    Int      @id @default(1)
+  inicialMensual        Int      @default(29900)
+  mediumMensual         Int      @default(49900)
+  premiumMensual        Int      @default(89900)
+  soporteMensual        Int      @default(19900)
+  descuentoAnualMeses   Int      @default(1)
+  actualizadoEn         DateTime @updatedAt
+
+  @@map("configuracion_planes")
+}
+
+model PagoPlan {
+  id                 Int             @id @default(autoincrement())
+  empresaId          Int
+  plan               PlanEmpresa
+  periodicidad       PeriodicidadPlan
+  monto              Int
+  estado             EstadoPagoPlan  @default(PENDIENTE)
+  referencia         String          @unique
+  transaccionId      String?         @unique
+  incluyePlan        Boolean         @default(true)
+  incluyeSoporte     Boolean         @default(false)
+  periodoDesde       DateTime
+  periodoHasta       DateTime
+  soporteDesde       DateTime?
+  soporteHasta       DateTime?
+  creadoEn           DateTime        @default(now())
+  pagadoEn           DateTime?
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([empresaId, creadoEn])
+  @@map("pagos_plan")
 }
 
 // ==========================================

@@ -19,7 +19,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: payload.sub },
-      include: { empresa: { select: { activo: true } } },
+      include: {
+        empresa: {
+          select: {
+            activo: true,
+            plan: true,
+            permisos: true,
+            suscripcionVenceEn: true,
+            pagoExonerado: true,
+            distribuidoresHabilitado: true,
+            recaudoEfectivoHabilitado: true,
+          },
+        },
+      },
     });
     if (
       !usuario ||
@@ -37,6 +49,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       empresaId: usuario.empresaId,
       sucursalId: usuario.sucursalId,
       distribuidorId: usuario.distribuidorId,
+      empresaPlan: usuario.empresa?.plan,
+      permisos: usuario.empresa?.permisos,
+      suscripcionVenceEn: usuario.empresa?.suscripcionVenceEn,
+      pagoExonerado: usuario.empresa?.pagoExonerado,
+      distribuidoresHabilitado: usuario.empresa?.distribuidoresHabilitado,
+      recaudoEfectivoHabilitado: usuario.empresa?.recaudoEfectivoHabilitado,
     };
   }
 }

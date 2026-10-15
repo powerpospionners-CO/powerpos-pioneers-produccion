@@ -23,8 +23,29 @@ const ITEMS = [
   { href: '/reportes', label: 'Reportes', icon: BarChart3 },
   { href: '/distribuidores', label: 'Distribuidores', icon: Truck },
   { href: '/configuracion', label: 'Config', icon: Settings },
+  { href: '/suscripcion', label: 'Suscripcion', icon: Wallet },
   { href: '/distribuidor', label: 'Mis pedidos', icon: Truck },
 ];
+
+const MODULOS_POR_PLAN: Record<string, string[]> = {
+  BASICO: ['pos', 'productos'],
+  MEDIUM: ['pos', 'dashboard', 'productos', 'inventario', 'clientes', 'cocina', 'configuracion'],
+  PREMIUM: ['pos', 'dashboard', 'productos', 'inventario', 'clientes', 'financiero', 'reportes', 'cocina', 'configuracion'],
+};
+
+const MODULO_POR_RUTA: Record<string, string> = {
+  '/pos': 'pos',
+  '/domicilios': 'pos',
+  '/caja': 'pos',
+  '/caja/recaudo': 'pos',
+  '/dashboard': 'dashboard',
+  '/productos': 'productos',
+  '/inventario': 'inventario',
+  '/clientes': 'clientes',
+  '/financiero': 'financiero',
+  '/reportes': 'reportes',
+  '/configuracion': 'configuracion',
+};
 
 export default function Navbar() {
   const router = useRouter();
@@ -34,12 +55,14 @@ export default function Navbar() {
   const [pendientesWeb, setPendientesWeb] = useState(0);
   const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
   const [recaudoEfectivoHabilitado, setRecaudoEfectivoHabilitado] = useState(false);
+  const [distribuidoresHabilitado, setDistribuidoresHabilitado] = useState(false);
   useEffect(() => {
     if (!usuario?.empresaId) return;
     api.get('/empresa').then((respuesta) => {
       if (respuesta.data?.tipoNegocio && respuesta.data.tipoNegocio !== usuario.tipoNegocio) setTipoNegocio(respuesta.data.tipoNegocio);
       setLogoEmpresa(respuesta.data?.logo || null);
       setRecaudoEfectivoHabilitado(!!respuesta.data?.recaudoEfectivoHabilitado);
+      setDistribuidoresHabilitado(!!respuesta.data?.distribuidoresHabilitado);
     }).catch(() => undefined);
   }, [usuario?.empresaId, usuario?.tipoNegocio, setTipoNegocio]);
   useEffect(() => {
@@ -53,13 +76,22 @@ export default function Navbar() {
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
     if (item.href === '/caja/recaudo') return esAdminOGerente && recaudoEfectivoHabilitado;
+    if (item.href === '/distribuidores') return esAdminOGerente && distribuidoresHabilitado;
     if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;
     if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
-    if (item.href === '/distribuidor') return usuario?.rol === 'DISTRIBUIDOR';
+    if (item.href === '/suscripcion') return usuario?.rol === 'ADMIN_EMPRESA';
+    if (item.href === '/distribuidor') return usuario?.rol === 'DISTRIBUIDOR' && distribuidoresHabilitado;
     if (usuario?.rol === 'DOMICILIARIO') return item.href === '/domicilios';
     if (usuario?.rol === 'CAJERO') return item.href === '/pos';
-    if (usuario?.rol === 'DISTRIBUIDOR') return item.href === '/distribuidor';
+    if (usuario?.rol === 'DISTRIBUIDOR') return item.href === '/distribuidor' && distribuidoresHabilitado;
+    const modulo = MODULO_POR_RUTA[item.href];
+    if (modulo && ['ADMIN_EMPRESA', 'GERENTE'].includes(usuario?.rol || '')) {
+      const permiso = usuario?.permisos?.[modulo];
+      return typeof permiso === 'boolean'
+        ? permiso
+        : (MODULOS_POR_PLAN[usuario?.plan || 'BASICO'] || MODULOS_POR_PLAN.BASICO).includes(modulo);
+    }
     if (esAdminOGerente) return true;
     return usuario?.permisos?.[item.href.replace('/', '')] !== false;
   });
