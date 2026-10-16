@@ -1,4 +1,4 @@
-import { EstadisticasService, resumirVentas } from './estadisticas.service';
+import { agruparDias, EstadisticasService, resumirVentas } from './estadisticas.service';
 
 function venta(cambios: Record<string, unknown> = {}) {
   return {
@@ -27,6 +27,11 @@ function venta(cambios: Record<string, unknown> = {}) {
   } as any;
 }
 describe('Estadísticas de negocio', () => {
+  it('groups weeks from Monday and preserves year boundaries and daily totals', () => {
+    const dias = [{ fecha: '2025-12-31', total: 10, cantidad: 1 }, { fecha: '2026-01-01', total: 20, cantidad: 2 }, { fecha: '2026-01-05', total: 30, cantidad: 3 }];
+    expect(agruparDias(dias, 'semana')).toEqual([{ periodo: 'Semana del 2025-12-29', total: 30, cantidad: 3 }, { periodo: 'Semana del 2026-01-05', total: 30, cantidad: 3 }]);
+    expect(agruparDias(dias, 'mes')).toEqual([{ periodo: '2025-12', total: 10, cantidad: 1 }, { periodo: '2026-01', total: 50, cantidad: 5 }]);
+  });
   const inicio = new Date('2026-10-15T05:00:00Z');
   it('respeta el día colombiano y separa pagos mixtos sin duplicarlos', () => {
     const datos = resumirVentas([venta()], inicio, 1);
@@ -89,11 +94,11 @@ describe('Estadísticas de negocio', () => {
   it('rechaza periodos demasiado grandes y fechas invertidas', async () => {
     const service = new EstadisticasService({} as any);
     await expect(
-      service.consultar(7, '2026-01-01', '2026-12-31'),
-    ).rejects.toThrow('93 días');
+      service.consultar(7, '2025-01-01', '2026-12-31'),
+    ).rejects.toThrow('366 días');
     await expect(
       service.consultar(7, '2026-10-16', '2026-10-15'),
-    ).rejects.toThrow('93 días');
+    ).rejects.toThrow('366 días');
   });
   it('consulta ambos periodos con aislamiento de empresa y sin solapar límites', async () => {
     const db: any = {

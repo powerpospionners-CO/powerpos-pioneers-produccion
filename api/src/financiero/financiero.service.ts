@@ -288,10 +288,19 @@ export class FinancieroService {
   async exportarExcel(empresaId: number, fechaDesde?: string, fechaHasta?: string): Promise<Buffer> {
     const resumen = await this.resumenFinanciero(empresaId, fechaDesde, fechaHasta);
     const movimientos = await this.listarMovimientos(empresaId, { fechaDesde, fechaHasta, completo: true });
+    const evolucion = new Map<string, { ingreso: number; egreso: number }>();
+    for (const m of movimientos) {
+      const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date(m.fecha));
+      const d = evolucion.get(fecha) || { ingreso: 0, egreso: 0 };
+      if (m.tipo === 'INGRESO') d.ingreso += Number(m.monto);
+      else if (m.categoria !== 'VENTA') d.egreso += Number(m.monto);
+      evolucion.set(fecha, d);
+    }
 
     return excelReport('Financiero', `Periodo: ${fechaDesde || 'Inicio'} a ${fechaHasta || 'Hoy'} · COP`, [
       { name: 'Resumen', headers: ['Indicador', 'Valor'], money: [1], rows: [['Ingresos', resumen.totalIngresos], ['Egresos', resumen.totalEgresos], ['Compras inventario', resumen.totalComprasInventario], ['Utilidad neta', resumen.utilidad], ['Ventas del periodo', resumen.totalVentasRango]], chart: { title: 'Resumen financiero · COP', label: 0, value: 1 } },
-      { name: 'Medios de pago', headers: ['Medio', 'Ventas'], money: [1], rows: resumen.ventasPorMetodoPago.map(v => [v.metodo, v.total]), chart: { title: 'Ventas por medio de pago · COP', label: 0, value: 1 } },
+      { name: 'Medios de pago', headers: ['Medio', 'Ventas'], money: [1], rows: resumen.ventasPorMetodoPago.map(v => [v.metodo, v.total]), chart: { title: 'Ventas por medio de pago · COP', label: 0, value: 1, type: 'pie' } },
+      { name: 'Evolucion', headers: ['Día con movimientos', 'Ingresos', 'Egresos'], money: [1,2], rows: [...evolucion].sort(([a],[b]) => a.localeCompare(b)).map(([fecha,v]) => [fecha, Math.round(v.ingreso * 100) / 100, Math.round(v.egreso * 100) / 100]), chart: { title: 'Evolución del resumen financiero · COP', label: 0, value: 1, type: 'line', limit: 366, series: [{ name: 'Ingresos', value: 1 }, { name: 'Egresos', value: 2 }] } },
       { name: 'Categorias', headers: ['Categoría', 'Ingresos', 'Egresos'], money: [1,2], rows: Object.entries(resumen.porCategoria as Record<string, { ingreso: number; egreso: number }>).map(([k,v]) => [k,v.ingreso,v.egreso]) },
       { name: 'Movimientos', headers: ['Fecha (Colombia)', 'Tipo', 'Categoría', 'Descripción', 'Monto', 'Usuario'], money: [4], rows: movimientos.map(m => [new Date(m.fecha).toLocaleString('es-CO', { timeZone: 'America/Bogota' }), m.tipo, m.categoria, m.descripcion, Number(m.monto), m.usuario?.nombre || '']) },
     ]);

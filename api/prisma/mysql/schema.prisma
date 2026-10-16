@@ -1,0 +1,1315 @@
+// Generated compatibility draft; production still uses PostgreSQL.
+// Regenerate with node scripts/prepare-mysql-schema.cjs.
+generator client {
+  provider      = "prisma-client-js"
+  output = "../../generated/prisma-mysql"
+  binaryTargets = ["native", "windows"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("MYSQL_DATABASE_URL")
+}
+
+// ==========================================
+// MULTIEMPRESA
+// ==========================================
+
+enum PlanEmpresa {
+  BASICO
+  MEDIUM
+  PREMIUM
+}
+
+enum PeriodicidadPlan {
+  MENSUAL
+  ANUAL
+}
+
+enum EstadoPagoPlan {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+enum ModoPreparacion {
+  KDS
+  COMANDAS
+}
+
+enum TipoNegocio {
+  RESTAURANTE
+  SUPERMERCADO
+  TIENDA
+  COMERCIO
+}
+
+model Empresa {
+  id            Int       @id @default(autoincrement())
+  nombre        String @db.LongText
+  nit           String    @unique
+  email         String @db.LongText
+  telefono      String? @db.LongText
+  direccion     String? @db.LongText
+  logo          String? @db.LongText
+  activo        Boolean   @default(true)
+  impresionAgenteToken String? @unique
+  tipoNegocio   TipoNegocio @default(RESTAURANTE)
+  plan          PlanEmpresa @default(BASICO)
+  permisos      Json      @default("{}")
+  modoPreparacion ModoPreparacion @default(KDS)
+  facturacionElectronicaHabilitada Boolean @default(false)
+  consumoEmpleadosHabilitado Boolean @default(false)
+  catalogoHabilitado Boolean @default(false)
+  catalogoFotosPublicas Boolean @default(true)
+  recaudoEfectivoHabilitado Boolean @default(false)
+  distribuidoresHabilitado Boolean @default(false)
+  suscripcionVenceEn DateTime?
+  pagoExonerado Boolean @default(false)
+  motivoExoneracion String? @db.LongText
+  soporteIncluidoHasta DateTime?
+  soportePagadoHasta DateTime?
+  tiendaSlug String @unique @default(uuid())
+  tiendaConfig Json @default("{}")
+  fidelizacionConfig Json @default("{}")
+  anunciosPantalla Json @default("[]")
+  pedidosWeb PedidoWeb[]
+  creadoEn      DateTime  @default(now())
+  actualizadoEn DateTime  @updatedAt
+
+  usuarios     Usuario[]
+  sucursales   Sucursal[]
+  categorias   Categoria[]
+  productos    Producto[]
+  clientes     Cliente[]
+  movimientos  MovimientoFinanciero[]
+  auditorias   Auditoria[]
+  adicionales  Adicional[]
+  preparaciones Preparacion[]
+  lotesPreparacion LotePreparacion[]
+  consumosEmpleados ConsumoEmpleado[]
+  ingredientes Ingrediente[]
+  catalogoProductos CatalogoProducto[]
+  distribuidores Distribuidor[]
+  pedidosDistribuidor PedidoDistribuidor[]
+  retirosEfectivoCaja RetiroEfectivoCaja[]
+  consignacionesEfectivo ConsignacionEfectivo[]
+  liquidacionesDistribuidor LiquidacionDistribuidor[]
+  pagosPlan PagoPlan[]
+  saldoInicialCuenta SaldoInicialCuenta?
+  comprasGastos CompraGasto[]
+  proveedores Proveedor[]
+  cuentasAdministrativas CuentaAdministrativa[]
+  conciliacionesAdministrativas ConciliacionAdministrativa[]
+  presupuestosAdministrativos PresupuestoAdministrativo[]
+  gastosRecurrentes GastoRecurrente[]
+  conteosInventario ConteoInventario[]
+
+  @@map("empresas")
+}
+
+model ConfiguracionPlanes {
+  id                    Int      @id @default(1)
+  inicialMensual        Int      @default(29900)
+  mediumMensual         Int      @default(49900)
+  premiumMensual        Int      @default(89900)
+  soporteMensual        Int      @default(19900)
+  descuentoAnualMeses   Int      @default(1)
+  actualizadoEn         DateTime @updatedAt
+
+  @@map("configuracion_planes")
+}
+
+model PagoPlan {
+  id                 Int             @id @default(autoincrement())
+  empresaId          Int
+  plan               PlanEmpresa
+  periodicidad       PeriodicidadPlan
+  monto              Int
+  estado             EstadoPagoPlan  @default(PENDIENTE)
+  referencia         String          @unique
+  transaccionId      String?         @unique
+  incluyePlan        Boolean         @default(true)
+  incluyeSoporte     Boolean         @default(false)
+  periodoDesde       DateTime
+  periodoHasta       DateTime
+  soporteDesde       DateTime?
+  soporteHasta       DateTime?
+  creadoEn           DateTime        @default(now())
+  pagadoEn           DateTime?
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([empresaId, creadoEn])
+  @@map("pagos_plan")
+}
+
+// ==========================================
+// CATÁLOGO DE PRODUCTOS (independiente del inventario/POS — es un
+// catálogo de venta/distribución tipo folleto, no afecta el stock ni las
+// ventas del sistema)
+// ==========================================
+model CatalogoProducto {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  nombre        String @db.LongText
+  presentacion  String? @db.LongText
+  descripcion   String? @db.LongText
+  precio        Decimal? @db.Decimal(10, 2)
+  categoria     String? @db.LongText
+  imagen        String? @db.LongText
+  orden         Int      @default(0)
+  activo        Boolean  @default(true)
+  // Origen del producto ("MEXICANO" | "PERUANO" | null = sin clasificar).
+  origen        String? @db.LongText
+  // Para qué tipo de cliente sirve: RESTAURANTE, TIENDA, SUPERMERCADO, MAYORISTA (puede ser más de uno).
+  usos          Json @default("[]")
+  // Se oculta solo de la página pública (el panel interno lo sigue mostrando).
+  ocultoWeb     Boolean  @default(false)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId])
+  @@map("catalogo_productos")
+}
+
+model Sucursal {
+  pedidosWeb PedidoWeb[]
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  nombre    String @db.LongText
+  direccion String? @db.LongText
+  telefono  String? @db.LongText
+  activo    Boolean  @default(true)
+  baseEfectivoCaja Decimal? @db.Decimal(10, 2)
+  creadoEn  DateTime @default(now())
+
+  empresa     Empresa                @relation(fields: [empresaId], references: [id])
+  usuarios    Usuario[]
+  pedidos     Pedido[]
+  cajas       Caja[]
+  movimientos MovimientoFinanciero[]
+  retirosEfectivoCaja RetiroEfectivoCaja[]
+  consignacionesEfectivo ConsignacionEfectivo[]
+  consumosEmpleados ConsumoEmpleado[]
+  distribuidores Distribuidor[]
+  pedidosDistribuidor PedidoDistribuidor[]
+  comprasGastos CompraGasto[]
+
+  @@map("sucursales")
+}
+
+// ==========================================
+// USUARIOS Y ROLES
+// ==========================================
+
+enum RolUsuario {
+  SUPERADMIN
+  ADMIN_EMPRESA
+  GERENTE
+  CAJERO
+  COCINERO
+  DOMICILIARIO
+  DISTRIBUIDOR
+}
+
+model Usuario {
+  entregasWeb PedidoWeb[]
+  id            Int        @id @default(autoincrement())
+  empresaId     Int?
+  sucursalId    Int?
+  nombre        String @db.LongText
+  email         String     @unique
+  password      String @db.LongText
+  rol           RolUsuario
+  permisos      Json?
+  activo        Boolean    @default(true)
+  creadoEn      DateTime   @default(now())
+  actualizadoEn DateTime   @updatedAt
+  // Solo tiene valor cuando rol = DISTRIBUIDOR: es la cuenta de acceso de
+  // ese perfil de distribuidor (uno a uno). El resto de roles no lo usan.
+  distribuidorId Int?      @unique
+
+  empresa     Empresa?               @relation(fields: [empresaId], references: [id])
+  sucursal    Sucursal?              @relation(fields: [sucursalId], references: [id])
+  distribuidor Distribuidor?         @relation(fields: [distribuidorId], references: [id])
+  pedidos     Pedido[]
+  cajas       Caja[]
+  eventos     EventoCaja[]
+  movimientos MovimientoFinanciero[]
+  retirosEfectivoCaja RetiroEfectivoCaja[]
+  consignacionesEfectivo ConsignacionEfectivo[]
+  movimientosInventario MovimientoInventario[]
+  lotesPreparacion LotePreparacion[]
+  auditorias  Auditoria[]
+  consumosEmpleados ConsumoEmpleado[]
+  liquidacionesDistribuidor LiquidacionDistribuidor[]
+  comprasGastos CompraGasto[]
+  saldosInicialesCuenta SaldoInicialCuenta[]
+
+  @@map("usuarios")
+}
+
+// ==========================================
+// PRODUCTOS Y CATEGORIAS
+// ==========================================
+
+model Categoria {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  parentId    Int?
+  nombre      String @db.LongText
+  descripcion String? @db.LongText
+  icono       String? @db.LongText
+  color       String? @db.LongText
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+
+  empresa          Empresa     @relation(fields: [empresaId], references: [id])
+  categoriaPadre   Categoria?  @relation("CategoriaPadre", fields: [parentId], references: [id])
+  subcategorias    Categoria[] @relation("CategoriaPadre")
+  productos        Producto[]
+
+  @@map("categorias")
+}
+
+model Producto {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  categoriaId   Int
+  nombre        String @db.LongText
+  descripcion   String? @db.LongText
+  precio        Decimal  @db.Decimal(10, 2)
+  costo         Decimal? @db.Decimal(10, 2)
+  codigoBarras  String?
+  controlaStock Boolean  @default(false)
+  stockActual   Int      @default(0)
+  stockMinimo   Int      @default(0)
+  // Se vende al granel: el cajero pesa la cantidad exacta que pide el
+  // cliente (ej. "10 g de gelatina"), no una presentación fija. `precio` es
+  // el precio por gramo y `stockActual` se cuenta en gramos, igual que con
+  // las presentaciones — el cajero simplemente escribe los gramos en el
+  // campo de cantidad del POS.
+  ventaGranel   Boolean  @default(false)
+  // Unidad en la que el admin carga y ve el stock/precio de un producto a
+  // granel: "g" o "kg" (familia de peso) / "ml" o "l" (familia de volumen).
+  // `precio` y `stockActual` SIEMPRE quedan guardados en la unidad base de
+  // esa familia (gramos o mililitros) — kg/l solo se convierten al mostrar
+  // o al guardar desde el formulario. null = gramos, por compatibilidad.
+  unidadGranel  String? @db.LongText
+  // Es una canasta/combo: se vende como un solo producto pero está armado
+  // con otros productos existentes (ver ComboComponente). Al venderla se
+  // descuenta el stock de cada componente, no el de este producto — por eso
+  // un combo normalmente no necesita `controlaStock` propio.
+  esCombo       Boolean  @default(false)
+  imagen        String? @db.LongText
+  disponible    Boolean  @default(true)
+  aceptaAdicionales Boolean @default(true)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  empresa             Empresa               @relation(fields: [empresaId], references: [id])
+  categoria           Categoria             @relation(fields: [categoriaId], references: [id])
+  ingredientes        ProductoIngrediente[]
+  adicionales         ProductoAdicional[]
+  preparaciones       ProductoPreparacion[]
+  detallesPedido      DetallePedido[]
+  detallesPedidoDistribuidor DetallePedidoDistribuidor[]
+  consumoEmpleadoItems ConsumoEmpleadoItem[]
+  movimientosInventario MovimientoInventario[]
+  presentaciones      ProductoPresentacion[]
+  codigosBarras       ProductoCodigoBarras[]
+  lotes               LoteProducto[]
+  detallesCompra      DetalleCompra[]
+  detallesConteo DetalleConteoInventario[]
+  componentesCombo    ComboComponente[]     @relation("ComboPadre")
+  usadoEnCombos       ComboComponente[]     @relation("ComboComponente")
+
+  @@unique([empresaId, codigoBarras])
+
+  @@map("productos")
+}
+
+model ProductoCodigoBarras {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  productoId   Int
+  codigoBarras String
+  sabor        String @db.LongText
+  creadoEn     DateTime @default(now())
+
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@unique([empresaId, codigoBarras])
+  @@index([productoId])
+  @@map("producto_codigos_barras")
+}
+
+// Un producto de un combo/canasta (ej. "Canasta básica" = 2 lb tomate + 1 lb
+// cebolla + 1 docena huevos). `cantidad` es cuánto de ese componente lleva
+// una unidad del combo. Un combo no puede contener otro combo (se valida en
+// el servicio), así que descontar sus componentes al venderlo es siempre un
+// solo nivel, sin recursión.
+model ComboComponente {
+  id         Int @id @default(autoincrement())
+  comboId    Int
+  productoId Int
+  cantidad   Int
+
+  combo    Producto @relation("ComboPadre", fields: [comboId], references: [id])
+  producto Producto @relation("ComboComponente", fields: [productoId], references: [id])
+
+  @@unique([comboId, productoId])
+  @@map("combo_componentes")
+}
+
+// Lote de un producto perecedero (ej. el tomate que llegó el lunes vence
+// distinto al que llegó el jueves). Es informativo: no descuenta
+// automáticamente `Producto.stockActual` en cada venta — ese sigue siendo
+// el número real que usa el POS, sin cambios. Los lotes solo sirven para
+// avisar qué está por vencer y llevar cuánto se recibió de cada compra.
+model LoteProducto {
+  id               Int       @id @default(autoincrement())
+  productoId       Int
+  cantidad         Int
+  cantidadRestante Int
+  fechaVencimiento DateTime?
+  costo            Decimal?  @db.Decimal(10, 2)
+  notas            String? @db.LongText
+  activo           Boolean   @default(true)
+  creadoEn         DateTime  @default(now())
+  actualizadoEn    DateTime  @updatedAt
+
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([productoId, fechaVencimiento])
+  @@map("lotes_producto")
+}
+
+// Formas alternativas de vender el mismo producto (ej. "Tarro" x 50 unidades
+// y "Unidad" x 1) que comparten el mismo `stockActual` del producto, contado
+// siempre en la unidad base (la más pequeña). Vender una presentación
+// descuenta `factorUnidades * cantidad` de ese único inventario, así que no
+// hace falta ningún ajuste manual para mantener el tarro y la unidad al día.
+model ProductoPresentacion {
+  id             Int      @id @default(autoincrement())
+  productoId     Int
+  nombre         String
+  factorUnidades Int      @default(1)
+  precio         Decimal  @db.Decimal(10, 2)
+  codigoBarras   String? @db.LongText
+  orden          Int      @default(0)
+  activo         Boolean  @default(true)
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+
+  producto Producto        @relation(fields: [productoId], references: [id])
+  detalles DetallePedido[]
+
+  @@unique([productoId, nombre])
+  @@map("producto_presentaciones")
+}
+
+model Ingrediente {
+  id               Int      @id @default(autoincrement())
+  empresaId        Int
+  nombre           String @db.LongText
+  unidad           String @db.LongText
+  unidadCompra     String? @db.LongText
+  factorConversion Decimal? @db.Decimal(10, 3)
+  costoUnitario    Decimal? @db.Decimal(10, 4)
+  stock            Decimal  @db.Decimal(10, 3)
+  stockMinimo      Decimal  @db.Decimal(10, 3) @default(0)
+  activo           Boolean  @default(true)
+  creadoEn         DateTime @default(now())
+
+  productos                 ProductoIngrediente[]
+  movimientos               MovimientoInventario[]
+  adicionales               Adicional[]
+  preparacionIngredientes   PreparacionIngrediente[]
+  lotePreparacionIngredientes LotePreparacionIngrediente[]
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId, activo])
+
+  @@map("ingredientes")
+}
+
+model MovimientoInventario {
+  id              Int      @id @default(autoincrement())
+  ingredienteId   Int?
+  productoId      Int?
+  usuarioId       Int
+  tipo            String @db.LongText
+  cantidadMovida  Decimal  @db.Decimal(10, 3)
+  unidadCompra    String? @db.LongText
+  factorAplicado  Decimal? @db.Decimal(10, 3)
+  stockAnterior   Decimal  @db.Decimal(10, 3)
+  stockNuevo      Decimal  @db.Decimal(10, 3)
+  descripcion     String? @db.LongText
+  // Solo se llena en salidas por merma (no es una venta): DANADO, DONADO,
+  // CONSUMO_PROPIO u OTRO. Permite reportar la merma aparte de las ventas.
+  motivoMerma     String? @db.LongText
+  creadoEn        DateTime @default(now())
+
+  ingrediente Ingrediente? @relation(fields: [ingredienteId], references: [id])
+  producto    Producto?    @relation(fields: [productoId], references: [id])
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id])
+
+  @@index([productoId, creadoEn])
+  @@map("movimientos_inventario")
+}
+
+model ProductoIngrediente {
+  id            Int     @id @default(autoincrement())
+  productoId    Int
+  ingredienteId Int
+  cantidad      Decimal @db.Decimal(10, 3)
+
+  producto    Producto    @relation(fields: [productoId], references: [id])
+  ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
+
+  @@unique([productoId, ingredienteId])
+  @@map("producto_ingredientes")
+}
+
+model Preparacion {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  nombre      String @db.LongText
+  descripcion String? @db.LongText
+  unidad      String @db.LongText   @default("porciones")
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+
+  empresa             Empresa                  @relation(fields: [empresaId], references: [id])
+  ingredientes        PreparacionIngrediente[]
+  lotes               LotePreparacion[]
+  productoPreparaciones ProductoPreparacion[]
+
+  @@map("preparaciones")
+}
+
+model PreparacionIngrediente {
+  id            Int      @id @default(autoincrement())
+  preparacionId Int
+  ingredienteId Int
+  cantidad      Decimal  @db.Decimal(10, 3)
+  unidad        String? @db.LongText
+  observacion   String? @db.LongText
+  creadoEn      DateTime @default(now())
+
+  preparacion Preparacion @relation(fields: [preparacionId], references: [id])
+  ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
+
+  @@map("preparacion_ingredientes")
+}
+
+model LotePreparacion {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  preparacionId      Int
+  usuarioId          Int
+  fecha              DateTime @default(now())
+  loteNumero         String? @db.LongText
+  cantidadProducida  Decimal  @db.Decimal(10, 3)
+  pesoTotal          Decimal? @db.Decimal(10, 3)
+  pesoPorBolsa       Decimal? @db.Decimal(10, 3)
+  porcionesPorBolsa  Decimal? @db.Decimal(10, 3)
+  porcionesTotales   Decimal? @db.Decimal(10, 3)
+  observacion        String? @db.LongText
+  creadoEn           DateTime @default(now())
+
+  empresa     Empresa                     @relation(fields: [empresaId], references: [id])
+  preparacion Preparacion                 @relation(fields: [preparacionId], references: [id])
+  usuario     Usuario                     @relation(fields: [usuarioId], references: [id])
+  ingredientes LotePreparacionIngrediente[]
+
+  @@map("lotes_preparacion")
+}
+
+model LotePreparacionIngrediente {
+  id            Int      @id @default(autoincrement())
+  loteId        Int
+  ingredienteId Int
+  cantidadUsada Decimal  @db.Decimal(10, 3)
+  unidad        String? @db.LongText
+  observacion   String? @db.LongText
+  creadoEn      DateTime @default(now())
+
+  lote        LotePreparacion @relation(fields: [loteId], references: [id])
+  ingrediente Ingrediente     @relation(fields: [ingredienteId], references: [id])
+
+  @@map("lote_preparacion_ingredientes")
+}
+
+model ProductoPreparacion {
+  id            Int      @id @default(autoincrement())
+  productoId    Int
+  preparacionId Int
+  cantidad      Decimal  @db.Decimal(10, 3) @default(1)
+  unidad        String @db.LongText   @default("porciones")
+  createdAt     DateTime @default(now())
+
+  producto    Producto    @relation(fields: [productoId], references: [id])
+  preparacion Preparacion @relation(fields: [preparacionId], references: [id])
+
+  @@unique([productoId, preparacionId])
+  @@map("producto_preparaciones")
+}
+
+// ==========================================
+// ADICIONALES (extras con costo)
+// ==========================================
+
+model Adicional {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  nombre        String @db.LongText
+  precio        Decimal  @db.Decimal(10, 2)
+  ingredienteId Int?
+  cantidad      Decimal? @db.Decimal(10, 3) // consumo de inventario por 1 unidad de adicional
+  disponible    Boolean  @default(true)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  empresa     Empresa                  @relation(fields: [empresaId], references: [id])
+  ingrediente Ingrediente?             @relation(fields: [ingredienteId], references: [id])
+  productos   ProductoAdicional[]
+  detalles    DetallePedidoAdicional[]
+
+  @@map("adicionales")
+}
+
+model ProductoAdicional {
+  id          Int @id @default(autoincrement())
+  productoId  Int
+  adicionalId Int
+
+  producto  Producto  @relation(fields: [productoId], references: [id])
+  adicional Adicional @relation(fields: [adicionalId], references: [id])
+
+  @@unique([productoId, adicionalId])
+  @@map("producto_adicionales")
+}
+
+// ==========================================
+// POS - PEDIDOS Y VENTAS
+// ==========================================
+
+enum EstadoPedido {
+  PENDIENTE
+  EN_COCINA
+  LISTO
+  ENTREGADO
+  ANULADO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  NEQUI
+  DAVIPLATA
+  MIXTO
+}
+
+model Cliente {
+  id              Int       @id @default(autoincrement())
+  empresaId       Int
+  nombre          String @db.LongText
+  documento       String?
+  telefono        String? @db.LongText
+  email           String? @db.LongText
+  direccion       String? @db.LongText
+  fechaNacimiento DateTime?
+  puntos          Int       @default(0)
+  activo          Boolean   @default(true)
+  creadoEn        DateTime  @default(now())
+
+  empresa Empresa  @relation(fields: [empresaId], references: [id])
+  pedidos Pedido[]
+
+  @@unique([empresaId, documento])
+  @@map("clientes")
+}
+
+model Pedido {
+  id            Int          @id @default(autoincrement())
+  sucursalId    Int
+  usuarioId     Int
+  clienteId     Int?
+  cajaId        Int?
+  numero        String       @unique
+  estado        EstadoPedido @default(PENDIENTE)
+  metodoPago    MetodoPago   @default(EFECTIVO)
+  subtotal      Decimal      @db.Decimal(10, 2)
+  descuento     Decimal      @db.Decimal(10, 2) @default(0)
+  total         Decimal      @db.Decimal(10, 2)
+  observacion   String? @db.LongText
+  creadoEn      DateTime     @default(now())
+  actualizadoEn DateTime     @updatedAt
+  puntosGanados Int @default(0)
+  puntosCanjeados Int @default(0)
+  valorPuntoAplicado Decimal @db.Decimal(10, 2) @default(0)
+  costoDomicilio Decimal @db.Decimal(10, 2) @default(0)
+  // Cuánto devolvió el cajero en pagos de contado con billete más grande
+  // (ej. pagaron con $50.000 una venta de $45.000 → cambio = $5.000). Antes
+  // solo se calculaba en pantalla para el cajero y se perdía; se guarda
+  // para poder imprimirlo en la tirilla.
+  cambio Decimal @db.Decimal(10, 2) @default(0)
+  // Solo la usan las ventas que el POS guardó localmente por falta de
+  // conexión: si al reconectar reintenta una venta que en realidad sí
+  // había llegado al servidor (se perdió la respuesta, no la petición),
+  // esta clave evita crear el pedido dos veces.
+  claveIdempotencia String? @unique
+  consumoInventario Json?
+  costoVentaHistorico Decimal? @db.Decimal(14, 4)
+  pedidoWeb PedidoWeb?
+
+  sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])
+  usuario     Usuario                @relation(fields: [usuarioId], references: [id])
+  cliente     Cliente?               @relation(fields: [clienteId], references: [id])
+  caja        Caja?                  @relation(fields: [cajaId], references: [id])
+  detalles    DetallePedido[]
+  movimientos MovimientoFinanciero[]
+  pagos       PagoPedido[]
+
+  @@map("pedidos")
+}
+
+// Nuevos controles independientes: no reclasifican ventas ni compras históricas.
+model Proveedor {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  nombre String @db.LongText
+  documento String
+  email String? @db.LongText
+  telefono String? @db.LongText
+  direccion String? @db.LongText
+  plazoDias Int @default(0)
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  compras CompraGasto[]
+  @@unique([id, empresaId])
+  @@unique([empresaId, documento])
+  @@map("proveedores")
+}
+
+model CuentaAdministrativa {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  usuarioId Int
+  tipo String
+  categoria CategoriaMovimiento @default(OTROS)
+  compraGastoId Int? @unique
+  gastoRecurrenteId Int?
+  periodoRecurrente String?
+  tercero String @db.LongText
+  documento String
+  descripcion String @db.LongText
+  monto Decimal @db.Decimal(12, 2)
+  saldo Decimal @db.Decimal(12, 2)
+  vencimiento DateTime
+  anulada Boolean @default(false)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  abonos AbonoAdministrativo[]
+  compra CompraGasto? @relation(fields: [compraGastoId], references: [id], onDelete: Restrict)
+  gastoRecurrente GastoRecurrente? @relation(fields: [gastoRecurrenteId], references: [id], onDelete: Restrict)
+  @@unique([gastoRecurrenteId, periodoRecurrente])
+  @@unique([empresaId, tipo, documento])
+  @@index([empresaId, tipo, vencimiento])
+  @@map("cuentas_administrativas")
+}
+
+model GastoRecurrente {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  usuarioId Int
+  nombre String
+  tercero String @db.LongText
+  categoria CategoriaMovimiento
+  monto Decimal @db.Decimal(12, 2)
+  diaVencimiento Int
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  cuentas CuentaAdministrativa[]
+  @@unique([empresaId, nombre])
+  @@index([empresaId, activo])
+  @@map("gastos_recurrentes")
+}
+
+model ConteoInventario {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  usuarioId Int
+  aprobadorId Int?
+  descripcion String @db.LongText
+  estado String @default("PENDIENTE")
+  motivoResolucion String? @db.LongText
+  creadoEn DateTime @default(now())
+  resueltoEn DateTime?
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  detalles DetalleConteoInventario[]
+  @@index([empresaId, estado, creadoEn])
+  @@map("conteos_inventario")
+}
+
+model DetalleConteoInventario {
+  id Int @id @default(autoincrement())
+  conteoId Int
+  productoId Int
+  productoNombre String @db.LongText
+  stockEsperado Int
+  stockContado Int
+  conteo ConteoInventario @relation(fields: [conteoId], references: [id], onDelete: Restrict)
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  @@unique([conteoId, productoId])
+  @@map("detalles_conteo_inventario")
+}
+
+model AbonoAdministrativo {
+  id Int @id @default(autoincrement())
+  cuentaId Int
+  usuarioId Int
+  monto Decimal @db.Decimal(12, 2)
+  referencia String @db.LongText
+  clave String @unique
+  movimientoId Int @unique
+  creadoEn DateTime @default(now())
+  cuenta CuentaAdministrativa @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+  movimiento MovimientoFinanciero @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
+  @@index([cuentaId])
+  @@map("abonos_administrativos")
+}
+
+model ConciliacionAdministrativa {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  movimientoId Int @unique
+  usuarioId Int
+  referencia String @db.LongText
+  fechaBanco DateTime
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  movimiento MovimientoFinanciero @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
+  @@index([empresaId, fechaBanco])
+  @@map("conciliaciones_administrativas")
+}
+
+model PresupuestoAdministrativo {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  periodo String
+  categoria CategoriaMovimiento
+  monto Decimal @db.Decimal(12, 2)
+  usuarioId Int
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  @@unique([empresaId, periodo, categoria])
+  @@map("presupuestos_administrativos")
+}
+
+model PagoPedido {
+  id         Int        @id @default(autoincrement())
+  pedidoId   Int
+  metodoPago MetodoPago
+  monto      Decimal    @db.Decimal(10, 2)
+  creadoEn   DateTime   @default(now())
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+
+  @@index([pedidoId])
+  @@map("pagos_pedido")
+}
+
+model DetallePedido {
+  id             Int     @id @default(autoincrement())
+  pedidoId       Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+  exclusiones    Json @default("[]")
+  observacion    String? @db.LongText
+  costoVentaHistorico Decimal? @db.Decimal(14, 4)
+
+  // Presentación vendida (ej. "Tarro" vs "Unidad"): se guarda una copia del
+  // nombre y del factor de unidades base al momento de la venta, para que el
+  // recibo y la reversión de inventario al anular sigan siendo correctos
+  // aunque luego se edite o desactive la presentación.
+  presentacionId     Int?
+  presentacionNombre String? @db.LongText
+  varianteSabor      String? @db.LongText
+  factorUnidades     Int     @default(1)
+
+  pedido       Pedido                   @relation(fields: [pedidoId], references: [id])
+  producto     Producto                 @relation(fields: [productoId], references: [id])
+  presentacion ProductoPresentacion?    @relation(fields: [presentacionId], references: [id])
+  adicionales  DetallePedidoAdicional[]
+
+  @@map("detalle_pedidos")
+}
+
+model DetallePedidoAdicional {
+  id              Int     @id @default(autoincrement())
+  detallePedidoId Int
+  adicionalId     Int
+  nombre          String @db.LongText // snapshot del nombre al momento de la venta
+  precio          Decimal @db.Decimal(10, 2) // snapshot del precio unitario
+  cantidad        Int     @default(1) // unidades del adicional por unidad de producto
+  subtotal        Decimal @db.Decimal(10, 2) // precio * cantidad * detalle.cantidad
+
+  detalle   DetallePedido @relation(fields: [detallePedidoId], references: [id])
+  adicional Adicional     @relation(fields: [adicionalId], references: [id])
+
+  @@map("detalle_pedido_adicionales")
+}
+
+// ==========================================
+// DISTRIBUIDORES (venden a nombre de la empresa en su zona, con su propio
+// código y acceso; ganan una comisión % sobre cada pedido que registran y
+// se les liquida por periodo)
+// ==========================================
+
+model Distribuidor {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  codigo    String
+  nombre    String @db.LongText
+  zona      String? @db.LongText
+  // % fijo que se aplica a cada pedido que este distribuidor registre.
+  porcentajeComision Decimal @db.Decimal(5, 2)
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  empresa       Empresa                    @relation(fields: [empresaId], references: [id])
+  sucursal      Sucursal                   @relation(fields: [sucursalId], references: [id])
+  usuario       Usuario?
+  pedidos       PedidoDistribuidor[]
+  liquidaciones LiquidacionDistribuidor[]
+
+  @@unique([empresaId, codigo])
+  @@map("distribuidores")
+}
+
+enum EstadoPedidoDistribuidor {
+  ENTREGADO
+  ANULADO
+}
+
+model PedidoDistribuidor {
+  id             Int                       @id @default(autoincrement())
+  numero         String                    @unique
+  empresaId      Int
+  sucursalId     Int
+  distribuidorId Int
+  clienteReferencia String? @db.LongText
+  estado         EstadoPedidoDistribuidor  @default(ENTREGADO)
+  total          Decimal                   @db.Decimal(10, 2)
+  // Snapshot del % y el monto de comisión al momento del pedido: si luego
+  // cambia el % del distribuidor, los pedidos ya hechos no deben moverse.
+  comisionPorcentaje Decimal               @db.Decimal(5, 2)
+  comisionMonto  Decimal                   @db.Decimal(10, 2)
+  liquidacionId  Int?
+  creadoEn       DateTime                  @default(now())
+
+  empresa      Empresa                    @relation(fields: [empresaId], references: [id])
+  sucursal     Sucursal                   @relation(fields: [sucursalId], references: [id])
+  distribuidor Distribuidor               @relation(fields: [distribuidorId], references: [id])
+  liquidacion  LiquidacionDistribuidor?   @relation(fields: [liquidacionId], references: [id])
+  detalles     DetallePedidoDistribuidor[]
+
+  @@map("pedidos_distribuidor")
+}
+
+model DetallePedidoDistribuidor {
+  id             Int     @id @default(autoincrement())
+  pedidoId       Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+
+  presentacionId     Int?
+  presentacionNombre String? @db.LongText
+  factorUnidades     Int     @default(1)
+
+  pedido   PedidoDistribuidor @relation(fields: [pedidoId], references: [id])
+  producto Producto           @relation(fields: [productoId], references: [id])
+
+  @@map("detalle_pedidos_distribuidor")
+}
+
+// Liquidación mensual: agrupa todos los pedidos de un distribuidor en un
+// periodo y deja un solo registro de cuánto se le pagó, enlazado al egreso
+// que queda en Financiero para que el cuadre del negocio lo refleje.
+model LiquidacionDistribuidor {
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  distribuidorId  Int
+  usuarioId       Int
+  periodoDesde    DateTime
+  periodoHasta    DateTime
+  cantidadPedidos Int
+  totalVentas     Decimal  @db.Decimal(10, 2)
+  totalComision   Decimal  @db.Decimal(10, 2)
+  movimientoFinancieroId Int? @unique
+  creadoEn        DateTime @default(now())
+
+  empresa      Empresa                @relation(fields: [empresaId], references: [id])
+  distribuidor Distribuidor           @relation(fields: [distribuidorId], references: [id])
+  usuario      Usuario                @relation(fields: [usuarioId], references: [id])
+  movimientoFinanciero MovimientoFinanciero? @relation(fields: [movimientoFinancieroId], references: [id])
+  pedidos      PedidoDistribuidor[]
+
+  @@map("liquidaciones_distribuidor")
+}
+
+// ==========================================
+// CAJA
+// ==========================================
+
+enum EstadoCaja {
+  ABIERTA
+  CERRADA
+}
+
+model Caja {
+  id           Int        @id @default(autoincrement())
+  sucursalId   Int
+  usuarioId    Int
+  estado       EstadoCaja @default(ABIERTA)
+  montoInicial Decimal    @db.Decimal(10, 2)
+  montoFinal   Decimal?   @db.Decimal(10, 2)
+  diferencia   Decimal?   @db.Decimal(10, 2)
+  abiertaEn    DateTime   @default(now())
+  cerradaEn    DateTime?
+
+  sucursal Sucursal     @relation(fields: [sucursalId], references: [id])
+  usuario  Usuario      @relation(fields: [usuarioId], references: [id])
+  pedidos  Pedido[]
+  eventos  EventoCaja[]
+  retiroEfectivo RetiroEfectivoCaja?
+
+  @@map("cajas")
+}
+
+model RetiroEfectivoCaja {
+  id             Int      @id @default(autoincrement())
+  empresaId      Int
+  sucursalId     Int
+  cajaId         Int      @unique
+  usuarioId      Int
+  montoEsperado  Decimal  @db.Decimal(10, 2)
+  montoRetirado  Decimal  @db.Decimal(10, 2)
+  creadoEn       DateTime @default(now())
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  caja     Caja     @relation(fields: [cajaId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([sucursalId, creadoEn])
+  @@map("retiros_efectivo_caja")
+}
+
+model ConsignacionEfectivo {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  sucursalId         Int
+  usuarioId          Int
+  periodoInicio      DateTime @db.Date
+  periodoFin         DateTime @db.Date
+  ventasEfectivo     Decimal  @db.Decimal(10, 2)
+  efectivoRecaudado  Decimal  @db.Decimal(10, 2)
+  montoConsignado    Decimal  @db.Decimal(10, 2)
+  fechaConsignacion  DateTime @default(now())
+  referencia         String? @db.LongText
+  creadoEn           DateTime @default(now())
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@unique([sucursalId, periodoInicio])
+  @@index([empresaId, periodoInicio])
+  @@map("consignaciones_efectivo")
+}
+
+// ==========================================
+// EVENTOS DE CAJA
+// ==========================================
+
+enum TipoEventoCaja {
+  APERTURA
+  CIERRE
+  APERTURA_IRREGULAR
+  DIFERENCIA
+  MOVIMIENTO
+  EDICION_PAGO
+  ANULACION
+  CORRECCION
+}
+
+model EventoCaja {
+  id          Int            @id @default(autoincrement())
+  cajaId      Int
+  usuarioId   Int
+  tipo        TipoEventoCaja
+  descripcion String @db.LongText
+  esAlerta    Boolean        @default(false)
+  creadoEn    DateTime       @default(now())
+
+  caja    Caja    @relation(fields: [cajaId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("eventos_caja")
+}
+
+// ==========================================
+// MÓDULO FINANCIERO
+// ==========================================
+
+enum TipoMovimiento {
+  INGRESO
+  EGRESO
+}
+
+enum CategoriaMovimiento {
+  VENTA
+  COSTO_VENTA
+  COMPRA_INSUMOS
+  COMPRA_MERCANCIA
+  NOMINA
+  SERVICIOS
+  ARRIENDO
+  MANTENIMIENTO
+  IMPUESTOS
+  COMISION_DISTRIBUIDOR
+  OTROS
+}
+
+model MovimientoFinanciero {
+  id          Int                 @id @default(autoincrement())
+  empresaId   Int
+  sucursalId  Int
+  usuarioId   Int
+  tipo        TipoMovimiento
+  categoria   CategoriaMovimiento
+  descripcion String @db.LongText
+  monto       Decimal             @db.Decimal(10, 2)
+  fecha       DateTime            @default(now())
+  pedidoId    Int?
+  comprobante String? @db.LongText
+  compraGastoId Int? @unique
+  creadoEn    DateTime            @default(now())
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+  pedido   Pedido?  @relation(fields: [pedidoId], references: [id])
+  liquidacionDistribuidor LiquidacionDistribuidor?
+  compraGasto CompraGasto? @relation(fields: [compraGastoId], references: [id], onDelete: Restrict)
+  abonoAdministrativo AbonoAdministrativo?
+  conciliacionAdministrativa ConciliacionAdministrativa?
+
+  @@map("movimientos_financieros")
+}
+
+model SaldoInicialCuenta {
+  id        Int      @id @default(autoincrement())
+  empresaId Int      @unique
+  usuarioId Int
+  monto     Decimal  @db.Decimal(12, 2)
+  desde     DateTime @default(now())
+  creadoEn  DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("saldos_iniciales_cuenta")
+}
+
+model CompraGasto {
+  id           Int                @id @default(autoincrement())
+  empresaId    Int
+  sucursalId   Int
+  usuarioId    Int
+  categoria    CategoriaMovimiento
+  descripcion  String @db.LongText
+  monto        Decimal            @db.Decimal(12, 2)
+  fecha        DateTime           @default(now())
+  creadoEn     DateTime           @default(now())
+  proveedorId Int?
+  condicionPago String @db.LongText @default("CONTADO")
+
+  empresa    Empresa @relation(fields: [empresaId], references: [id])
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+  usuario    Usuario @relation(fields: [usuarioId], references: [id])
+  movimiento MovimientoFinanciero?
+  detalles   DetalleCompra[]
+  proveedor Proveedor? @relation(fields: [proveedorId, empresaId], references: [id, empresaId], onDelete: Restrict)
+  cuentaAdministrativa CuentaAdministrativa?
+  recepcionOrden RecepcionOrdenCompra?
+
+  @@index([empresaId, fecha])
+  @@map("compras_gastos")
+}
+
+model OrdenCompra {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  proveedorId Int
+  usuarioId Int
+  referencia String
+  descripcion String @db.LongText
+  estado String @default("PENDIENTE")
+  creadoEn DateTime @default(now())
+  aprobadoPor Int?
+  motivoCierre String? @db.LongText
+  detalles DetalleOrdenCompra[]
+  recepciones RecepcionOrdenCompra[]
+  @@unique([empresaId, referencia])
+  @@index([empresaId, estado])
+  @@map("ordenes_compra")
+}
+
+model DetalleOrdenCompra {
+  id Int @id @default(autoincrement())
+  ordenId Int
+  productoId Int
+  nombre String @db.LongText
+  cantidad Int
+  recibida Int @default(0)
+  costoUnitario Decimal @db.Decimal(12, 2)
+  orden OrdenCompra @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  @@unique([ordenId, productoId])
+  @@map("detalles_orden_compra")
+}
+
+model RecepcionOrdenCompra {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  ordenId Int
+  compraId Int @unique
+  clave String
+  solicitud Json
+  creadoEn DateTime @default(now())
+  orden OrdenCompra @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  compra CompraGasto @relation(fields: [compraId], references: [id], onDelete: Restrict)
+  @@unique([empresaId, clave])
+  @@map("recepciones_orden_compra")
+}
+
+model DetalleCompra {
+  id                 Int      @id @default(autoincrement())
+  compraGastoId      Int
+  productoId         Int
+  productoNombre     String @db.LongText
+  cantidad           Decimal  @db.Decimal(10, 3)
+  unidadCompra       String @db.LongText
+  factorAplicado     Int
+  cantidadInventario Int
+  costoUnitario      Decimal  @db.Decimal(12, 2)
+  subtotal           Decimal  @db.Decimal(12, 2)
+
+  compra   CompraGasto @relation(fields: [compraGastoId], references: [id], onDelete: Restrict)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([productoId])
+  @@map("detalles_compra")
+}
+
+// ==========================================
+// CONSUMO DE EMPLEADOS (no es venta, sí descuenta inventario)
+// ==========================================
+
+model ConsumoEmpleado {
+  id             Int      @id @default(autoincrement())
+  empresaId      Int
+  sucursalId     Int
+  usuarioId      Int
+  empleadoNombre String @db.LongText
+  observacion    String? @db.LongText
+  creadoEn       DateTime @default(now())
+
+  empresa  Empresa               @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal              @relation(fields: [sucursalId], references: [id])
+  usuario  Usuario               @relation(fields: [usuarioId], references: [id])
+  items    ConsumoEmpleadoItem[]
+
+  @@map("consumos_empleados")
+}
+
+model ConsumoEmpleadoItem {
+  id                Int    @id @default(autoincrement())
+  consumoEmpleadoId Int
+  productoId        Int
+  cantidad          Int
+  precioReferencia  Decimal @db.Decimal(10, 2)
+
+  consumo  ConsumoEmpleado @relation(fields: [consumoEmpleadoId], references: [id])
+  producto Producto        @relation(fields: [productoId], references: [id])
+
+  @@map("consumo_empleado_items")
+}
+
+model Auditoria {
+  id        Int      @id @default(autoincrement())
+  empresaId Int?
+  usuarioId Int?
+  accion    String @db.LongText
+  entidad   String @db.LongText
+  entidadId Int?
+  detalle   Json?
+  creadoEn  DateTime @default(now())
+
+  empresa Empresa? @relation(fields: [empresaId], references: [id])
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([empresaId, creadoEn])
+  @@map("auditorias")
+}
+
+// Solicitud pública: no afecta caja, inventario ni puntos hasta ser aceptada.
+model PedidoWeb {
+  id String @id @default(uuid())
+  empresaId Int
+  sucursalId Int
+  clave String
+  estado String @default("RECIBIDO")
+  nombre String @db.LongText
+  telefono String @db.LongText
+  direccion String @db.LongText
+  zona String @db.LongText
+  observacion String? @db.LongText
+  items Json
+  subtotal Decimal @db.Decimal(10, 2)
+  costoDomicilio Decimal @db.Decimal(10, 2)
+  total Decimal @db.Decimal(10, 2)
+  metodoPago MetodoPago @default(EFECTIVO)
+  pedidoId Int? @unique
+  repartidorId Int?
+  motivo String? @db.LongText
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+  pedido Pedido? @relation(fields: [pedidoId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  repartidor Usuario? @relation(fields: [repartidorId], references: [id])
+  @@unique([empresaId, clave])
+  @@index([empresaId, estado, creadoEn])
+  @@map("pedidos_web")
+}

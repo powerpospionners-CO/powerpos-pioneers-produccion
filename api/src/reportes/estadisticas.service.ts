@@ -21,6 +21,20 @@ type VentaEstadistica = {
   }[];
 };
 const redondear = (n: number) => Math.round(n * 100) / 100;
+export function agruparDias(dias: { fecha: string; total: number; cantidad: number }[], tipo: 'semana' | 'mes') {
+  const grupos = new Map<string, { periodo: string; total: number; cantidad: number }>();
+  for (const d of dias) {
+    let periodo = d.fecha.slice(0, 7);
+    if (tipo === 'semana') {
+      const fecha = new Date(`${d.fecha}T00:00:00Z`);
+      fecha.setUTCDate(fecha.getUTCDate() - (fecha.getUTCDay() + 6) % 7);
+      periodo = `Semana del ${fecha.toISOString().slice(0, 10)}`;
+    }
+    const g = grupos.get(periodo) || { periodo, total: 0, cantidad: 0 };
+    g.total += d.total; g.cantidad += d.cantidad; grupos.set(periodo, g);
+  }
+  return [...grupos.values()].map(g => ({ ...g, total: redondear(g.total) }));
+}
 export function resumirVentas(
   ventas: VentaEstadistica[],
   desde: Date,
@@ -144,8 +158,8 @@ export class EstadisticasService {
     const desde = fechaDia(desdeInput);
     const hasta = new Date(fechaDia(hastaInput).getTime() + 86400000);
     const dias = (hasta.getTime() - desde.getTime()) / 86400000;
-    if (dias < 1 || dias > 93)
-      throw new BadRequestException('Selecciona entre uno y 93 días');
+    if (dias < 1 || dias > 366)
+      throw new BadRequestException('Selecciona entre uno y 366 días');
     const sucursalId = sucursalInput ? Number(sucursalInput) : undefined;
     if (
       sucursalInput &&
@@ -212,6 +226,8 @@ export class EstadisticasService {
     const totalAnterior = Number(anteriores._sum.total || 0);
     return {
       ...resumen,
+      semanales: agruparDias(resumen.diarias, 'semana'),
+      mensuales: agruparDias(resumen.diarias, 'mes'),
       filtro: {
         desde: desdeInput,
         hasta: hastaInput,

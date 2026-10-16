@@ -7,7 +7,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import ExcelDownload from '@/components/ExcelDownload';
 
-type Periodo = 'hoy' | 'mes' | 'anio' | 'personalizado';
+type Periodo = 'hoy' | 'semana' | 'mes' | 'anio' | 'personalizado';
 
 const ETIQUETAS_METODO: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', NEQUI: 'Nequi', DAVIPLATA: 'Daviplata',
@@ -20,6 +20,12 @@ function calcularRango(periodo: Periodo, desdePersonalizado: string, hastaPerson
   const ahora = new Date();
   if (periodo === 'hoy') {
     const inicio = new Date(ahora);
+    inicio.setHours(0, 0, 0, 0);
+    return { desde: inicio.toISOString(), hasta: ahora.toISOString() };
+  }
+  if (periodo === 'semana') {
+    const inicio = new Date(ahora);
+    inicio.setDate(ahora.getDate() - (ahora.getDay() + 6) % 7);
     inicio.setHours(0, 0, 0, 0);
     return { desde: inicio.toISOString(), hasta: ahora.toISOString() };
   }
@@ -187,6 +193,7 @@ export default function FinancieroPage() {
             <div className="flex flex-wrap items-center gap-2">
               {([
                 ['hoy', 'Hoy'],
+                ['semana', 'Esta semana'],
                 ['mes', 'Este mes'],
                 ['anio', 'Este año'],
                 ['personalizado', 'Personalizado'],
@@ -332,6 +339,7 @@ export default function FinancieroPage() {
             <div className="no-imprimir px-4 pt-3 flex flex-wrap items-center gap-2">
               {([
                 ['hoy', 'Hoy'],
+                ['semana', 'Esta semana'],
                 ['mes', 'Este mes'],
                 ['anio', 'Este año'],
                 ['personalizado', 'Personalizado'],

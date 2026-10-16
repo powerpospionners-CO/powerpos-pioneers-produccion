@@ -80,7 +80,7 @@ export default function ReportesPage() {
         <Navbar />
 
         <div className="flex-1 p-6 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-white text-xl font-bold">Reportes avanzados</h2><ExcelDownload url="/reportes/exportar" filename="reportes-powerpos.xlsx" /></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-white text-xl font-bold">Reportes avanzados</h2><div className="flex flex-wrap items-center gap-3"><a href="/estadisticas" className="text-sm text-orange-300">Ventas por semana, mes y año →</a><ExcelDownload url="/reportes/exportar" filename="reportes-powerpos.xlsx" /></div></div>
 
           {/* Comparativa por periodo */}
           <RentabilidadHistorica />

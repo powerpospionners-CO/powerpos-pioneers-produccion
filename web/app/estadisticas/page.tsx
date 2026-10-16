@@ -159,6 +159,16 @@ function EstadisticasContenido() {
               onSubmit={consultar}
               className={`${tarjeta} flex flex-wrap items-end gap-3`}
             >
+              <div className="flex w-full flex-wrap gap-2" aria-label="Periodos rápidos">
+                {(['Hoy', 'Esta semana', 'Este mes', 'Este año'] as const).map((periodo) => <button key={periodo} type="button" disabled={cargando} className="rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:opacity-50" onClick={() => {
+                  const fin = hoy();
+                  let inicio = fin;
+                  if (periodo === 'Esta semana') { const fecha = new Date(`${fin}T00:00:00Z`); fecha.setUTCDate(fecha.getUTCDate() - (fecha.getUTCDay() + 6) % 7); inicio = fecha.toISOString().slice(0, 10); }
+                  if (periodo === 'Este mes') inicio = `${fin.slice(0, 7)}-01`;
+                  if (periodo === 'Este año') inicio = `${fin.slice(0, 4)}-01-01`;
+                  setDesde(inicio); setHasta(fin); setFiltro({ desde: inicio, hasta: fin, sucursalId });
+                }}>{periodo}</button>)}
+              </div>
               <label className="text-sm">
                 Desde
                 <input
