@@ -6,6 +6,14 @@ const VERSION = 'powerpos-v1';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [OFFLINE_URL, '/icons/icon-192.png', '/icons/icon-512.png'];
 
+// A misdirected GET may succeed when retried. Keep the deployment identifier:
+// removing it could combine files from different releases.
+async function descargar(request) {
+  const respuesta = await fetch(request);
+  if (respuesta.status !== 421) return respuesta;
+  return fetch(new Request(request, { cache: 'no-store' }));
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()),
@@ -32,7 +40,7 @@ self.addEventListener('fetch', (event) => {
   // ya cacheada o a un aviso simple de "sin conexión".
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match(request).then((r) => r || caches.match(OFFLINE_URL))),
+      descargar(request).catch(() => caches.match(request).then((r) => r || caches.match(OFFLINE_URL))),
     );
     return;
   }
@@ -42,7 +50,7 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/marca/')) {
     event.respondWith(
       caches.match(request).then((cacheada) => {
-        const enRed = fetch(request).then((respuesta) => {
+        const enRed = descargar(request).then((respuesta) => {
           // clonar ya mismo, antes de que el navegador empiece a consumir el
           // cuerpo de la respuesta original — si se clona dentro del .then()
           // de caches.open() (asíncrono), para entonces el cuerpo ya pudo

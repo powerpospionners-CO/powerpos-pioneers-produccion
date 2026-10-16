@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recuperar acceso · PowerPOS</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#030712;color:#f9fafb;font:16px system-ui}main{max-width:480px;padding:28px}h1{font-size:26px}p{line-height:1.6;color:#d1d5db}button{background:#f97316;color:white;border:0;border-radius:10px;padding:16px;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.5}#estado{min-height:3em}
+</style>
+</head>
+<body><main>
+<h1>Recuperar acceso a PowerPOS</h1>
+<p>Actualiza los archivos de la aplicación cuando la pantalla no carga. Conserva las ventas pendientes y los datos guardados en este equipo.</p>
+<p>Si tienes una venta abierta en otra pestaña, termínala o guárdala antes de continuar.</p>
+<button id="recuperar">Actualizar archivos y abrir el sistema</button>
+<p id="estado" role="status" aria-live="polite"></p>
+</main>
+<script>
+document.getElementById('recuperar').addEventListener('click',async()=>{
+ const boton=document.getElementById('recuperar'),estado=document.getElementById('estado');
+ boton.disabled=true;estado.textContent='Comprobando conexión…';
+ try{
+  const comprobar=await fetch('/api/version?recuperacion='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+  if(!comprobar.ok)throw Error('conexion');
+  const version=await comprobar.json();if(typeof version.version!=='string')throw Error('conexion');
+  estado.textContent='Actualizando archivos de la aplicación…';
+  if('serviceWorker' in navigator){const registros=await navigator.serviceWorker.getRegistrations();await Promise.all(registros.filter(r=>{const u=new URL(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||location.origin);return u.origin===location.origin&&u.pathname==='/sw.js';}).map(r=>r.unregister()));}
+  if('caches' in window){const nombres=await caches.keys();await Promise.all(nombres.filter(n=>/^powerpos-v\d+$/.test(n)).map(n=>caches.delete(n)));}
+  location.replace('/login?recuperacion='+Date.now());
+ }catch{estado.textContent='No se pudo completar la recuperación. Comprueba la conexión e inténtalo otra vez. Las ventas guardadas no se han borrado.';boton.disabled=false;}
+});
+</script></body></html>
