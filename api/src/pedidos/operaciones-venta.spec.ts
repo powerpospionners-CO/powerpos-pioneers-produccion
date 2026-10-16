@@ -30,6 +30,13 @@ describe('Crédito y devoluciones del POS', ()=>{
   });
   const cobro = { clave:'cobro-1', monto:30, metodoPago:'EFECTIVO', referencia:'Recibo 1' };
   const devolucion = { clave:'dev-1', metodoPago:'EFECTIVO', motivo:'Producto devuelto', reponer:true, items:[{detalleId:7,cantidad:1}] };
+  it('repone una bolsita y un porta al devolver una de dos hamburguesas para llevar', async()=>{
+    const {db,pedido,service}=escenario();
+    pedido.detalles[0].consumoInventario=[{tipo:'INGREDIENTE',id:21,cantidad:2},{tipo:'INGREDIENTE',id:22,cantidad:2}];
+    await service.devolver(10,devolucion,actor);
+    expect(db.ingrediente.updateMany).toHaveBeenCalledTimes(2);
+    for(const id of [21,22])expect(db.ingrediente.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({id,empresaId:1}),data:{stock:{increment:1}}}));
+  });
   it('registra abono, ingreso y operación en la misma transacción', async()=>{
     const {db,service}=escenario(); const op=await service.cobrar(10,cobro,actor);
     expect(op).toMatchObject({tipo:'COBRO_CREDITO',cajaId:1});

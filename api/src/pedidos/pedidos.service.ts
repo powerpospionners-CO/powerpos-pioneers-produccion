@@ -11,6 +11,7 @@ import { PedidosEventosService } from './pedidos-eventos.service';
 import { bloquearCajaSucursal } from '../caja/caja-lock';
 import { costoHistoricoItem } from './costo-historico';
 import { fechaDia } from '../administracion/administracion.service';
+import { adicionalesConEmpaque } from './empaque';
 
 const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
@@ -236,7 +237,7 @@ export class PedidosService {
         item.adicionales.length > 0
       ) {
         const catalogo = await db.adicional.findMany({
-          where: { empresaId, activo: true, disponible: true },
+          where: { empresaId, activo: true, disponible: true, empaqueParaLlevar: false },
           include: { ingrediente: true },
         });
         for (const ad of catalogo) adicionalesPermitidos.set(ad.id, ad);
@@ -244,9 +245,7 @@ export class PedidosService {
 
       const adicionalesValidados = [];
       let extrasPorUnidad = 0;
-      for (const solicitud of Array.isArray(item.adicionales)
-        ? item.adicionales
-        : []) {
+      for (const solicitud of adicionalesConEmpaque(item, producto)) {
         const adicional = adicionalesPermitidos.get(solicitud.adicionalId);
         if (!adicional) {
           throw new BadRequestException(
@@ -275,7 +274,9 @@ export class PedidosService {
         producto,
         cantidad: item.cantidad,
         exclusiones: item.exclusiones || [],
-        observacion: item.observacion || null,
+        observacion: item.tipoConsumo
+          ? `[${item.tipoConsumo === 'PARA_LLEVAR' ? 'Para llevar' : 'Comer aquí'}] ${item.observacion || ''}`.trim()
+          : item.observacion || null,
         adicionales: adicionalesValidados,
         subtotal: itemSubtotal,
         presentacionId: presentacion?.id ?? null,

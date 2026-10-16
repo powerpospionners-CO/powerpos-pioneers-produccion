@@ -32,6 +32,7 @@ interface Adicional {
   ingredienteId: number | null;
   cantidad: string | null;
   disponible: boolean;
+  empaqueParaLlevar?: boolean;
   ingrediente?: { id: number; nombre: string; unidad: string } | null;
 }
 
@@ -493,7 +494,7 @@ export default function ProductosPage() {
   const [recetaTemp, setRecetaTemp] = useState<IngredienteReceta[]>([]);
   const [adicionalIdsTemp, setAdicionalIdsTemp] = useState<number[]>([]);
   const [formCategoria, setFormCategoria] = useState({ nombre: '', icono: iconoCategoriaDefecto, color: '#FF6B35', parentId: '' });
-  const [formAdicional, setFormAdicional] = useState<{ id: number | null; nombre: string; precio: string; ingredienteId: string; cantidad: string }>({
+  const [formAdicional, setFormAdicional] = useState<{ id: number | null; nombre: string; precio: string; ingredienteId: string; cantidad: string; empaqueParaLlevar?: boolean }>({
     id: null,
     nombre: '',
     precio: '',
@@ -593,6 +594,7 @@ export default function ProductosPage() {
         precio: Number(formAdicional.precio),
         ingredienteId: formAdicional.ingredienteId ? Number(formAdicional.ingredienteId) : null,
         cantidad: formAdicional.cantidad ? Number(formAdicional.cantidad) : null,
+        empaqueParaLlevar: formAdicional.empaqueParaLlevar ?? false,
       };
       if (formAdicional.id) {
         await api.patch(`/adicionales/${formAdicional.id}`, payload);
@@ -615,6 +617,7 @@ export default function ProductosPage() {
       precio: String(adicional.precio),
       ingredienteId: adicional.ingredienteId ? String(adicional.ingredienteId) : '',
       cantidad: adicional.cantidad ? String(adicional.cantidad) : '',
+      empaqueParaLlevar: adicional.empaqueParaLlevar ?? false,
     });
   };
 
@@ -1703,6 +1706,12 @@ export default function ProductosPage() {
                     placeholder="Ej: 20"
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-orange-500 disabled:opacity-40"
                   />
+                  <label className="flex gap-2 mt-3 text-gray-300 text-xs">
+                    <input type="checkbox" checked={formAdicional.empaqueParaLlevar ?? false}
+                      onChange={e => setFormAdicional({ ...formAdicional, empaqueParaLlevar: e.target.checked })} />
+                    Empaque automático solo para llevar
+                  </label>
+                  <p className="text-gray-400 text-xs mt-1">Asócialo a los productos que lo usan. Se descuenta por cada unidad para llevar. No lo incluyas también en la receta base. Precio $0 si está incluido.</p>
                 </div>
               </div>
               <div className="flex gap-2">

@@ -27,6 +27,23 @@ function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado
 describe('Pedidos comerciales', () => {
   const venta = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 5, cantidad: 2 }] };
 
+  it.each(['AQUI', 'PARA_LLEVAR'])('guarda y descuenta el empaque real de dos hamburguesas %s', async tipoConsumo => {
+    const { db, service } = escenario('RESTAURANTE');
+    const bolsa = { id: 21, nombre: 'Bolsita metalizada', costoUnitario: 100 };
+    const porta = { id: 22, nombre: 'Porta hamburguesa', costoUnitario: 300 };
+    const adicional = { id: 7, nombre: 'Empaque', precio: 0, ingredienteId: 22, cantidad: 1, activo: true, disponible: true, empaqueParaLlevar: true, ingrediente: porta };
+    db.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Hamburguesa', precio: 10000, disponible: true, activo: true, ingredientes: [{ ingredienteId: 21, ingrediente: bolsa, cantidad: 1 }], adicionales: [{ adicional }] });
+    db.ingrediente = { update: jest.fn() };
+    await service.crearEnTransaccion({ ...venta, items: [{ productoId: 5, cantidad: 2, tipoConsumo }] }, 3, 1, db);
+    const data = db.pedido.create.mock.calls[0][0].data;
+    expect(data.consumoInventario).toEqual(tipoConsumo === 'AQUI'
+      ? [{ tipo: 'INGREDIENTE', id: 21, cantidad: 2 }]
+      : [{ tipo: 'INGREDIENTE', id: 21, cantidad: 2 }, { tipo: 'INGREDIENTE', id: 22, cantidad: 2 }]);
+    expect(Number(data.costoVentaHistorico)).toBe(tipoConsumo === 'AQUI' ? 200 : 800);
+    expect(db.ingrediente.update).toHaveBeenCalledTimes(tipoConsumo === 'AQUI' ? 1 : 2);
+    expect(data.detalles.create[0].observacion).toContain(tipoConsumo === 'AQUI' ? 'Comer aquí' : 'Para llevar');
+  });
+
   it('entrega crédito, descuenta existencias y registra cartera sin inventar efectivo', async () => {
     const { db, service } = escenario('SUPERMERCADO');
     db.cliente = { findFirst: jest.fn().mockResolvedValue({ id: 9, nombre: 'Cliente' }), update: jest.fn() };

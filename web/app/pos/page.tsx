@@ -19,6 +19,9 @@ interface AdicionalProducto {
   id: number;
   nombre: string;
   precio: string;
+  empaqueParaLlevar?: boolean;
+  disponible?: boolean;
+  activo?: boolean;
 }
 
 interface Categoria {
@@ -54,6 +57,7 @@ interface ItemCarrito {
   exclusiones: string[];
   adicionales: AdicionalSeleccionado[];
   observacion: string;
+  tipoConsumo?: 'AQUI' | 'PARA_LLEVAR';
 }
 
 function RestaurantePOS() {
@@ -72,6 +76,7 @@ function RestaurantePOS() {
   const [adicionalesTemp, setAdicionalesTemp] = useState<AdicionalSeleccionado[]>([]);
   const [observacionTemp, setObservacionTemp] = useState('');
   const [cantidadTemp, setCantidadTemp] = useState(1);
+  const [tipoConsumoTemp, setTipoConsumoTemp] = useState<'AQUI' | 'PARA_LLEVAR' | null>(null);
   const intentoVenta = useRef<{ firma: string; clave: string } | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
@@ -113,10 +118,19 @@ function RestaurantePOS() {
   const adicionalesDelModal: AdicionalProducto[] = !modalProducto
     ? []
     : modalProducto.adicionales && modalProducto.adicionales.length > 0
-      ? modalProducto.adicionales.map((a) => a.adicional)
+      ? modalProducto.adicionales.map((a) => a.adicional).filter(a => a.activo !== false)
       : modalProducto.aceptaAdicionales === false
         ? []
-        : adicionalesCatalogo;
+        : adicionalesCatalogo.filter(a => !a.empaqueParaLlevar);
+  const empaquesDelModal = adicionalesDelModal.filter(a => a.empaqueParaLlevar);
+
+  const seleccionarConsumo = (tipo: 'AQUI' | 'PARA_LLEVAR') => {
+    setTipoConsumoTemp(tipo);
+    setAdicionalesTemp(prev => [
+      ...prev.filter(a => !empaquesDelModal.some(e => e.id === a.adicionalId)),
+      ...(tipo === 'PARA_LLEVAR' ? empaquesDelModal.map(a => ({ adicionalId: a.id, nombre: a.nombre, precio: Number(a.precio), cantidad: 1 })) : []),
+    ]);
+  };
 
   const subtotalPuntos = carrito.reduce((acc, item) => acc + precioLinea(item), 0);
   const canjeAplicado = reglasPuntos?.habilitado && clienteSeleccionado ? Math.min(puntosCanjeados, clienteSeleccionado.puntos, Math.floor(subtotalPuntos / (reglasPuntos.valorPunto || Infinity))) : 0;
@@ -686,6 +700,7 @@ function RestaurantePOS() {
     setAdicionalesTemp([]);
     setObservacionTemp('');
     setCantidadTemp(1);
+    setTipoConsumoTemp(null);
     setTecladoObservacionVisible(false);
   };
 
@@ -713,6 +728,8 @@ function RestaurantePOS() {
 
   const agregarAlCarrito = () => {
     if (!modalProducto) return;
+    if (empaquesDelModal.length && !tipoConsumoTemp) return;
+    const tipoConsumo = empaquesDelModal.length ? tipoConsumoTemp! : undefined;
     const cantidad = Math.max(1, Number(cantidadTemp) || 1);
     const claveAdicionales = JSON.stringify(
       [...adicionalesTemp].sort((a, b) => a.adicionalId - b.adicionalId)
@@ -721,6 +738,7 @@ function RestaurantePOS() {
       const existe = prev.findIndex(
         (i) =>
           i.producto.id === modalProducto.id &&
+          i.tipoConsumo === tipoConsumo &&
           JSON.stringify(i.exclusiones) === JSON.stringify(exclusionesTemp) &&
           JSON.stringify([...i.adicionales].sort((a, b) => a.adicionalId - b.adicionalId)) === claveAdicionales &&
           i.observacion === observacionTemp
@@ -730,7 +748,7 @@ function RestaurantePOS() {
         nuevo[existe].cantidad += cantidad;
         return nuevo;
       }
-      return [...prev, { producto: modalProducto, cantidad, exclusiones: exclusionesTemp, adicionales: adicionalesTemp, observacion: observacionTemp }];
+      return [...prev, { producto: modalProducto, cantidad, exclusiones: exclusionesTemp, adicionales: adicionalesTemp, observacion: observacionTemp, tipoConsumo }];
     });
     setModalProducto(null);
     setTecladoObservacionVisible(false);
@@ -824,6 +842,7 @@ function RestaurantePOS() {
           productoId: item.producto.id,
           cantidad: item.cantidad,
           exclusiones: item.exclusiones,
+          tipoConsumo: item.tipoConsumo,
           adicionales: item.adicionales.map((a) => ({ adicionalId: a.adicionalId, cantidad: a.cantidad })),
           observacion: item.observacion,
         })),
@@ -1110,6 +1129,7 @@ function RestaurantePOS() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="text-white text-sm font-medium">{item.producto.nombre}</div>
+                      {item.tipoConsumo && <div className="text-orange-300 text-xs">{item.tipoConsumo === 'PARA_LLEVAR' ? 'Para llevar' : 'Comer aquí'}</div>}
                       {item.exclusiones.length > 0 && (
                         <div className="text-red-400 text-xs mt-1">Sin: {item.exclusiones.join(', ')}</div>
                       )}
@@ -1195,6 +1215,17 @@ function RestaurantePOS() {
             <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
               <h3 className="text-white font-bold text-lg mb-1">{modalProducto.nombre}</h3>
               <p className="text-orange-500 font-bold mb-4">${Number(modalProducto.precio).toLocaleString()}</p>
+              {empaquesDelModal.length > 0 && <div className="mb-4">
+                <p className="text-gray-300 text-sm mb-2">¿Dónde lo va a consumir? Selecciona una opción.</p>
+                <div className="flex gap-2">
+                  {(['AQUI', 'PARA_LLEVAR'] as const).map(tipo => <button key={tipo} onClick={() => seleccionarConsumo(tipo)}
+                    disabled={tipo === 'PARA_LLEVAR' && empaquesDelModal.some(a => a.disponible === false)}
+                    className={`flex-1 rounded-lg p-3 border disabled:opacity-40 ${tipoConsumoTemp === tipo ? 'border-orange-500 bg-orange-500/20 text-white' : 'border-gray-700 text-gray-300'}`}>
+                    {tipo === 'AQUI' ? 'Comer aquí' : 'Para llevar'}
+                  </button>)}
+                </div>
+                <p className="text-xs text-gray-400 mt-2">Para llevar incluye automáticamente el empaque por cada unidad. Para opciones distintas, agrega el producto en dos líneas.</p>
+              </div>}
 
               {modalProducto.ingredientes?.length > 0 && (
                 <div className="mb-4">
@@ -1222,7 +1253,7 @@ function RestaurantePOS() {
                 <div className="mb-4">
                   <p className="text-gray-400 text-sm mb-2">¿Desea agregar adicionales?</p>
                   <div className="space-y-2">
-                    {adicionalesDelModal.map((adicional) => {
+                    {adicionalesDelModal.filter(a => !a.empaqueParaLlevar).map((adicional) => {
                       const sel = adicionalesTemp.find((a) => a.adicionalId === adicional.id);
                       return (
                         <div
@@ -1313,6 +1344,7 @@ function RestaurantePOS() {
                 </button>
                 <button
                   onClick={agregarAlCarrito}
+                  disabled={empaquesDelModal.length > 0 && !tipoConsumoTemp}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg py-3 transition-colors"
                 >
                   Agregar {cantidadTemp} · ${((

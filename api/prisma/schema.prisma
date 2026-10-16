@@ -611,6 +611,7 @@ model Adicional {
   ingredienteId Int?
   cantidad      Decimal? @db.Decimal(10, 3) // consumo de inventario por 1 unidad de adicional
   disponible    Boolean  @default(true)
+  empaqueParaLlevar Boolean @default(false)
   activo        Boolean  @default(true)
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
