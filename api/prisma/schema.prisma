@@ -99,6 +99,7 @@ model Empresa {
   cuentasAdministrativas CuentaAdministrativa[]
   conciliacionesAdministrativas ConciliacionAdministrativa[]
   presupuestosAdministrativos PresupuestoAdministrativo[]
+  gastosRecurrentes GastoRecurrente[]
 
   @@map("empresas")
 }
@@ -702,6 +703,8 @@ model CuentaAdministrativa {
   tipo String
   categoria CategoriaMovimiento @default(OTROS)
   compraGastoId Int? @unique
+  gastoRecurrenteId Int?
+  periodoRecurrente String?
   tercero String
   documento String
   descripcion String
@@ -713,9 +716,30 @@ model CuentaAdministrativa {
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
   abonos AbonoAdministrativo[]
   compra CompraGasto? @relation(fields: [compraGastoId], references: [id], onDelete: Restrict)
+  gastoRecurrente GastoRecurrente? @relation(fields: [gastoRecurrenteId], references: [id], onDelete: Restrict)
+  @@unique([gastoRecurrenteId, periodoRecurrente])
   @@unique([empresaId, tipo, documento])
   @@index([empresaId, tipo, vencimiento])
   @@map("cuentas_administrativas")
+}
+
+model GastoRecurrente {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  usuarioId Int
+  nombre String
+  tercero String
+  categoria CategoriaMovimiento
+  monto Decimal @db.Decimal(12, 2)
+  diaVencimiento Int
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  cuentas CuentaAdministrativa[]
+  @@unique([empresaId, nombre])
+  @@index([empresaId, activo])
+  @@map("gastos_recurrentes")
 }
 
 model AbonoAdministrativo {

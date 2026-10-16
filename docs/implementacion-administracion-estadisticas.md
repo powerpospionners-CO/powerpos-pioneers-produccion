@@ -5,6 +5,7 @@ Cambios preparados el 15 de octubre de 2026. Publicación autorizada por el usua
 ## Implementado en esta etapa
 
 - `/administracion`: proveedores, obligaciones por pagar/cobrar, vencimientos, abonos, conciliación bancaria manual y presupuesto mensual contra egresos.
+- Gastos recurrentes mensuales: plantillas de arriendo, servicios y otros gastos; generación manual de una obligación por plantilla y mes, sin pagos automáticos. Permite cambiar el valor para meses futuros y desactivar plantillas. Un vencimiento en día 31 se ajusta al último día de los meses más cortos. Las obligaciones existentes conservan su valor y repetir la generación no las duplica, incluidas las anuladas.
 - `/compras`: proveedor opcional y compras a crédito, únicamente para empresas habilitadas. Una compra a crédito recibe inventario y crea una obligación sin generar un pago; cada abono registra su egreso. El flujo de contado conserva su comportamiento.
 - `/estadisticas`: filtros de fechas y sucursal/consolidado, ventas, ticket promedio, descuentos, anulaciones, distribución horaria y diaria, comparación con el periodo anterior de igual duración, medios de pago y diez productos por subtotal.
 - Reintentos de ventas aislados por empresa; edición del pago protegida por el mismo bloqueo del cierre y auditoría dentro de su transacción.
@@ -61,7 +62,7 @@ Estas verificaciones no sustituyen la aplicación de la migración, pruebas de c
 | Conteos físicos y ajustes aprobados | Pendiente de integrar con stock por sucursal, movimientos y autorizaciones. |
 | Órdenes de compra y recepción parcial | Pendiente; la compra actual recibe mercancía al registrarse. |
 | Aprobaciones por operación | Pendiente de definir responsables, límites y separación entre quien solicita y quien aprueba. |
-| Gastos recurrentes | Pendiente; el presupuesto actual no programa ni ejecuta pagos automáticos. |
+| Gastos recurrentes | Implementados con generación manual e idempotente de obligaciones mensuales; no ejecutan pagos automáticos. |
 | Personal, turnos, anticipos y nómina | Pendiente de reglas laborales, permisos y proveedor/integración de nómina. |
 | Contabilidad completa | Pendiente de plan de cuentas, reglas de causación, periodos y elección de integración con contador. |
 | Reversiones administrativas | Pendiente de flujo formal para abonos y conciliaciones erróneos; se bloquea su modificación destructiva. |
@@ -71,6 +72,12 @@ Estas verificaciones no sustituyen la aplicación de la migración, pruebas de c
 La selección técnica debe confirmar soporte multiempresa por NIT, ambiente de pruebas, numeración, firma/certificados, facturas y notas, documento equivalente POS si se ofrece, idempotencia, consulta de estado, autenticidad de notificaciones, XML/respuestas/representaciones, conservación y exportación, contingencia y precios por empresa/documento.
 
 La integración deberá conservar una configuración protegida por empresa, documentos inmutables relacionados con ventas, estados separados de venta y factura, cola persistente y reintentos. No activar `facturacionElectronicaHabilitada` hasta que la empresa y sus documentos estén habilitados y probados. El interruptor existente sigue sin constituir un emisor electrónico.
+
+## Registro de publicación
+
+La entrega `f431177` quedó publicada en `main`, con estado exitoso tanto en Vercel como en Railway. La web confirmó ese commit mediante `/api/version` y la API respondió HTTP 200. Neon confirmó aplicada `20261015200000_controles_administrativos`. Se habilitó `ADMINISTRACION_HABILITADA=true` en Railway; cada empresa sigue requiriendo el permiso explícito `administracion` y acceso Financiero en Superadmin. No se habilitaron empresas masivamente ni se registraron ventas o pagos de prueba en producción.
+
+La ampliación de gastos recurrentes utiliza la migración aditiva separada `20261015210000_gastos_recurrentes`, que debe ejecutarse antes de arrancar su versión de API. Agrega una tabla y campos opcionales a cuentas existentes; no modifica saldos históricos.
 
 ## Referencia de estadísticas
 

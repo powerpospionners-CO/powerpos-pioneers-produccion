@@ -16,6 +16,8 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { AdministracionGuard } from './administracion.guard';
 import { AdministracionService } from './administracion.service';
+import { GastosRecurrentesService } from './gastos-recurrentes.service';
+import type { GastoRecurrenteInput } from './gastos-recurrentes.service';
 import type {
   AbonoInput,
   ActorAdministrativo,
@@ -27,7 +29,36 @@ import type {
 @UseGuards(JwtAuthGuard, RolesGuard, AdministracionGuard)
 @Roles('ADMIN_EMPRESA', 'GERENTE')
 export class AdministracionController {
-  constructor(private readonly service: AdministracionService) {}
+  constructor(
+    private readonly service: AdministracionService,
+    private readonly recurrentes: GastosRecurrentesService,
+  ) {}
+  @Get('recurrentes') listarRecurrentes(
+    @Request() req: { user: ActorAdministrativo },
+  ) {
+    return this.recurrentes.listar(req.user.empresaId);
+  }
+  @Post('recurrentes') @Roles('ADMIN_EMPRESA') crearRecurrente(
+    @Body() datos: GastoRecurrenteInput,
+    @Request() req: { user: ActorAdministrativo },
+  ) {
+    return this.recurrentes.crear(datos, req.user);
+  }
+  @Patch('recurrentes/:id') @Roles('ADMIN_EMPRESA') editarRecurrente(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    datos: { monto?: number; diaVencimiento?: number; activo?: boolean },
+    @Request() req: { user: ActorAdministrativo },
+  ) {
+    return this.recurrentes.editar(id, datos, req.user);
+  }
+  @Post('recurrentes/:id/generar') @Roles('ADMIN_EMPRESA') generarRecurrente(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() datos: { periodo: string },
+    @Request() req: { user: ActorAdministrativo },
+  ) {
+    return this.recurrentes.generar(id, datos.periodo, req.user);
+  }
   @Get('resumen') resumen(@Request() req: { user: ActorAdministrativo }) {
     return this.service.resumen(req.user.empresaId);
   }

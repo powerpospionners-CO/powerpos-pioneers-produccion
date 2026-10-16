@@ -5,6 +5,7 @@ import axios from "axios";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
+import GastosRecurrentes from "@/components/GastosRecurrentes";
 import { useAuthStore } from "@/store/authStore";
 
 type Proveedor = {
@@ -52,7 +53,12 @@ type Resumen = {
   cuentas: { tipo: string; _sum: { saldo: string }; _count: number }[];
   vencidas: { tipo: string; _sum: { saldo: string }; _count: number }[];
 };
-type Tab = "cuentas" | "proveedores" | "conciliacion" | "presupuestos";
+type Tab =
+  | "cuentas"
+  | "proveedores"
+  | "conciliacion"
+  | "presupuestos"
+  | "recurrentes";
 const cop = (valor: string | number) =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -264,6 +270,7 @@ function Controles() {
                   ["proveedores", "Proveedores"],
                   ["conciliacion", "Conciliación"],
                   ["presupuestos", "Presupuestos"],
+                  ["recurrentes", "Gastos recurrentes"],
                 ] as [Tab, string][]
               ).map(([valor, etiqueta]) => (
                 <button
@@ -638,6 +645,12 @@ function Controles() {
                   </article>
                 ))}
               </section>
+            )}
+            {tab === "recurrentes" && (
+              <GastosRecurrentes
+                administrador={usuario?.rol === "ADMIN_EMPRESA"}
+                alGenerar={cargar}
+              />
             )}
             {tab === "presupuestos" && (
               <section className={panel}>
