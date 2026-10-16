@@ -6,6 +6,7 @@ Cambios preparados el 15 de octubre de 2026. Publicación autorizada por el usua
 
 - `/administracion`: proveedores, obligaciones por pagar/cobrar, vencimientos, abonos, conciliación bancaria manual y presupuesto mensual contra egresos.
 - Gastos recurrentes mensuales: plantillas de arriendo, servicios y otros gastos; generación manual de una obligación por plantilla y mes, sin pagos automáticos. Permite cambiar el valor para meses futuros y desactivar plantillas. Un vencimiento en día 31 se ajusta al último día de los meses más cortos. Las obligaciones existentes conservan su valor y repetir la generación no las duplica, incluidas las anuladas.
+- Conteos físicos de productos: solicitud con existencias esperadas y contadas, resolución por ADMIN_EMPRESA e historial de ajustes dentro de una transacción. Registrar o rechazar un conteo no cambia existencias. La aprobación se rechaza si cambió el stock después de contar. Se conserva el inventario actual de la única sede por empresa que confirmó el usuario; no se redistribuyó entre sedes.
 - `/compras`: proveedor opcional y compras a crédito, únicamente para empresas habilitadas. Una compra a crédito recibe inventario y crea una obligación sin generar un pago; cada abono registra su egreso. El flujo de contado conserva su comportamiento.
 - `/estadisticas`: filtros de fechas y sucursal/consolidado, ventas, ticket promedio, descuentos, anulaciones, distribución horaria y diaria, comparación con el periodo anterior de igual duración, medios de pago y diez productos por subtotal.
 - Reintentos de ventas aislados por empresa; edición del pago protegida por el mismo bloqueo del cierre y auditoría dentro de su transacción.
@@ -59,7 +60,7 @@ Estas verificaciones no sustituyen la aplicación de la migración, pruebas de c
 | Crédito desde el POS | Pendiente de diseñar cobro diferido sin simular una venta pagada; la cartera manual no sustituye este flujo. |
 | Devoluciones parciales, cambios y reembolsos | Pendiente; coordinar inventario, caja, puntos, documentos fiscales y notas crédito. |
 | Stock por sucursal y traslados | Pendiente de definir distribución inicial real del stock global y aprobación de saldos; no repartir existencias por suposición. |
-| Conteos físicos y ajustes aprobados | Pendiente de integrar con stock por sucursal, movimientos y autorizaciones. |
+| Conteos físicos y ajustes aprobados | Implementados para productos con stock en el inventario actual de la empresa. No incluyen ingredientes, stock por sucursal ni bloqueo operativo de ventas durante el conteo. |
 | Órdenes de compra y recepción parcial | Pendiente; la compra actual recibe mercancía al registrarse. |
 | Aprobaciones por operación | Pendiente de definir responsables, límites y separación entre quien solicita y quien aprueba. |
 | Gastos recurrentes | Implementados con generación manual e idempotente de obligaciones mensuales; no ejecutan pagos automáticos. |
@@ -78,6 +79,10 @@ La integración deberá conservar una configuración protegida por empresa, docu
 La entrega `f431177` quedó publicada en `main`, con estado exitoso tanto en Vercel como en Railway. La web confirmó ese commit mediante `/api/version` y la API respondió HTTP 200. Neon confirmó aplicada `20261015200000_controles_administrativos`. Se habilitó `ADMINISTRACION_HABILITADA=true` en Railway; cada empresa sigue requiriendo el permiso explícito `administracion` y acceso Financiero en Superadmin. No se habilitaron empresas masivamente ni se registraron ventas o pagos de prueba en producción.
 
 La ampliación de gastos recurrentes utiliza la migración aditiva separada `20261015210000_gastos_recurrentes`, que debe ejecutarse antes de arrancar su versión de API. Agrega una tabla y campos opcionales a cuentas existentes; no modifica saldos históricos.
+
+La ampliación de conteos utiliza `20261015220000_conteos_inventario`, que solo agrega sus tablas e índices. Los ajustes se ejecutan únicamente al aprobar un conteo desde la aplicación. Hay que suspender los movimientos de esos productos mientras se realiza y aprueba el conteo; si cambian las existencias, se debe rechazar y volver a contar. Permite hasta 200 productos por solicitud y muestra los últimos 100 conteos. El administrador puede registrar y resolver; no se impone un aprobador distinto del solicitante, pero ambos quedan identificados en auditoría.
+
+Se detectó que PgBouncer conservaba el bloqueo de Prisma de una migración terminada y hacía fallar la siguiente publicación. Se verificó la sesión inactiva sin transacción abierta antes de cerrarla. El comando de migración recomendado es ahora `node scripts/prisma-migrate.cjs deploy`: respeta `DIRECT_DATABASE_URL` cuando existe y, para Neon, deriva el endpoint directo del mismo destino configurado. No imprime credenciales ni cambia `DATABASE_URL` de la API. Debe reemplazar el comando anterior en Pre-deploy de Railway. No desactiva los bloqueos de seguridad de Prisma. Las recomendaciones de conexiones directas están en la [guía oficial de Neon para Prisma](https://github.com/neondatabase/website/blob/main/content/docs/guides/prisma.md).
 
 ## Referencia de estadísticas
 

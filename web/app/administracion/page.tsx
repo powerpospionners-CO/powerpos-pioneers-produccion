@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import GastosRecurrentes from "@/components/GastosRecurrentes";
+import ConteosInventario from "@/components/ConteosInventario";
 import { useAuthStore } from "@/store/authStore";
 
 type Proveedor = {
@@ -58,7 +59,8 @@ type Tab =
   | "proveedores"
   | "conciliacion"
   | "presupuestos"
-  | "recurrentes";
+  | "recurrentes"
+  | "conteos";
 const cop = (valor: string | number) =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -271,6 +273,7 @@ function Controles() {
                   ["conciliacion", "Conciliación"],
                   ["presupuestos", "Presupuestos"],
                   ["recurrentes", "Gastos recurrentes"],
+                  ["conteos", "Conteos físicos"],
                 ] as [Tab, string][]
               ).map(([valor, etiqueta]) => (
                 <button
@@ -645,6 +648,11 @@ function Controles() {
                   </article>
                 ))}
               </section>
+            )}
+            {tab === "conteos" && (
+              <ConteosInventario
+                administrador={usuario?.rol === "ADMIN_EMPRESA"}
+              />
             )}
             {tab === "recurrentes" && (
               <GastosRecurrentes

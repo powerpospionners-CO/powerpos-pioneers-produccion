@@ -18,6 +18,8 @@ import { AdministracionGuard } from './administracion.guard';
 import { AdministracionService } from './administracion.service';
 import { GastosRecurrentesService } from './gastos-recurrentes.service';
 import type { GastoRecurrenteInput } from './gastos-recurrentes.service';
+import { ConteosService } from './conteos.service';
+import type { ConteoInput } from './conteos.service';
 import type {
   AbonoInput,
   ActorAdministrativo,
@@ -32,7 +34,24 @@ export class AdministracionController {
   constructor(
     private readonly service: AdministracionService,
     private readonly recurrentes: GastosRecurrentesService,
+    private readonly conteos: ConteosService,
   ) {}
+  @Get('conteos') listarConteos(@Request() req: { user: ActorAdministrativo }) {
+    return this.conteos.listar(req.user.empresaId);
+  }
+  @Post('conteos') crearConteo(
+    @Body() datos: ConteoInput,
+    @Request() req: { user: ActorAdministrativo },
+  ) {
+    return this.conteos.crear(datos, req.user);
+  }
+  @Post('conteos/:id/resolver') @Roles('ADMIN_EMPRESA') resolverConteo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() datos: { aprobar: boolean; motivo: string },
+    @Request() req: { user: ActorAdministrativo },
+  ) {
+    return this.conteos.resolver(id, datos.aprobar, datos.motivo, req.user);
+  }
   @Get('recurrentes') listarRecurrentes(
     @Request() req: { user: ActorAdministrativo },
   ) {

@@ -100,6 +100,7 @@ model Empresa {
   conciliacionesAdministrativas ConciliacionAdministrativa[]
   presupuestosAdministrativos PresupuestoAdministrativo[]
   gastosRecurrentes GastoRecurrente[]
+  conteosInventario ConteoInventario[]
 
   @@map("empresas")
 }
@@ -320,6 +321,7 @@ model Producto {
   codigosBarras       ProductoCodigoBarras[]
   lotes               LoteProducto[]
   detallesCompra      DetalleCompra[]
+  detallesConteo DetalleConteoInventario[]
   componentesCombo    ComboComponente[]     @relation("ComboPadre")
   usadoEnCombos       ComboComponente[]     @relation("ComboComponente")
 
@@ -740,6 +742,35 @@ model GastoRecurrente {
   @@unique([empresaId, nombre])
   @@index([empresaId, activo])
   @@map("gastos_recurrentes")
+}
+
+model ConteoInventario {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  usuarioId Int
+  aprobadorId Int?
+  descripcion String
+  estado String @default("PENDIENTE")
+  motivoResolucion String?
+  creadoEn DateTime @default(now())
+  resueltoEn DateTime?
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  detalles DetalleConteoInventario[]
+  @@index([empresaId, estado, creadoEn])
+  @@map("conteos_inventario")
+}
+
+model DetalleConteoInventario {
+  id Int @id @default(autoincrement())
+  conteoId Int
+  productoId Int
+  productoNombre String
+  stockEsperado Int
+  stockContado Int
+  conteo ConteoInventario @relation(fields: [conteoId], references: [id], onDelete: Restrict)
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  @@unique([conteoId, productoId])
+  @@map("detalles_conteo_inventario")
 }
 
 model AbonoAdministrativo {

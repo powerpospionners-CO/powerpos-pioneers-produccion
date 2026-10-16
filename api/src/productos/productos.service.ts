@@ -510,7 +510,12 @@ export class ProductosService {
       if (!MOTIVOS_MERMA.includes(datos.motivoMerma)) throw new BadRequestException('Motivo de merma inválido');
     }
 
-    const stockAnterior = producto.stockActual;
+    const resultado = await this.prisma.$transaction(async (tx) => {
+    // Comparte el bloqueo de fila con Compras y con la aprobación de conteos.
+    await tx.$queryRaw`SELECT id FROM productos WHERE id = ${id} AND "empresaId" = ${empresaId} FOR UPDATE`;
+    const actual = await tx.producto.findFirst({ where: { id, empresaId } });
+    if (!actual || !actual.controlaStock) throw new BadRequestException('El producto ya no está disponible para ajustar existencias');
+    const stockAnterior = actual.stockActual;
     let stockNuevo: number;
     if (datos.tipo === 'ENTRADA') {
       stockNuevo = stockAnterior + cantidad;
@@ -521,12 +526,13 @@ export class ProductosService {
       stockNuevo = cantidad;
     }
 
-    const actualizado = await this.prisma.producto.update({
+    if (stockNuevo > 9999999) throw new BadRequestException('El stock supera el máximo permitido por el historial de inventario');
+    const actualizado = await tx.producto.update({
       where: { id },
       data: { stockActual: stockNuevo },
     });
 
-    await this.prisma.movimientoInventario.create({
+    await tx.movimientoInventario.create({
       data: {
         productoId: id,
         usuarioId,
@@ -539,17 +545,19 @@ export class ProductosService {
       },
     });
 
-    if (stockNuevo <= producto.stockMinimo) {
-      await this.notificaciones.enviarAlerta({
+    return { ...actualizado, stockAnterior, stockNuevo };
+    });
+    if (resultado.stockNuevo <= resultado.stockMinimo) {
+      void Promise.resolve().then(() => this.notificaciones.enviarAlerta({
         tipo: 'STOCK BAJO',
-        mensaje: `⚠️ ${producto.nombre} tiene existencias bajas: ${stockNuevo} unidades (mínimo: ${producto.stockMinimo})`,
+        mensaje: `⚠️ ${resultado.nombre} tiene existencias bajas: ${resultado.stockNuevo} unidades (mínimo: ${resultado.stockMinimo})`,
         empresa: 'PowerPOS',
         sucursal: 'Sucursal Principal',
         empresaId,
-      });
+      })).catch(() => undefined);
     }
 
-    return { ...actualizado, stockAnterior, stockNuevo };
+    return resultado;
   }
 
   async obtenerHistorialStock(id: number, empresaId: number) {
