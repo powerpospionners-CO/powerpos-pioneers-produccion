@@ -1,12 +1,16 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
+import { useAuthStore } from '@/store/authStore';
 
 type Venta = { id: number; numero: string; total: string; metodoPago: string; devueltoTotal: boolean; cuentaCredito?: { saldo: string }; detalles: { id: number; cantidad: number; producto: { nombre: string } }[]; operacionesCaja: { detalle: { lineas?: { detalleId: number; cantidad: number }[] } }[] };
 type Cuenta = { id: number; pedidoId: number; saldo: string; vencimiento: string; pedido: { numero: string; cliente?: { nombre: string } } };
 export default function OperacionesVenta({ onCambio }: { onCambio: () => void }) {
+  const usuario = useAuthStore(s=>s.usuario);
+  const clavePendiente = usuario ? `pos-operacion-pendiente:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : '';
+  const [restaurado, setRestaurado] = useState(false);
   const [abierto, setAbierto] = useState(false);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [id, setId] = useState('');
@@ -20,6 +24,16 @@ export default function OperacionesVenta({ onCambio }: { onCambio: () => void })
   const [ocupado, setOcupado] = useState(false);
   // Freeze uncertain requests so a retry cannot create a second refund or collection.
   const [pendiente, setPendiente] = useState<{ ruta: string; datos: object } | null>(null);
+  useEffect(()=>{
+    setRestaurado(false);
+    if (!clavePendiente) return;
+    try {
+      const guardado = window.localStorage.getItem(clavePendiente);
+      const solicitud = guardado ? JSON.parse(guardado) : null;
+      if (solicitud && (!/^\/pedidos\/\d+\/(cobros-credito|devoluciones)$/.test(solicitud.ruta) || typeof solicitud.datos?.clave !== 'string')) throw new Error('Solicitud inválida');
+      setPendiente(solicitud); setRestaurado(true);
+    } catch { setMensaje('No se pudo recuperar el estado de las operaciones de este equipo. Verifica los últimos cobros antes de continuar.'); }
+  }, [clavePendiente]);
   const error = (e: any) => setMensaje(e?.response?.data?.message || 'No se pudo confirmar. Conserva esta ventana y reintenta la misma operación.');
   const cargar = async () => { try { const { data } = await api.get('/pedidos/creditos'); setCuentas(data); } catch (e) { error(e); } };
   const buscar = async (numero?: number) => {
@@ -29,14 +43,27 @@ export default function OperacionesVenta({ onCambio }: { onCambio: () => void })
     catch (e) { error(e); } finally { setOcupado(false); }
   };
   const ejecutar = async (ruta: string, datos: object) => {
-    if (ocupado) return;
+    if (ocupado || !restaurado) return;
     const solicitud = pendiente ?? { ruta, datos: { ...datos, clave: generarClaveVenta() } };
+    try {
+      const guardado = window.localStorage.getItem(clavePendiente);
+      if (guardado) {
+        const anterior = JSON.parse(guardado);
+        if (!/^\/pedidos\/\d+\/(cobros-credito|devoluciones)$/.test(anterior.ruta) || typeof anterior.datos?.clave !== 'string') throw new Error('Solicitud inválida');
+        if (anterior.datos.clave !== (solicitud.datos as { clave: string }).clave) {
+          setPendiente(anterior); setMensaje('Otra ventana dejó una operación pendiente. Confírmala antes de registrar una nueva.'); return;
+        }
+      }
+      window.localStorage.setItem(clavePendiente, JSON.stringify(solicitud));
+    }
+    catch { setMensaje('No se pudo respaldar la operación en este equipo. No se envió el cobro ni la devolución.'); return; }
     setPendiente(solicitud); setOcupado(true); setMensaje('');
     try {
       await api.post(solicitud.ruta, solicitud.datos);
+      window.localStorage.removeItem(clavePendiente);
       setPendiente(null); setVenta(null); setMensaje('Operación registrada. La caja y los saldos fueron actualizados.');
       await cargar(); onCambio();
-    } catch (e: any) { if (e?.response?.status >= 400 && e?.response?.status < 500) setPendiente(null); error(e); }
+    } catch (e: any) { if (e?.response?.status >= 400 && e?.response?.status < 500) { try { window.localStorage.removeItem(clavePendiente); setPendiente(null); } catch { /* Keep the same key until storage becomes available. */ } } error(e); }
     finally { setOcupado(false); }
   };
   const devuelto = (detalleId: number) => venta?.operacionesCaja.reduce((s,o)=>s+(o.detalle?.lineas || []).filter(l=>l.detalleId===detalleId).reduce((n,l)=>n+l.cantidad,0),0) || 0;
@@ -46,7 +73,7 @@ export default function OperacionesVenta({ onCambio }: { onCambio: () => void })
     {abierto && <div className="mt-4 space-y-4">
       {mensaje && <p role="status" className="text-amber-200">{mensaje}</p>}
       {pendiente && <div className="rounded border border-amber-600 p-3"><p>Hay una operación pendiente de confirmar. El reintento conserva los mismos datos.</p><button disabled={ocupado} onClick={()=>ejecutar(pendiente.ruta, pendiente.datos)} className="mt-2 text-orange-300">Reintentar operación</button></div>}
-      <fieldset disabled={ocupado || !!pendiente} className="space-y-4 disabled:opacity-50">
+      <fieldset disabled={!restaurado || ocupado || !!pendiente} className="space-y-4 disabled:opacity-50">
         <div className="flex flex-wrap gap-2"><input aria-label="Número de venta" placeholder="Número de venta del recibo" value={id} onChange={e=>setId(e.target.value)} className={estilo} /><button onClick={()=>buscar()} className="rounded bg-orange-600 px-3">Consultar venta</button></div>
         <div className="max-h-52 overflow-auto"><p className="mb-2 text-sm text-gray-400">Créditos pendientes · últimos 200 registros</p>{cuentas.filter(c=>Number(c.saldo)>0).map(c=><button key={c.id} onClick={()=>buscar(c.pedidoId)} className="block w-full border-b border-gray-800 p-2 text-left text-sm">{c.pedido.numero} · {c.pedido.cliente?.nombre} · Saldo {moneda(Number(c.saldo))} · Vence {c.vencimiento.slice(0,10)}</button>)}</div>
         {venta && <div className="space-y-3 border-t border-gray-700 pt-3">
