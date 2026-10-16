@@ -23,7 +23,8 @@ function leer<T>(clave: string): T[] {
 }
 
 function escribir<T>(clave: string, valor: T[]) {
-  try { window.localStorage.setItem(clave, JSON.stringify(valor)); } catch { /* almacenamiento no disponible, se pierde el respaldo pero no rompe la venta actual */ }
+  // El cajero solo puede dar por respaldada una venta si se pudo guardar.
+  window.localStorage.setItem(clave, JSON.stringify(valor));
 }
 
 export function generarClaveVenta(): string {
@@ -34,7 +35,7 @@ export function generarClaveVenta(): string {
 export function encolarVentaPendiente(empresaId: number, sucursalId: number, clave: string, payload: any) {
   const clavePendiente = clavePendientes(empresaId, sucursalId);
   const actuales = leer<VentaPendiente>(clavePendiente);
-  escribir(clavePendiente, [...actuales, { clave, payload, creadoEn: Date.now(), intentos: 0 }]);
+  if (!actuales.some((venta) => venta.clave === clave)) escribir(clavePendiente, [...actuales, { clave, payload: { ...payload, claveIdempotencia: clave }, creadoEn: Date.now(), intentos: 0 }]);
 }
 
 export function listarVentasPendientes(empresaId: number, sucursalId: number): VentaPendiente[] {
@@ -56,7 +57,7 @@ export function quitarVentaFallida(empresaId: number, sucursalId: number, clave:
 // porque el servidor la rechazó de verdad (ej. ya no hay existencias), se
 // saca de la cola y se guarda como fallida para que el admin la revise a
 // mano, en vez de reintentarla para siempre.
-export async function sincronizarVentasPendientes(
+async function sincronizar(
   empresaId: number, sucursalId: number,
   onVentaSincronizada?: (clave: string, resultado: any) => void,
 ): Promise<{ sincronizadas: number; fallidas: number }> {
@@ -67,27 +68,50 @@ export async function sincronizarVentasPendientes(
 
   let sincronizadas = 0;
   let fallidas = 0;
-  const restantes: VentaPendiente[] = [];
   const nuevasFallidas: VentaFallida[] = [];
+  const procesadas = new Set<string>();
 
   for (const venta of pendientes) {
     try {
-      const { data } = await api.post('/pedidos', venta.payload);
+      const { data } = await api.post('/pedidos', { ...venta.payload, claveIdempotencia: venta.clave });
       sincronizadas++;
-      onVentaSincronizada?.(venta.clave, data);
+      procesadas.add(venta.clave);
+      try { onVentaSincronizada?.(venta.clave, data); } catch { /* el documento ya se confirmó */ }
     } catch (e: any) {
-      if (!e?.response) {
+      if (!e?.response || [401, 403, 408, 409, 425, 429].includes(e.response.status) || e.response.status >= 500) {
         // Sin respuesta del servidor: seguimos sin conexión real. Se deja
         // esta y todas las que faltan tal como están, para el próximo intento.
-        restantes.push(venta, ...pendientes.slice(pendientes.indexOf(venta) + 1));
         break;
       }
       fallidas++;
+      procesadas.add(venta.clave);
       nuevasFallidas.push({ clave: venta.clave, payload: venta.payload, motivo: e.response?.data?.message || 'La venta fue rechazada al sincronizar', creadoEn: venta.creadoEn });
     }
   }
 
-  escribir(clavePendiente, restantes);
-  if (nuevasFallidas.length) escribir(claveFallida, [...leer<VentaFallida>(claveFallida), ...nuevasFallidas]);
+  // Guardar rechazos antes de retirarlos de la cola. Volver a leer conserva
+  // las ventas agregadas mientras esperábamos las respuestas de la API.
+  if (nuevasFallidas.length) {
+    const anteriores = leer<VentaFallida>(claveFallida);
+    escribir(claveFallida, [...anteriores, ...nuevasFallidas.filter((venta) => !anteriores.some((anterior) => anterior.clave === venta.clave))]);
+  }
+  escribir(clavePendiente, leer<VentaPendiente>(clavePendiente).filter((venta) => !procesadas.has(venta.clave)));
   return { sincronizadas, fallidas };
+}
+
+const sincronizaciones = new Map<string, Promise<{ sincronizadas: number; fallidas: number }>>();
+
+export function sincronizarVentasPendientes(
+  empresaId: number, sucursalId: number,
+  onVentaSincronizada?: (clave: string, resultado: any) => void,
+): Promise<{ sincronizadas: number; fallidas: number }> {
+  const clave = clavePendientes(empresaId, sucursalId);
+  const actual = sincronizaciones.get(clave);
+  if (actual) return actual;
+  const ejecutar = () => sincronizar(empresaId, sucursalId, onVentaSincronizada);
+  const tarea = Promise.resolve().then(async () => typeof navigator !== 'undefined' && navigator.locks
+    ? await navigator.locks.request(clave, ejecutar) : await ejecutar())
+    .finally(() => sincronizaciones.delete(clave));
+  sincronizaciones.set(clave, tarea);
+  return tarea;
 }

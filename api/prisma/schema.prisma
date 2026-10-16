@@ -95,6 +95,10 @@ model Empresa {
   pagosPlan PagoPlan[]
   saldoInicialCuenta SaldoInicialCuenta?
   comprasGastos CompraGasto[]
+  proveedores Proveedor[]
+  cuentasAdministrativas CuentaAdministrativa[]
+  conciliacionesAdministrativas ConciliacionAdministrativa[]
+  presupuestosAdministrativos PresupuestoAdministrativo[]
 
   @@map("empresas")
 }
@@ -657,6 +661,7 @@ model Pedido {
   // había llegado al servidor (se perdió la respuesta, no la petición),
   // esta clave evita crear el pedido dos veces.
   claveIdempotencia String? @unique
+  consumoInventario Json?
   pedidoWeb PedidoWeb?
 
   sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])
@@ -668,6 +673,90 @@ model Pedido {
   pagos       PagoPedido[]
 
   @@map("pedidos")
+}
+
+// Nuevos controles independientes: no reclasifican ventas ni compras históricas.
+model Proveedor {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  nombre String
+  documento String
+  email String?
+  telefono String?
+  direccion String?
+  plazoDias Int @default(0)
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  compras CompraGasto[]
+  @@unique([id, empresaId])
+  @@unique([empresaId, documento])
+  @@map("proveedores")
+}
+
+model CuentaAdministrativa {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  usuarioId Int
+  tipo String
+  categoria CategoriaMovimiento @default(OTROS)
+  compraGastoId Int? @unique
+  tercero String
+  documento String
+  descripcion String
+  monto Decimal @db.Decimal(12, 2)
+  saldo Decimal @db.Decimal(12, 2)
+  vencimiento DateTime
+  anulada Boolean @default(false)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  abonos AbonoAdministrativo[]
+  compra CompraGasto? @relation(fields: [compraGastoId], references: [id], onDelete: Restrict)
+  @@unique([empresaId, tipo, documento])
+  @@index([empresaId, tipo, vencimiento])
+  @@map("cuentas_administrativas")
+}
+
+model AbonoAdministrativo {
+  id Int @id @default(autoincrement())
+  cuentaId Int
+  usuarioId Int
+  monto Decimal @db.Decimal(12, 2)
+  referencia String
+  clave String @unique
+  movimientoId Int @unique
+  creadoEn DateTime @default(now())
+  cuenta CuentaAdministrativa @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+  movimiento MovimientoFinanciero @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
+  @@index([cuentaId])
+  @@map("abonos_administrativos")
+}
+
+model ConciliacionAdministrativa {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  movimientoId Int @unique
+  usuarioId Int
+  referencia String
+  fechaBanco DateTime
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  movimiento MovimientoFinanciero @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
+  @@index([empresaId, fechaBanco])
+  @@map("conciliaciones_administrativas")
+}
+
+model PresupuestoAdministrativo {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  periodo String
+  categoria CategoriaMovimiento
+  monto Decimal @db.Decimal(12, 2)
+  usuarioId Int
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  @@unique([empresaId, periodo, categoria])
+  @@map("presupuestos_administrativos")
 }
 
 model PagoPedido {
@@ -971,6 +1060,8 @@ model MovimientoFinanciero {
   pedido   Pedido?  @relation(fields: [pedidoId], references: [id])
   liquidacionDistribuidor LiquidacionDistribuidor?
   compraGasto CompraGasto? @relation(fields: [compraGastoId], references: [id], onDelete: Restrict)
+  abonoAdministrativo AbonoAdministrativo?
+  conciliacionAdministrativa ConciliacionAdministrativa?
 
   @@map("movimientos_financieros")
 }
@@ -1000,12 +1091,16 @@ model CompraGasto {
   monto        Decimal            @db.Decimal(12, 2)
   fecha        DateTime           @default(now())
   creadoEn     DateTime           @default(now())
+  proveedorId Int?
+  condicionPago String @default("CONTADO")
 
   empresa    Empresa @relation(fields: [empresaId], references: [id])
   sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
   usuario    Usuario @relation(fields: [usuarioId], references: [id])
   movimiento MovimientoFinanciero?
   detalles   DetalleCompra[]
+  proveedor Proveedor? @relation(fields: [proveedorId, empresaId], references: [id, empresaId], onDelete: Restrict)
+  cuentaAdministrativa CuentaAdministrativa?
 
   @@index([empresaId, fecha])
   @@map("compras_gastos")

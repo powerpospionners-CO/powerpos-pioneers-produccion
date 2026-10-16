@@ -21,7 +21,9 @@ const ITEMS = [
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
   { href: '/compras', label: 'Compras', icon: ShoppingCart },
+  { href: '/administracion', label: 'Administración', icon: Wallet },
   { href: '/reportes', label: 'Reportes', icon: BarChart3 },
+  { href: '/estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { href: '/distribuidores', label: 'Distribuidores', icon: Truck },
   { href: '/configuracion', label: 'Config', icon: Settings },
   { href: '/suscripcion', label: 'Suscripcion', icon: Wallet },
@@ -45,7 +47,9 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/clientes': 'clientes',
   '/financiero': 'financiero',
   '/compras': 'financiero',
+  '/administracion': 'financiero',
   '/reportes': 'reportes',
+  '/estadisticas': 'reportes',
   '/configuracion': 'configuracion',
 };
 
@@ -77,6 +81,7 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
+    if (item.href === '/administracion' && (!esAdminOGerente || usuario?.permisos?.administracion !== true)) return false;
     if (item.href === '/compras' && !esAdminOGerente) return false;
     if (item.href === '/caja/recaudo') return esAdminOGerente && recaudoEfectivoHabilitado;
     if (item.href === '/distribuidores') return esAdminOGerente && distribuidoresHabilitado;

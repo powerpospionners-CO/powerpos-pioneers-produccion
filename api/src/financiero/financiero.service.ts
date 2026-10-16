@@ -81,6 +81,8 @@ export class FinancieroService {
     if (datos.fecha !== undefined) data.fecha = new Date(datos.fecha);
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM movimientos_financieros WHERE id = ${id} AND "empresaId" = ${empresaId} FOR UPDATE`;
+      await this.validarMovimientoAdministrativo(tx, id);
       const actualizado = await tx.movimientoFinanciero.update({
         where: { id },
         data,
@@ -124,6 +126,8 @@ export class FinancieroService {
       throw new ForbiddenException('Solo se pueden eliminar los egresos registrados manualmente, no los generados por una venta');
     }
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM movimientos_financieros WHERE id = ${id} AND "empresaId" = ${empresaId} FOR UPDATE`;
+      await this.validarMovimientoAdministrativo(tx, id);
       await tx.auditoria.create({
         data: {
           empresaId,
@@ -143,6 +147,14 @@ export class FinancieroService {
       await tx.movimientoFinanciero.delete({ where: { id } });
     });
     return { ok: true };
+  }
+
+  private async validarMovimientoAdministrativo(tx: import('@prisma/client').Prisma.TransactionClient, id: number) {
+    const [abono, conciliacion] = await Promise.all([
+      tx.abonoAdministrativo.findUnique({ where: { movimientoId: id }, select: { id: true } }),
+      tx.conciliacionAdministrativa.findUnique({ where: { movimientoId: id }, select: { id: true } }),
+    ]);
+    if (abono || conciliacion) throw new ForbiddenException('Un abono o movimiento conciliado requiere una reversión documentada; no se puede editar ni eliminar');
   }
 
   async listarMovimientos(empresaId: number, filtros?: any) {

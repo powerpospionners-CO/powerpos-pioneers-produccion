@@ -91,7 +91,13 @@ export class PedidosService {
           cliente: { select: { nombre: true, telefono: true } },
         },
       });
-      if (existente) return existente;
+      if (existente) {
+        const pertenece = await db.sucursal.findFirst({
+          where: { id: existente.sucursalId, empresaId }, select: { id: true },
+        });
+        if (!pertenece) throw new BadRequestException('La clave de la venta no está disponible');
+        return existente;
+      }
     }
 
     // El tope de la cantidad no puede ser el mismo para unidades que para
@@ -299,6 +305,7 @@ export class PedidosService {
     const cambio = monto(datos.cambio ?? 0, 'Cambio', 0, 99999999.99);
     const { metodoPago, pagos } = this.normalizarPagos(datos, Math.round(total * 100) / 100);
 
+    const consumoInventario: { tipo: 'PRODUCTO' | 'INGREDIENTE'; id: number; cantidad: number }[] = [];
     for (const item of itemsValidados) {
       // Un combo/canasta no tiene stock propio: vender uno descuenta el de
       // cada producto que lo compone (ej. vender 1 "Canasta básica" baja
@@ -313,6 +320,7 @@ export class PedidosService {
             data: { stockActual: { decrement: unidadesBase } },
           });
           if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${componente.producto.nombre} (para ${item.producto.nombre})`);
+          consumoInventario.push({ tipo: 'PRODUCTO', id: componente.productoId, cantidad: unidadesBase });
         }
         continue;
       }
@@ -323,6 +331,24 @@ export class PedidosService {
         data: { stockActual: { decrement: unidadesBase } },
       });
       if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}${item.presentacionNombre ? ` (${item.presentacionNombre})` : ''}`);
+      consumoInventario.push({ tipo: 'PRODUCTO', id: item.producto.id, cantidad: unidadesBase });
+    }
+
+    if (esRestaurante) {
+      for (const item of itemsValidados) {
+        for (const pi of item.producto.ingredientes) {
+          if (!item.exclusiones.includes(pi.ingrediente.nombre)) consumoInventario.push({
+            tipo: 'INGREDIENTE', id: pi.ingredienteId,
+            cantidad: this.obtenerCantidadInventario(pi.ingrediente, Number(pi.cantidad)) * item.cantidad,
+          });
+        }
+        for (const a of item.adicionales) {
+          if (a.adicional.ingredienteId && a.adicional.cantidad) consumoInventario.push({
+            tipo: 'INGREDIENTE', id: a.adicional.ingredienteId,
+            cantidad: Number(a.adicional.cantidad) * a.cantidad * item.cantidad,
+          });
+        }
+      }
     }
 
     const numero = await this.generarNumeroPedido(sucursalId, db);
@@ -342,6 +368,7 @@ export class PedidosService {
         observacion: observacion || null,
         estado: esRestaurante ? 'PENDIENTE' : 'ENTREGADO',
         claveIdempotencia,
+        consumoInventario,
         pagos: {
           create: pagos.map((p) => ({ metodoPago: p.metodoPago as any, monto: p.monto })),
         },
@@ -554,21 +581,23 @@ export class PedidosService {
   }
 
   async actualizarPago(id: number, datos: any, usuarioId: number, empresaId: number) {
-    const pedido = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } } });
-    if (!pedido) throw new NotFoundException('Pedido no encontrado');
-    if (pedido.estado === 'ANULADO') throw new BadRequestException('Una venta anulada no puede modificarse');
-    if (pedido.cajaId) {
-      const caja = await this.prisma.caja.findUnique({ where: { id: pedido.cajaId } });
-      if (!caja || caja.estado !== 'ABIERTA') {
-        throw new BadRequestException('La caja de esta venta ya está cerrada. Requiere conciliación para modificar el pago.');
-      }
-    }
-
-    const { metodoPago, pagos } = this.normalizarPagos(datos, Number(pedido.total));
-    const metodoAnterior = pedido.metodoPago;
-
+    const referencia = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } }, select: { sucursalId: true } });
+    if (!referencia) throw new NotFoundException('Pedido no encontrado');
     const actualizado = await this.prisma.$transaction(async (db) => {
+      await bloquearCajaSucursal(db, referencia.sucursalId);
+      const pedido = await db.pedido.findFirst({ where: { id, sucursal: { empresaId } } });
+      if (!pedido) throw new NotFoundException('Pedido no encontrado');
+      if (pedido.estado === 'ANULADO') throw new BadRequestException('Una venta anulada no puede modificarse');
+      if (pedido.cajaId) {
+        const caja = await db.caja.findUnique({ where: { id: pedido.cajaId } });
+        if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja de esta venta ya está cerrada. Requiere conciliación para modificar el pago.');
+      }
+      const { metodoPago, pagos } = this.normalizarPagos(datos, Number(pedido.total));
       await db.pagoPedido.deleteMany({ where: { pedidoId: id } });
+      if (pedido.cajaId) await db.eventoCaja.create({
+        data: { cajaId: pedido.cajaId, tipo: 'EDICION_PAGO',
+          descripcion: `Pago de la venta ${pedido.numero} cambiado de ${pedido.metodoPago} a ${metodoPago}`, usuarioId },
+      });
       return db.pedido.update({
         where: { id },
         data: {
@@ -578,17 +607,6 @@ export class PedidosService {
         include: { pagos: true },
       });
     });
-
-    if (pedido.cajaId) {
-      await this.prisma.eventoCaja.create({
-        data: {
-          cajaId: pedido.cajaId,
-          tipo: 'EDICION_PAGO',
-          descripcion: `Pago de la venta ${pedido.numero} cambiado de ${metodoAnterior} a ${metodoPago}`,
-          usuarioId,
-        },
-      });
-    }
 
     this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: actualizado.estado });
     return actualizado;
@@ -628,7 +646,15 @@ export class PedidosService {
         // Reponer existencias: stockActual directo (comercio), los
         // componentes de un combo si la venta fue de una canasta, y si la
         // venta usó receta, los ingredientes descontados en la venta original.
-        for (const detalle of (pedido as any).detalles || []) {
+        if (Array.isArray(pedido.consumoInventario)) {
+          for (const consumo of pedido.consumoInventario as { tipo: string; id: number; cantidad: number }[]) {
+            if (consumo.tipo === 'PRODUCTO') {
+              await tx.producto.update({ where: { id: consumo.id }, data: { stockActual: { increment: consumo.cantidad } } });
+            } else {
+              await tx.ingrediente.update({ where: { id: consumo.id }, data: { stock: { increment: consumo.cantidad } } });
+            }
+          }
+        } else for (const detalle of (pedido as any).detalles || []) {
           if (detalle.producto.esCombo) {
             const componentes = await tx.comboComponente.findMany({ where: { comboId: detalle.productoId }, include: { producto: true } });
             for (const componente of componentes) {
@@ -649,7 +675,7 @@ export class PedidosService {
           }
           for (const da of detalle.adicionales || []) {
             if (da.adicional?.ingredienteId) {
-              const cantidad = Number(da.cantidad) * detalle.cantidad;
+              const cantidad = Number(da.adicional.cantidad || 0) * Number(da.cantidad) * detalle.cantidad;
               await tx.ingrediente.update({ where: { id: da.adicional.ingredienteId }, data: { stock: { increment: cantidad } } });
             }
           }

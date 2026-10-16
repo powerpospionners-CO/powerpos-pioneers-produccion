@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { CategoriaMovimiento, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { fechaDia, texto } from '../administracion/administracion.service';
 
 const CATEGORIAS_EGRESO = new Set<CategoriaMovimiento>([
   CategoriaMovimiento.COMPRA_MERCANCIA,
@@ -25,6 +26,10 @@ type ItemCompraInput = {
 };
 
 type CompraInput = {
+  proveedorId?: number;
+  condicionPago?: 'CONTADO' | 'CREDITO';
+  documento?: string;
+  vencimiento?: string;
   categoria: CategoriaMovimiento;
   descripcion: string;
   fecha?: string;
@@ -124,6 +129,20 @@ export class ComprasService {
   }
 
   async registrar(datos: CompraInput, usuarioId: number, empresaId: number, sucursalId: number) {
+    const condicionPago = datos.condicionPago ?? 'CONTADO';
+    if (!['CONTADO', 'CREDITO'].includes(condicionPago)) throw new BadRequestException('Condición de pago no válida');
+    const credito = condicionPago === 'CREDITO';
+    let documento: string | undefined;
+    let vencimiento: Date | undefined;
+    if (credito || datos.proveedorId !== undefined) {
+      const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { permisos: true } });
+      if (process.env.ADMINISTRACION_HABILITADA !== 'true' || (empresa?.permisos as Record<string, unknown>)?.administracion !== true) throw new BadRequestException('Los controles administrativos no están habilitados');
+      if (!Number.isInteger(datos.proveedorId) || datos.proveedorId <= 0) throw new BadRequestException('Selecciona un proveedor');
+    }
+    if (credito) {
+      documento = texto(datos.documento, 'Referencia del proveedor y factura', 100);
+      vencimiento = fechaDia(datos.vencimiento);
+    }
     if (!CATEGORIAS_EGRESO.has(datos.categoria)) {
       throw new BadRequestException('Selecciona una categoría de egreso válida');
     }
@@ -164,6 +183,12 @@ export class ComprasService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const proveedor = datos.proveedorId ? await tx.proveedor.findFirst({ where: { id: datos.proveedorId, empresaId, activo: true } }) : null;
+      if (datos.proveedorId && !proveedor) throw new BadRequestException('Proveedor no disponible para esta empresa');
+      if (credito) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(73103, ${empresaId}::integer)`;
+        if (await tx.cuentaAdministrativa.findUnique({ where: { empresaId_tipo_documento: { empresaId, tipo: 'PAGAR', documento } } })) throw new BadRequestException('Ya existe una obligación con este documento');
+      }
       if (productoIds.length) {
         await tx.$queryRaw<Array<{ id: number }>>`
           SELECT id FROM productos
@@ -289,11 +314,19 @@ export class ComprasService {
           descripcion,
           monto,
           fecha,
+          condicionPago,
+          proveedorId: proveedor?.id,
           detalles: { create: detalles },
         },
         include: { detalles: true },
       });
-      await tx.movimientoFinanciero.create({
+      if (credito) {
+        await tx.cuentaAdministrativa.create({ data: {
+          empresaId, sucursalId, usuarioId, tipo: 'PAGAR', categoria: datos.categoria,
+          tercero: `${proveedor!.nombre} (${proveedor!.documento})`, documento: documento!,
+          descripcion, monto, saldo: monto, vencimiento: vencimiento!, compraGastoId: compra.id,
+        } });
+      } else await tx.movimientoFinanciero.create({
         data: {
           empresaId,
           sucursalId,
@@ -318,6 +351,9 @@ export class ComprasService {
             descripcion,
             monto,
             fecha: fecha.toISOString(),
+            condicionPago,
+            proveedorId: proveedor?.id ?? null,
+            documento: documento ?? null,
             productos: detalles.map((detalle) => ({
               productoId: detalle.productoId,
               producto: detalle.productoNombre,
@@ -354,6 +390,8 @@ export class ComprasService {
         usuario: { select: { nombre: true } },
         sucursal: { select: { nombre: true } },
         detalles: true,
+        proveedor: { select: { nombre: true, documento: true } },
+        cuentaAdministrativa: { select: { saldo: true, vencimiento: true } },
       },
       orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       take: 250,

@@ -1,11 +1,21 @@
 import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { ReportesService } from './reportes.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { EstadisticasService } from './estadisticas.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('reportes')
 export class ReportesController {
-  constructor(private readonly reportesService: ReportesService) {}
+  constructor(private readonly reportesService: ReportesService, private readonly estadisticasService: EstadisticasService) {}
+
+  @Get('estadisticas')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  estadisticas(@Request() req: any, @Query('desde') desde: string, @Query('hasta') hasta: string, @Query('sucursalId') sucursalId?: string) {
+    return this.estadisticasService.consultar(req.user.empresaId, desde, hasta, sucursalId);
+  }
 
   @Get('empleados')
   rendimientoPorEmpleado(@Request() req: any) {

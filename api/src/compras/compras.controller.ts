@@ -29,6 +29,10 @@ export class ComprasController {
       descripcion: string;
       monto?: number;
       fecha?: string;
+      proveedorId?: number;
+      condicionPago?: 'CONTADO' | 'CREDITO';
+      documento?: string;
+      vencimiento?: string;
       items?: { productoId: number; presentacionId?: number | null; cantidad: number; costoUnitario: number }[];
     },
     @Request() req: any,

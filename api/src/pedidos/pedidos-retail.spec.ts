@@ -100,6 +100,13 @@ describe('Pedidos comerciales', () => {
 });
 
 describe('Idempotencia (reintento de venta guardada offline)', () => {
+  it('no devuelve una venta de otra empresa aunque conozcan su clave', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    db.pedido.findUnique.mockResolvedValue({ id: 77, sucursalId: 22 });
+    db.sucursal.findFirst.mockResolvedValue(null);
+    await expect(service.crearEnTransaccion({ claveIdempotencia: 'ajena' }, 3, 1, db)).rejects.toThrow('no está disponible');
+    expect(db.pedido.create).not.toHaveBeenCalled();
+  });
   it('devuelve la venta ya existente sin crear otra ni volver a descontar stock', async () => {
     const { db, service } = escenario('SUPERMERCADO');
     const yaExistente = { id: 8, numero: 'PED-2-existente', claveIdempotencia: 'abc-123' };

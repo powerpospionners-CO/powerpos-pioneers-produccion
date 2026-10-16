@@ -169,6 +169,8 @@ export default function RetailPOS() {
           setAviso(`${sincronizadas} venta(s) guardada(s) sin conexión ya se sincronizaron.`);
           void cargarProductos();
         }
+      } catch {
+        setError('No se pudo actualizar el respaldo de ventas pendientes. Revisa el almacenamiento de este equipo.');
       } finally {
         sincronizando = false;
         refrescarContadoresSync();
@@ -388,7 +390,12 @@ export default function RetailPOS() {
         // real de la venta (stock, caja cerrada, etc.). Se guarda para
         // reintentar sola y se cierra el cobro como si hubiera salido bien,
         // porque para el cajero la venta ya ocurrió — el cliente ya se fue.
-        encolarVentaPendiente(usuario.empresaId, usuario.sucursalId, payload.claveIdempotencia, payload);
+        try {
+          encolarVentaPendiente(usuario.empresaId, usuario.sucursalId, payload.claveIdempotencia, payload);
+        } catch {
+          setError('No se pudo guardar la venta en este equipo. Conserva los datos del cobro y verifica si llegó al servidor antes de repetirla.');
+          return;
+        }
         refrescarContadoresSync();
         setCarrito([]);
         setDescuentoInput('');

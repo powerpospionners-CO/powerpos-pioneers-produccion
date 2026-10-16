@@ -41,6 +41,9 @@ type Detalle = {
   subtotal: number | string;
 };
 type Movimiento = {
+  condicionPago?: 'CONTADO' | 'CREDITO';
+  proveedor?: { nombre: string } | null;
+  cuentaAdministrativa?: { saldo: string; vencimiento: string } | null;
   id: number;
   categoria: Categoria;
   descripcion: string;
@@ -93,6 +96,12 @@ function ComprasContenido() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categoria, setCategoria] = useState<Categoria>('COMPRA_MERCANCIA');
   const [descripcion, setDescripcion] = useState('');
+  const [proveedores, setProveedores] = useState<{ id: number; nombre: string; activo: boolean }[]>([]);
+  const [proveedorId, setProveedorId] = useState('');
+  const [condicionPago, setCondicionPago] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
+  const [documentoCompra, setDocumentoCompra] = useState('');
+  const [vencimientoCompra, setVencimientoCompra] = useState('');
+  const administracion = usuario?.permisos?.administracion === true;
   const [monto, setMonto] = useState('');
   const [lineas, setLineas] = useState<Linea[]>([nuevaLinea()]);
   const [saldoInicial, setSaldoInicial] = useState('');
@@ -121,6 +130,10 @@ function ComprasContenido() {
   }, []);
 
   useEffect(() => { void cargarDatos(); }, [cargarDatos]);
+  useEffect(() => {
+    if (!administracion) return;
+    api.get('/administracion/proveedores').then((r) => setProveedores(r.data)).catch(() => setProveedores([]));
+  }, [administracion]);
   useEffect(() => {
     if (usuario && !['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol)) router.replace('/pos');
   }, [usuario, router]);
@@ -172,6 +185,11 @@ function ComprasContenido() {
       await api.post('/compras', {
         categoria,
         descripcion: descripcion.trim(),
+        ...(administracion ? {
+          condicionPago,
+          ...(proveedorId ? { proveedorId: Number(proveedorId) } : {}),
+          ...(condicionPago === 'CREDITO' ? { documento: documentoCompra, vencimiento: vencimientoCompra } : {}),
+        } : {}),
         ...(esMercancia
           ? {
               items: lineas.map((linea) => ({
@@ -186,7 +204,9 @@ function ComprasContenido() {
       setDescripcion('');
       setMonto('');
       setLineas([nuevaLinea()]);
-      setExito(esMercancia
+      setExito(condicionPago === 'CREDITO' && administracion
+        ? 'Compra a crédito registrada. La obligación está en Administración; el saldo de dinero se descuenta al registrar abonos.'
+        : esMercancia
         ? 'Compra registrada: se actualizó el inventario, el costo del producto y el saldo de la cuenta.'
         : 'Egreso registrado y descontado del saldo de la cuenta.');
       await cargarDatos();
@@ -209,7 +229,7 @@ function ComprasContenido() {
             <p className="text-sm font-semibold uppercase tracking-widest text-orange-400">Control de egresos e inventario</p>
             <h1 className="mt-1 text-3xl font-bold">Compras y gastos</h1>
             <p className="mt-2 max-w-3xl text-sm text-gray-400">
-              Registra las compras de mercancía y los pagos del negocio. Cada egreso queda en Financiero y se descuenta del saldo de la cuenta.
+              Registra las compras de mercancía y los pagos del negocio. Las operaciones de contado generan un egreso; las compras a crédito se pagan mediante abonos desde Administración.
             </p>
           </header>
 
@@ -296,6 +316,12 @@ function ComprasContenido() {
                   <input required value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2" placeholder="Ej. Compra a Distribuidora Central" />
                 </label>
 
+                {administracion && <div className="space-y-3 rounded-lg border border-gray-700 p-3">
+                  <label className="block text-sm">Condición de pago<select value={condicionPago} onChange={(e) => setCondicionPago(e.target.value as 'CONTADO' | 'CREDITO')} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2"><option value="CONTADO">Contado (pagado)</option><option value="CREDITO">Crédito (pendiente de pago)</option></select></label>
+                  <label className="block text-sm">Proveedor<select required={condicionPago === 'CREDITO'} value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2"><option value="">Selecciona un proveedor</option>{proveedores.filter((p) => p.activo).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
+                  {condicionPago === 'CREDITO' && <><label className="block text-sm">Referencia única (NIT y factura)<input required maxLength={100} value={documentoCompra} onChange={(e) => setDocumentoCompra(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2" /></label><label className="block text-sm">Fecha de vencimiento<input required type="date" value={vencimientoCompra} onChange={(e) => setVencimientoCompra(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2" /></label><p className="text-xs text-amber-200">El inventario se recibe al guardar. El dinero solo se descuenta cuando registres los abonos.</p></>}
+                  <a href="/administracion" className="text-sm text-orange-300">Administrar proveedores y obligaciones →</a>
+                </div>}
                 {esMercancia ? (
                   <div className="space-y-3">
                     {productos.length === 0 && <p className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-200">No hay productos activos que controlen inventario. Activa el control de existencias en Productos antes de registrar mercancía.</p>}
@@ -375,6 +401,7 @@ function ComprasContenido() {
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-semibold">{movimiento.descripcion}</p>
+                            {movimiento.condicionPago === 'CREDITO' && <p className="text-sm text-amber-200">Crédito · {movimiento.proveedor?.nombre} · Pendiente: {COP(movimiento.cuentaAdministrativa?.saldo || 0)}</p>}
                             <p className="mt-1 text-xs text-orange-300">{etiquetaCategoria(movimiento.categoria)}</p>
                             <p className="mt-1 text-xs text-gray-500">{new Date(movimiento.fecha).toLocaleString('es-CO')} · {movimiento.usuario.nombre} · {movimiento.sucursal.nombre}</p>
                           </div>

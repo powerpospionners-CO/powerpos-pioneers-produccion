@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdministracionModule } from './administracion/administracion.module';
 import { TiendaModule } from './tienda/tienda.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -33,6 +34,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 
 @Module({
   imports: [
+    AdministracionModule,
     TiendaModule,
     ScheduleModule.forRoot(),
     PrismaModule,

@@ -495,6 +495,7 @@ export default function SuperadminPage() {
                 </label>
               </div>
               <div className="mt-6 space-y-2">{MODULOS.filter((modulo) => tipoNegocio === 'RESTAURANTE' || modulo.id !== 'cocina').map((modulo) => <label key={modulo.id} className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm"><span>{modulo.label}</span><input type="checkbox" checked={Boolean(permisos[modulo.id])} onChange={(event) => setPermisos((actuales) => ({ ...actuales, [modulo.id]: event.target.checked }))} className="h-4 w-4 accent-orange-500" /></label>)}</div>
+              <label className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-slate-800/60 px-3 py-2.5 text-sm"><span>Controles administrativos (piloto; requiere acceso Financiero y habilitación del servidor)</span><input type="checkbox" checked={permisos.administracion === true} onChange={(event) => setPermisos((actuales) => ({ ...actuales, administracion: event.target.checked }))} className="h-4 w-4 accent-orange-500" /></label>
               <button type="button" onClick={guardarConfiguracion} disabled={guardando} className="w-full mt-6 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2"><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar plan y funciones'}</button>
               <div className="mt-6 border-t border-slate-800 pt-5 space-y-3">
                 <p className="text-xs text-slate-500 uppercase tracking-wider">Suscripcion y soporte</p>

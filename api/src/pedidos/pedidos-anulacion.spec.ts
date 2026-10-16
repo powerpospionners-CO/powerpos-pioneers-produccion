@@ -42,6 +42,15 @@ function escenario() {
 }
 
 describe('Anulación conciliada de pedidos', () => {
+  it('repone el consumo original aunque hayan cambiado recetas o combos', async () => {
+    const { service, db, pedido } = escenario();
+    pedido.consumoInventario = [{ tipo: 'PRODUCTO', id: 11, cantidad: 6 }, { tipo: 'INGREDIENTE', id: 12, cantidad: 0.75 }];
+    db.producto = { update: jest.fn() };
+    db.ingrediente = { update: jest.fn() };
+    await service.actualizarEstado(1, 'ANULADO', 7);
+    expect(db.producto.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { stockActual: { increment: 6 } } });
+    expect(db.ingrediente.update).toHaveBeenCalledWith({ where: { id: 12 }, data: { stock: { increment: 0.75 } } });
+  });
   it('revierte el ingreso una sola vez y conserva el movimiento original', async () => {
     const { service, db } = escenario();
     await service.actualizarEstado(1, 'ANULADO', 7);

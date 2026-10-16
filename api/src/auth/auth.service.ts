@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -17,7 +21,13 @@ export class AuthService {
       include: { empresa: true, sucursal: true, distribuidor: true },
     });
 
-    if (!usuario || !usuario.activo || (usuario.empresa && !usuario.empresa.activo && usuario.rol !== 'SUPERADMIN')) {
+    if (
+      !usuario ||
+      !usuario.activo ||
+      (usuario.empresa &&
+        !usuario.empresa.activo &&
+        usuario.rol !== 'SUPERADMIN')
+    ) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
@@ -49,13 +59,16 @@ export class AuthService {
         tipoNegocio: usuario.empresa?.tipoNegocio,
         permisos: usuario.empresa?.permisos,
         modoPreparacion: usuario.empresa?.modoPreparacion,
-        facturacionElectronicaHabilitada: usuario.empresa?.facturacionElectronicaHabilitada,
+        facturacionElectronicaHabilitada:
+          usuario.empresa?.facturacionElectronicaHabilitada,
         consumoEmpleadosHabilitado: usuario.empresa?.consumoEmpleadosHabilitado,
         catalogoHabilitado: usuario.empresa?.catalogoHabilitado,
         tiendaSlug: usuario.empresa?.tiendaSlug,
         distribuidorId: usuario.distribuidorId,
         distribuidorCodigo: usuario.distribuidor?.codigo,
-        distribuidorComision: usuario.distribuidor ? Number(usuario.distribuidor.porcentajeComision) : undefined,
+        distribuidorComision: usuario.distribuidor
+          ? Number(usuario.distribuidor.porcentajeComision)
+          : undefined,
       },
     };
   }
@@ -82,49 +95,51 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(datos.admin.password, 10);
 
-    // Se crea la empresa junto con su Sucursal Principal en la misma transacción
-    const empresa = await this.prisma.empresa.create({
-      data: {
-        nombre: datos.empresa.nombre,
-        nit: datos.empresa.nit,
-        email: datos.empresa.email,
-        telefono: datos.empresa.telefono,
-        suscripcionVenceEn: new Date(),
-        soporteIncluidoHasta: sumarMeses(new Date(), 3),
-        sucursales: {
-          create: {
-            nombre: 'Sucursal Principal',
+    // Empresa, sucursal y administrador deben confirmarse juntos.
+    return this.prisma.$transaction(async (tx) => {
+      const empresa = await tx.empresa.create({
+        data: {
+          nombre: datos.empresa.nombre,
+          nit: datos.empresa.nit,
+          email: datos.empresa.email,
+          telefono: datos.empresa.telefono,
+          suscripcionVenceEn: new Date(),
+          soporteIncluidoHasta: sumarMeses(new Date(), 3),
+          sucursales: {
+            create: {
+              nombre: 'Sucursal Principal',
+            },
           },
         },
-      },
-      include: { sucursales: true },
+        include: { sucursales: true },
+      });
+
+      const sucursalPrincipal = empresa.sucursales[0];
+
+      await tx.usuario.create({
+        data: {
+          nombre: datos.admin.nombre,
+          email: datos.admin.email,
+          password: passwordHash,
+          rol: 'ADMIN_EMPRESA',
+          empresaId: empresa.id,
+          sucursalId: sucursalPrincipal.id,
+        },
+      });
+
+      return {
+        mensaje: 'Empresa registrada exitosamente',
+        empresa: {
+          id: empresa.id,
+          nombre: empresa.nombre,
+          tiendaRuta: `/tienda/${empresa.tiendaSlug}`,
+          nit: empresa.nit,
+        },
+        sucursal: {
+          id: sucursalPrincipal.id,
+          nombre: sucursalPrincipal.nombre,
+        },
+      };
     });
-
-    const sucursalPrincipal = empresa.sucursales[0];
-
-    const admin = await this.prisma.usuario.create({
-      data: {
-        nombre: datos.admin.nombre,
-        email: datos.admin.email,
-        password: passwordHash,
-        rol: 'ADMIN_EMPRESA',
-        empresaId: empresa.id,
-        sucursalId: sucursalPrincipal.id,
-      },
-    });
-
-    return {
-      mensaje: 'Empresa registrada exitosamente',
-      empresa: {
-        id: empresa.id,
-        nombre: empresa.nombre,
-        tiendaRuta: `/tienda/${empresa.tiendaSlug}`,
-        nit: empresa.nit,
-      },
-      sucursal: {
-        id: sucursalPrincipal.id,
-        nombre: sucursalPrincipal.nombre,
-      },
-    };
   }
 }
