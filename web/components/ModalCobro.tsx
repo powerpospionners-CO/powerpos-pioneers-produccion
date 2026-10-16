@@ -22,12 +22,13 @@ function MarcaPago({ metodo, grande = false }: { metodo: string; grande?: boolea
   </span>;
 }
 
-export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number };
+export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number; condicionPago?: "CREDITO"; vencimientoCredito?: string };
 
 type Linea = { metodoPago: string; monto: string };
 
-export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales }: {
+export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false }: {
   total: number;
+  permitirCredito?: boolean;
   procesando?: boolean;
   onConfirmar: (pago: PagoConfirmado) => void;
   onCancelar: () => void;
@@ -37,6 +38,9 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
   metodoInicial?: string;
   pagosIniciales?: { metodoPago: string; monto: string | number }[];
 }) {
+  const [credito, setCredito] = useState(false);
+  const [vencimiento, setVencimiento] = useState('');
+  const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
   const yaEraMixto = metodoInicial === 'MIXTO' && Array.isArray(pagosIniciales) && pagosIniciales.length > 1;
   const [mixto, setMixto] = useState(yaEraMixto);
   const [metodoUnico, setMetodoUnico] = useState(metodoInicial === 'MIXTO' ? 'EFECTIVO' : metodoInicial);
@@ -72,6 +76,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
   const puedeConfirmar = useMemo(() => {
     if (procesando) return false;
+    if (credito) return permitirCredito && total > 0 && vencimiento >= hoy;
     if (!mixto) {
       if (metodoUnico === 'EFECTIVO') return recibidoUnico >= total;
       return true;
@@ -80,10 +85,11 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
     if (lineas.some((l) => !Number(l.monto) || Number(l.monto) <= 0)) return false;
     if (indiceEfectivoMixto >= 0 && recibidoMixtoEfectivo < montoEfectivoMixto) return false;
     return true;
-  }, [procesando, mixto, metodoUnico, recibidoUnico, total, resta, lineas, indiceEfectivoMixto, recibidoMixtoEfectivo, montoEfectivoMixto]);
+  }, [credito, permitirCredito, vencimiento, hoy, procesando, mixto, metodoUnico, recibidoUnico, total, resta, lineas, indiceEfectivoMixto, recibidoMixtoEfectivo, montoEfectivoMixto]);
 
   const confirmar = () => {
     if (!puedeConfirmar) return;
+    if (credito) { onConfirmar({ metodoPago: 'CREDITO', pagos: [], cambio: 0, condicionPago: 'CREDITO', vencimientoCredito: vencimiento }); return; }
     if (!mixto) {
       const cambio = metodoUnico === 'EFECTIVO' ? Math.max(0, recibidoUnico - total) : 0;
       onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }], cambio });
@@ -107,6 +113,9 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
           <button type="button" aria-label="Cerrar cobro" disabled={procesando} onClick={onCancelar} className="flex h-11 w-11 items-center justify-center text-gray-500 hover:text-white"><X size={20} /></button>
         </div>
 
+        {permitirCredito && <label className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/40 p-3 text-amber-200"><input type="checkbox" checked={credito} disabled={procesando} onChange={e=>setCredito(e.target.checked)} /> Venta a crédito · pendiente de cobro</label>}
+        {credito && <div className="mb-4 rounded-xl bg-gray-950 p-4"><label>Fecha de vencimiento<input type="date" min={hoy} value={vencimiento} onChange={e=>setVencimiento(e.target.value)} className="ml-3 rounded border border-gray-700 bg-gray-900 p-2" /></label><p className="mt-3 text-sm text-gray-400">Se entrega la mercancía y se registra la deuda del cliente. El dinero ingresará a caja al registrar los abonos.</p></div>}
+        <div hidden={credito}>
         <button
           type="button"
           disabled={procesando}
@@ -198,10 +207,11 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
           </div>
         )}
 
+        </div>
         <div className="sticky -bottom-3 mt-5 flex gap-3 border-t border-gray-700 bg-gray-900 py-3 sm:-bottom-5 sm:py-4">
           <button type="button" disabled={procesando} onClick={onCancelar} className="flex-1 rounded-lg bg-gray-800 py-3 text-white hover:bg-gray-700">{textoCancelar}</button>
           <button type="button" onClick={confirmar} disabled={!puedeConfirmar} className="flex-1 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-40">
-            {procesando ? 'Guardando…' : textoConfirmar}
+            {procesando ? 'Guardando…' : credito ? 'Registrar crédito' : textoConfirmar}
           </button>
         </div>
       </div>

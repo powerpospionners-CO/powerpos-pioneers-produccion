@@ -144,10 +144,10 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
                 <label className="mb-3 block text-sm text-gray-300">Efectivo retirado para recaudo
                   <input type="number" min={0} max={caja.totalEfectivo || 0} step="0.01" value={montoRetirado} onChange={(e) => { setMontoRetirado(e.target.value); setMontoFinal(0); setConfirmoCero(false); }} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 </label>
-                <p className="mb-3 text-sm text-gray-400">Ventas en efectivo: {moneda(caja.totalEfectivo || 0)} · Debe quedar en caja: <strong className="text-white">{moneda(Math.max(0, montoEsperadoDespuesRetiro))}</strong></p>
+                <p className="mb-3 text-sm text-gray-400">Cobros netos en efectivo: {moneda(caja.totalEfectivo || 0)} · Debe quedar en caja: <strong className="text-white">{moneda(Math.max(0, montoEsperadoDespuesRetiro))}</strong></p>
               </>
             ) : (
-              <p className="mb-3 text-sm text-gray-400">Cuenta el efectivo que hay físicamente en la caja. Se espera <strong className="text-white">{moneda(caja.totalEsperado || 0)}</strong> en efectivo (base + ventas en efectivo del turno).</p>
+              <p className="mb-3 text-sm text-gray-400">Cuenta el efectivo que hay físicamente en la caja. Se espera <strong className="text-white">{moneda(caja.totalEsperado || 0)}</strong> en efectivo (base + cobros − reembolsos en efectivo del turno).</p>
             )}
             <CalculadoraBilletes objetivo={Math.max(0, montoEsperadoDespuesRetiro)} onCambiar={(v) => { setMontoFinal(v); if (v !== 0) setConfirmoCero(false); }} />
             {montoFinal === 0 && (

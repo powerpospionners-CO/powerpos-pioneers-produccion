@@ -186,7 +186,7 @@ export default function CajaHistorialPage() {
                     {resumen.ventasPorMetodoPago.map((p) => (
                       <div key={p.metodo} className="flex justify-between text-gray-300"><span>{ETIQUETAS_METODO[p.metodo] || p.metodo}</span><strong className="text-white">{moneda(p.total)}</strong></div>
                     ))}
-                    {!resumen.ventasPorMetodoPago.length && <p className="text-gray-500">Sin ventas en este turno.</p>}
+                    {!resumen.ventasPorMetodoPago.length && <p className="text-gray-500">Sin cobros ni reembolsos en este turno.</p>}
                   </div>
                 </div>
 
@@ -194,7 +194,7 @@ export default function CajaHistorialPage() {
                   <div className="flex justify-between text-gray-300"><span>Base inicial</span><span>{moneda(resumen.montoInicial)}</span></div>
                   {resumen.retiroEfectivo && (
                     <>
-                      <div className="flex justify-between text-gray-300"><span>Ventas en efectivo para recaudo</span><span>{moneda(resumen.retiroEfectivo.montoEsperado)}</span></div>
+                      <div className="flex justify-between text-gray-300"><span>Cobros netos en efectivo para recaudo</span><span>{moneda(resumen.retiroEfectivo.montoEsperado)}</span></div>
                       <div className="flex justify-between text-gray-300"><span>Efectivo retirado</span><span>{moneda(resumen.retiroEfectivo.montoRetirado)}</span></div>
                       {resumen.retiroEfectivo.diferencia !== 0 && <div className="flex justify-between text-yellow-300"><span>Diferencia del retiro</span><span>{moneda(resumen.retiroEfectivo.diferencia)}</span></div>}
                     </>

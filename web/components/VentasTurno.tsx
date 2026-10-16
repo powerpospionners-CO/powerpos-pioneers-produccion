@@ -8,7 +8,7 @@ import { moneda } from '@/lib/formato';
 import ModalCobro, { PagoConfirmado } from './ModalCobro';
 
 type Venta = {
-  id: number; numero: string; total: string; metodoPago: string; estado: string; creadoEn: string;
+  id: number; numero: string; total: string; metodoPago: string; estado: string; creadoEn: string; devueltoTotal?: boolean;
   pagos?: { metodoPago: string; monto: string }[];
 };
 type DetalleVenta = {
@@ -75,7 +75,7 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
   useEffect(() => { if (abierto) void cargar(); }, [abierto, cajaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anular = async (venta: Venta) => {
-    if (!(await confirmar(`Se va a anular la venta ${venta.numero} por ${moneda(Number(venta.total))}. Se devuelven las existencias y se eliminan sus movimientos financieros.`, { titulo: 'Anular venta', textoConfirmar: 'Sí, anular', peligroso: true }))) return;
+    if (!(await confirmar(`Se va a anular la venta ${venta.numero} por ${moneda(Number(venta.total))}. Se reponen las existencias y se registran las reversiones financieras, conservando el historial.`, { titulo: 'Anular venta', textoConfirmar: 'Sí, anular', peligroso: true }))) return;
     setError('');
     try {
       await api.patch(`/pedidos/${venta.id}/estado`, { estado: 'ANULADO' });
@@ -114,12 +114,12 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
                 <tr key={v.id} className={`border-b border-gray-800 ${v.estado === 'ANULADO' ? 'opacity-40' : ''}`}>
                   <td className="py-2 pr-2 text-gray-300">{v.numero}</td>
                   <td className="py-2 pr-2 text-gray-500">{new Date(v.creadoEn).toLocaleTimeString('es-CO')}</td>
-                  <td className="py-2 pr-2 text-gray-400">{v.estado === 'ANULADO' ? 'ANULADO' : v.metodoPago}</td>
+                  <td className="py-2 pr-2 text-gray-400">{v.estado === 'ANULADO' ? 'ANULADO' : v.devueltoTotal ? 'DEVUELTA' : v.metodoPago}</td>
                   <td className="py-2 pr-2 text-right font-semibold text-white">{moneda(Number(v.total))}</td>
                   <td className="py-2 text-right">
                     <button type="button" title="Ver productos" onClick={() => verProductos(v)} className="mr-2 text-gray-500 hover:text-blue-400"><List size={13} /></button>
                     <button type="button" title="Reimprimir ticket" disabled={reimprimiendoId === v.id} onClick={() => reimprimirTicket(v)} className="mr-2 text-gray-500 hover:text-green-400 disabled:opacity-40"><Printer size={13} /></button>
-                    {puedeGestionar && v.estado !== 'ANULADO' && (
+                    {puedeGestionar && v.estado !== 'ANULADO' && !v.devueltoTotal && v.metodoPago !== 'CREDITO' && (
                       <>
                         <button type="button" title="Editar medio de pago" onClick={() => setVentaEditar(v)} className="mr-2 text-gray-500 hover:text-orange-400"><Pencil size={13} /></button>
                         <button type="button" title="Anular venta" onClick={() => anular(v)} className="text-gray-500 hover:text-red-400"><Ban size={13} /></button>

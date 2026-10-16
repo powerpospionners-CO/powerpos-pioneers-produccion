@@ -258,6 +258,7 @@ export class AdministracionService {
         where: { id, empresaId: actor.empresaId },
       });
       if (!cuenta) throw new NotFoundException('Cuenta no encontrada');
+      if (cuenta.pedidoId) throw new BadRequestException('Los créditos del POS se cobran desde la caja para conservar su trazabilidad');
       const existente = await tx.abonoAdministrativo.findUnique({
         where: { clave },
         include: { cuenta: { select: { empresaId: true } } },
@@ -333,7 +334,7 @@ export class AdministracionService {
         include: { abonos: { select: { id: true }, take: 1 } },
       });
       if (!cuenta) throw new NotFoundException('Cuenta no encontrada');
-      if (cuenta.anulada || cuenta.abonos.length || cuenta.compraGastoId)
+      if (cuenta.anulada || cuenta.abonos.length || cuenta.compraGastoId || cuenta.pedidoId)
         throw new BadRequestException(
           'Solo se pueden anular cuentas manuales sin abonos; las compras y demás cuentas requieren conciliación',
         );

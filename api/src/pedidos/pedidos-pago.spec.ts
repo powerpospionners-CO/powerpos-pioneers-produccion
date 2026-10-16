@@ -12,7 +12,8 @@ describe('Edición del pago y cierre de caja', () => {
       metodoPago: 'EFECTIVO',
     };
     const db: any = {
-      $executeRaw: jest.fn(),
+      operacionVentaCaja: { count: jest.fn().mockResolvedValue(0) },
+    $executeRaw: jest.fn(),
       pedido: {
         findFirst: jest.fn().mockResolvedValue(pedido),
         update: jest.fn().mockResolvedValue(pedido),

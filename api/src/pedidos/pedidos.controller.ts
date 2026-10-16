@@ -5,11 +5,32 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { PedidosEventosService } from './pedidos-eventos.service';
+import { OperacionesVentaService, CobroCredito, DevolucionVenta } from './operaciones-venta.service';
+import { ParseIntPipe } from '@nestjs/common';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('pedidos')
 export class PedidosController {
-  constructor(private readonly pedidosService: PedidosService, private readonly eventos: PedidosEventosService) {}
+  constructor(private readonly pedidosService: PedidosService, private readonly eventos: PedidosEventosService, private readonly operaciones: OperacionesVentaService) {}
+
+  @Get('creditos')
+  @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
+  creditos(@Request() req: any) { return this.operaciones.creditos(req.user); }
+
+  @Get('consulta')
+  @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
+  async consultarVenta(@Query('numero') numero: string, @Request() req: any) {
+    const pedido = await this.operaciones.buscar(numero, req.user);
+    return this.pedidosService.obtenerPedido(pedido.id, req.user.empresaId);
+  }
+
+  @Post(':id/cobros-credito')
+  @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
+  cobrarCredito(@Param('id', ParseIntPipe) id: number, @Body() datos: CobroCredito, @Request() req: any) { return this.operaciones.cobrar(id, datos, req.user); }
+
+  @Post(':id/devoluciones')
+  @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
+  devolver(@Param('id', ParseIntPipe) id: number, @Body() datos: DevolucionVenta, @Request() req: any) { return this.operaciones.devolver(id, datos, req.user); }
 
   @Sse('stream')
   stream(@Request() req: any): Observable<MessageEvent> {

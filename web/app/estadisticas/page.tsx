@@ -23,6 +23,9 @@ import { useTema } from "@/components/ThemeProvider";
 
 type Estadisticas = {
   ventas: number;
+  ventasBrutas: number;
+  devoluciones: number;
+  ventasCredito: number;
   cantidad: number;
   ticketPromedio: number;
   descuentos: number;
@@ -233,7 +236,10 @@ function EstadisticasContenido() {
                 </p>
                 <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {[
-                    ["Ventas registradas", moneda(datos.ventas)],
+                    ["Ventas netas de devoluciones", moneda(datos.ventas)],
+                    ["Ventas brutas", moneda(datos.ventasBrutas)],
+                    ["Devoluciones del periodo", moneda(datos.devoluciones)],
+                    ["Ventas a crédito", moneda(datos.ventasCredito)],
                     ["Cantidad de ventas", String(datos.cantidad)],
                     ["Ticket promedio", moneda(datos.ticketPromedio)],
                     ["Descuentos aplicados", moneda(datos.descuentos)],

@@ -10,6 +10,7 @@ import { NotificacionesService } from '../notificaciones/notificaciones.service'
 import { PedidosEventosService } from './pedidos-eventos.service';
 import { bloquearCajaSucursal } from '../caja/caja-lock';
 import { costoHistoricoItem } from './costo-historico';
+import { fechaDia } from '../administracion/administracion.service';
 
 const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
@@ -286,6 +287,7 @@ export class PedidosService {
         varianteSabor,
         factorUnidades,
         precioUnitario,
+        consumos: [] as { tipo: 'PRODUCTO' | 'INGREDIENTE'; id: number; cantidad: number }[],
         componentes: producto.esCombo ? await db.comboComponente.findMany({ where: { comboId: producto.id, producto: { empresaId } }, include: { producto: true } }) : [],
       });
     }
@@ -300,12 +302,20 @@ export class PedidosService {
       const canje = await db.cliente.updateMany({ where: { id: clienteId, empresaId, activo: true, puntos: { gte: puntosCanjeados } }, data: { puntos: { decrement: puntosCanjeados } } });
       if (!canje.count) throw new BadRequestException('Saldo de puntos insuficiente');
     }
-    const puntosGanados = clienteId ? calcularPuntos(itemsValidados, subtotal, descuento, reglas) : 0;
+    if (datos.condicionPago !== undefined && !['CONTADO', 'CREDITO'].includes(datos.condicionPago)) throw new BadRequestException('Condición de pago no válida');
+    const credito = datos.condicionPago === 'CREDITO';
+    if (credito && (!clienteId || puntosCanjeados || costoDomicilio || !claveIdempotencia)) throw new BadRequestException('El crédito requiere cliente y clave de operación; no admite canje de puntos ni domicilio');
+    const vencimientoCredito = credito ? fechaDia(datos.vencimientoCredito) : null;
+    const hoyCredito = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+    if (vencimientoCredito && vencimientoCredito < fechaDia(hoyCredito)) throw new BadRequestException('El vencimiento no puede estar en el pasado');
+    const puntosCalculados = clienteId ? calcularPuntos(itemsValidados, subtotal, descuento, reglas) : 0;
+    const puntosGanados = credito ? 0 : puntosCalculados;
     const total = subtotal - descuento + costoDomicilio;
     monto(Math.round(total * 100) / 100, 'Total', 0, 99999999.99);
-    if (puntosGanados > 2147483647) throw new BadRequestException('Revise la regla de acumulación: genera demasiados puntos');
+    if (puntosCalculados > 2147483647) throw new BadRequestException('Revise la regla de acumulación: genera demasiados puntos');
     const cambio = monto(datos.cambio ?? 0, 'Cambio', 0, 99999999.99);
-    const { metodoPago, pagos } = this.normalizarPagos(datos, Math.round(total * 100) / 100);
+    if (credito && (total <= 0 || cambio !== 0 || (Array.isArray(datos.pagos) && datos.pagos.length))) throw new BadRequestException('La venta a crédito debe quedar pendiente sin pagos ni cambio');
+    const { metodoPago, pagos } = credito ? { metodoPago: 'CREDITO', pagos: [] } : this.normalizarPagos(datos, Math.round(total * 100) / 100);
 
     const consumoInventario: { tipo: 'PRODUCTO' | 'INGREDIENTE'; id: number; cantidad: number }[] = [];
     for (const item of itemsValidados) {
@@ -323,6 +333,7 @@ export class PedidosService {
           });
           if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${componente.producto.nombre} (para ${item.producto.nombre})`);
           consumoInventario.push({ tipo: 'PRODUCTO', id: componente.productoId, cantidad: unidadesBase });
+          item.consumos.push({ tipo: 'PRODUCTO', id: componente.productoId, cantidad: unidadesBase });
         }
         continue;
       }
@@ -334,21 +345,22 @@ export class PedidosService {
       });
       if (!actualizado.count) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}${item.presentacionNombre ? ` (${item.presentacionNombre})` : ''}`);
       consumoInventario.push({ tipo: 'PRODUCTO', id: item.producto.id, cantidad: unidadesBase });
+      item.consumos.push({ tipo: 'PRODUCTO', id: item.producto.id, cantidad: unidadesBase });
     }
 
     if (esRestaurante) {
       for (const item of itemsValidados) {
         for (const pi of item.producto.ingredientes) {
-          if (!item.exclusiones.includes(pi.ingrediente.nombre)) consumoInventario.push({
-            tipo: 'INGREDIENTE', id: pi.ingredienteId,
-            cantidad: this.obtenerCantidadInventario(pi.ingrediente, Number(pi.cantidad)) * item.cantidad,
-          });
+          if (!item.exclusiones.includes(pi.ingrediente.nombre)) {
+            const consumo = { tipo: 'INGREDIENTE' as const, id: pi.ingredienteId, cantidad: this.obtenerCantidadInventario(pi.ingrediente, Number(pi.cantidad)) * item.cantidad };
+            consumoInventario.push(consumo); item.consumos.push(consumo);
+          }
         }
         for (const a of item.adicionales) {
-          if (a.adicional.ingredienteId && a.adicional.cantidad) consumoInventario.push({
-            tipo: 'INGREDIENTE', id: a.adicional.ingredienteId,
-            cantidad: Number(a.adicional.cantidad) * a.cantidad * item.cantidad,
-          });
+          if (a.adicional.ingredienteId && a.adicional.cantidad) {
+            const consumo = { tipo: 'INGREDIENTE' as const, id: a.adicional.ingredienteId, cantidad: Number(a.adicional.cantidad) * a.cantidad * item.cantidad };
+            consumoInventario.push(consumo); item.consumos.push(consumo);
+          }
         }
       }
     }
@@ -376,12 +388,14 @@ export class PedidosService {
         claveIdempotencia,
         consumoInventario,
         costoVentaHistorico: costoHistorico,
+        puntosCreditoPendientes: credito ? puntosCalculados : 0,
         pagos: {
           create: pagos.map((p) => ({ metodoPago: p.metodoPago as any, monto: p.monto })),
         },
         detalles: {
           create: itemsValidados.map((item, indice) => ({
             costoVentaHistorico: costosHistoricos[indice],
+            consumoInventario: item.consumos,
             productoId: item.producto.id,
             cantidad: item.cantidad,
             // precioUnitario guarda el precio de la presentación vendida (o el del producto si no aplica); subtotal ya incluye adicionales
@@ -425,7 +439,7 @@ export class PedidosService {
     if (esRestaurante) await this.descontarInventario(itemsValidados, db);
 
     // Registrar ingreso automático por venta
-    await db.movimientoFinanciero.create({
+    if (!credito) await db.movimientoFinanciero.create({
       data: {
         empresaId,
         sucursalId,
@@ -438,11 +452,18 @@ export class PedidosService {
       },
     });
 
+    if (credito) await db.cuentaAdministrativa.create({ data: {
+      empresaId, sucursalId, usuarioId, pedidoId: pedido.id,
+      tipo: 'COBRAR', categoria: 'VENTA', documento: `POS-${pedido.numero}`,
+      tercero: `Cliente #${clienteId}`, descripcion: `Venta a crédito ${pedido.numero}`,
+      monto: total, saldo: total, vencimiento: vencimientoCredito!,
+    } });
+
     // Registrar también el costo de lo vendido, para que la utilidad neta
     // reste lo invertido y no muestre el ingreso completo como si fuera
     // ganancia. En comercio/tienda usa el costo del producto; en
     // restaurante, el costo de la receta (igual que en Reportes).
-    const costoVenta = this.calcularCostoVenta(itemsValidados);
+    const costoVenta = costoHistorico === null ? this.calcularCostoVenta(itemsValidados) : Number(costoHistorico);
     if (costoVenta > 0) {
       await db.movimientoFinanciero.create({
         data: {
@@ -545,6 +566,7 @@ export class PedidosService {
         ...(sucursalId && { sucursalId }),
         ...(cajaId && { cajaId }),
         ...(rangoFecha && { creadoEn: rangoFecha }),
+        ...(!cajaId && !rangoFecha ? { devueltoTotal: false } : {}),
       },
       include: {
         detalles: {
@@ -570,6 +592,8 @@ export class PedidosService {
     const pedido = await this.prisma.pedido.findFirst({
       where: { id, sucursal: { empresaId } },
       include: {
+        cuentaCredito: true,
+        operacionesCaja: { where: { tipo: 'DEVOLUCION' } },
         detalles: {
           include: {
             producto: {
@@ -596,6 +620,8 @@ export class PedidosService {
       const pedido = await db.pedido.findFirst({ where: { id, sucursal: { empresaId } } });
       if (!pedido) throw new NotFoundException('Pedido no encontrado');
       if (pedido.estado === 'ANULADO') throw new BadRequestException('Una venta anulada no puede modificarse');
+      if (await db.operacionVentaCaja.count({ where: { pedidoId: id, tipo: 'DEVOLUCION' } })) throw new BadRequestException('Una venta con devoluciones no admite cambios de pago');
+      if (pedido.metodoPago === 'CREDITO') throw new BadRequestException('Use el flujo de cobros de crédito para esta venta');
       if (pedido.cajaId) {
         const caja = await db.caja.findUnique({ where: { id: pedido.cajaId } });
         if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja de esta venta ya está cerrada. Requiere conciliación para modificar el pago.');
@@ -644,6 +670,8 @@ export class PedidosService {
       });
       if (!pedido) throw new NotFoundException('Pedido no encontrado');
       if (pedido.estado === 'ANULADO') throw new BadRequestException('Un pedido anulado no puede reabrirse');
+      if (await tx.operacionVentaCaja.count({ where: { pedidoId: id, tipo: 'DEVOLUCION' } })) throw new BadRequestException('Una venta con devoluciones no admite cambios de estado');
+      if (estado === 'ANULADO' && pedido.metodoPago === 'CREDITO') throw new BadRequestException('Use el flujo de devolución y conciliación de crédito');
       const web = await tx.pedidoWeb.findUnique({ where: { pedidoId: id } });
       if (web && (['ENTREGADO','ANULADO'].includes(estado) || ['EN_CAMINO','ENTREGADO'].includes(web.estado))) throw new BadRequestException('Gestione este pedido desde Domicilios. Las ventas aceptadas requieren conciliación antes de cancelar.');
       if (estado === 'ANULADO' && (pedido.puntosGanados || pedido.puntosCanjeados)) throw new BadRequestException('Esta venta tiene movimientos de puntos. Requiere conciliación antes de anular para no alterar saldos sin respaldo.');

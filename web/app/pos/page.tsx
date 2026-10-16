@@ -9,9 +9,11 @@ import Navbar from '@/components/Navbar';
 import CajaControl from '@/components/CajaControl';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import VentasTurno from '@/components/VentasTurno';
+import OperacionesVenta from '@/components/OperacionesVenta';
 import VentasPendientes from '@/components/VentasPendientes';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import RetailPOS from './RetailPOS';
+import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 
 interface AdicionalProducto {
   id: number;
@@ -70,6 +72,7 @@ function RestaurantePOS() {
   const [adicionalesTemp, setAdicionalesTemp] = useState<AdicionalSeleccionado[]>([]);
   const [observacionTemp, setObservacionTemp] = useState('');
   const [cantidadTemp, setCantidadTemp] = useState(1);
+  const intentoVenta = useRef<{ firma: string; clave: string } | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -540,7 +543,7 @@ function RestaurantePOS() {
 
         ${Array.isArray(pedido.pagos) && pedido.pagos.length > 1
           ? pedido.pagos.map((p: any) => `<div class="metodo-pago">✓ ${p.metodoPago}: $${Number(p.monto).toLocaleString()}</div>`).join('')
-          : `<div class="metodo-pago">✓ Pago en ${pedido.metodoPago}</div>`}
+          : `<div class="metodo-pago">${pedido.metodoPago === 'CREDITO' ? 'A crédito · pendiente de cobro' : '✓ Pago en ' + pedido.metodoPago}</div>`}
 
         ${pedido.cliente ? `
           <div class="observacion-pedido">
@@ -808,10 +811,12 @@ function RestaurantePOS() {
     if (carrito.length === 0) return;
     setLoading(true);
     try {
-      const { data } = await api.post('/pedidos', {
+      const payload = {
         sucursalId: usuario?.sucursalId || 1,
         metodoPago: pago.metodoPago,
         pagos: pago.pagos,
+        condicionPago: pago.condicionPago,
+        vencimientoCredito: pago.vencimientoCredito,
         clienteId: clienteSeleccionado?.id || null,
         puntosCanjeados: canjeAplicado,
         cambio: pago.cambio,
@@ -822,7 +827,12 @@ function RestaurantePOS() {
           adicionales: item.adicionales.map((a) => ({ adicionalId: a.adicionalId, cantidad: a.cantidad })),
           observacion: item.observacion,
         })),
-      });
+      };
+      const firma = JSON.stringify(payload);
+      if (intentoVenta.current && intentoVenta.current.firma !== firma) throw new Error('Hay una venta pendiente de confirmar. Reintenta con los mismos datos antes de cambiarla.');
+      intentoVenta.current ??= { firma, clave: generarClaveVenta() };
+      const { data } = await api.post('/pedidos', { ...payload, claveIdempotencia: intentoVenta.current.clave });
+      intentoVenta.current = null;
       setModalCobroAbierto(false);
       setPedidoExitoso(data.numero);
       setUltimoPedido(data.numero);
@@ -872,11 +882,12 @@ function RestaurantePOS() {
       setTimeout(() => setPedidoExitoso(null), 4000);
       void cargarCaja();
       if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.response?.status >= 400 && e?.response?.status < 500) intentoVenta.current = null;
       setAlertDialog({
         open: true,
         title: 'No se pudo registrar el pedido',
-        message: 'Hubo un problema al guardar la venta. Revisa la información e intenta nuevamente.',
+        message: e?.response?.data?.message || e.message || 'Reintenta con los mismos datos para confirmar la venta.',
       });
     } finally {
       setLoading(false);
@@ -1332,10 +1343,11 @@ function RestaurantePOS() {
           />
         )}
 
-        <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
+        <OperacionesVenta onCambio={()=>{ void cargarCaja(); }} />
+    <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
 
         {modalCobroAbierto && (
-          <ModalCobro total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+          <ModalCobro permitirCredito={!!clienteSeleccionado && !canjeAplicado} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
         )}
         {cambioAMostrar !== null && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">

@@ -405,7 +405,7 @@ CREATE TABLE `pedidos` (
     `cajaId` INTEGER NULL,
     `numero` VARCHAR(191) NOT NULL,
     `estado` ENUM('PENDIENTE', 'EN_COCINA', 'LISTO', 'ENTREGADO', 'ANULADO') NOT NULL DEFAULT 'PENDIENTE',
-    `metodoPago` ENUM('EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL DEFAULT 'EFECTIVO',
+    `metodoPago` ENUM('CREDITO', 'EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL DEFAULT 'EFECTIVO',
     `subtotal` DECIMAL(10, 2) NOT NULL,
     `descuento` DECIMAL(10, 2) NOT NULL DEFAULT 0,
     `total` DECIMAL(10, 2) NOT NULL,
@@ -420,6 +420,8 @@ CREATE TABLE `pedidos` (
     `claveIdempotencia` VARCHAR(191) NULL,
     `consumoInventario` JSON NULL,
     `costoVentaHistorico` DECIMAL(14, 4) NULL,
+    `puntosCreditoPendientes` INTEGER NOT NULL DEFAULT 0,
+    `devueltoTotal` BOOLEAN NOT NULL DEFAULT false,
 
     UNIQUE INDEX `pedidos_numero_key`(`numero`),
     UNIQUE INDEX `pedidos_claveIdempotencia_key`(`claveIdempotencia`),
@@ -453,6 +455,7 @@ CREATE TABLE `cuentas_administrativas` (
     `tipo` VARCHAR(191) NOT NULL,
     `categoria` ENUM('VENTA', 'COSTO_VENTA', 'COMPRA_INSUMOS', 'COMPRA_MERCANCIA', 'NOMINA', 'SERVICIOS', 'ARRIENDO', 'MANTENIMIENTO', 'IMPUESTOS', 'COMISION_DISTRIBUIDOR', 'OTROS') NOT NULL DEFAULT 'OTROS',
     `compraGastoId` INTEGER NULL,
+    `pedidoId` INTEGER NULL,
     `gastoRecurrenteId` INTEGER NULL,
     `periodoRecurrente` VARCHAR(191) NULL,
     `tercero` LONGTEXT NOT NULL,
@@ -465,6 +468,7 @@ CREATE TABLE `cuentas_administrativas` (
     `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     UNIQUE INDEX `cuentas_administrativas_compraGastoId_key`(`compraGastoId`),
+    UNIQUE INDEX `cuentas_administrativas_pedidoId_key`(`pedidoId`),
     INDEX `cuentas_administrativas_empresaId_tipo_vencimiento_idx`(`empresaId`, `tipo`, `vencimiento`),
     UNIQUE INDEX `cuentas_administrativas_gastoRecurrenteId_periodoRecurrente_key`(`gastoRecurrenteId`, `periodoRecurrente`),
     UNIQUE INDEX `cuentas_administrativas_empresaId_tipo_documento_key`(`empresaId`, `tipo`, `documento`),
@@ -568,7 +572,7 @@ CREATE TABLE `presupuestos_administrativos` (
 CREATE TABLE `pagos_pedido` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `pedidoId` INTEGER NOT NULL,
-    `metodoPago` ENUM('EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL,
+    `metodoPago` ENUM('CREDITO', 'EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL,
     `monto` DECIMAL(10, 2) NOT NULL,
     `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
@@ -587,6 +591,7 @@ CREATE TABLE `detalle_pedidos` (
     `exclusiones` JSON NOT NULL,
     `observacion` LONGTEXT NULL,
     `costoVentaHistorico` DECIMAL(14, 4) NULL,
+    `consumoInventario` JSON NULL,
     `presentacionId` INTEGER NULL,
     `presentacionNombre` LONGTEXT NULL,
     `varianteSabor` LONGTEXT NULL,
@@ -688,6 +693,27 @@ CREATE TABLE `cajas` (
     `abiertaEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `cerradaEn` DATETIME(3) NULL,
 
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `operaciones_venta_caja` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `empresaId` INTEGER NOT NULL,
+    `pedidoId` INTEGER NOT NULL,
+    `cajaId` INTEGER NOT NULL,
+    `usuarioId` INTEGER NOT NULL,
+    `clave` VARCHAR(191) NOT NULL,
+    `tipo` LONGTEXT NOT NULL,
+    `metodoPago` ENUM('CREDITO', 'EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL,
+    `monto` DECIMAL(12, 2) NOT NULL,
+    `motivo` LONGTEXT NOT NULL,
+    `detalle` JSON NULL,
+    `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `operaciones_venta_caja_clave_key`(`clave`),
+    INDEX `operaciones_venta_caja_empresaId_pedidoId_idx`(`empresaId`, `pedidoId`),
+    INDEX `operaciones_venta_caja_cajaId_idx`(`cajaId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -912,7 +938,7 @@ CREATE TABLE `pedidos_web` (
     `subtotal` DECIMAL(10, 2) NOT NULL,
     `costoDomicilio` DECIMAL(10, 2) NOT NULL,
     `total` DECIMAL(10, 2) NOT NULL,
-    `metodoPago` ENUM('EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL DEFAULT 'EFECTIVO',
+    `metodoPago` ENUM('CREDITO', 'EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'MIXTO') NOT NULL DEFAULT 'EFECTIVO',
     `pedidoId` INTEGER NULL,
     `repartidorId` INTEGER NULL,
     `motivo` LONGTEXT NULL,
@@ -1049,6 +1075,9 @@ ALTER TABLE `pedidos` ADD CONSTRAINT `pedidos_cajaId_fkey` FOREIGN KEY (`cajaId`
 ALTER TABLE `proveedores` ADD CONSTRAINT `proveedores_empresaId_fkey` FOREIGN KEY (`empresaId`) REFERENCES `empresas`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `cuentas_administrativas` ADD CONSTRAINT `cuentas_administrativas_pedidoId_fkey` FOREIGN KEY (`pedidoId`) REFERENCES `pedidos`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `cuentas_administrativas` ADD CONSTRAINT `cuentas_administrativas_empresaId_fkey` FOREIGN KEY (`empresaId`) REFERENCES `empresas`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1143,6 +1172,12 @@ ALTER TABLE `cajas` ADD CONSTRAINT `cajas_sucursalId_fkey` FOREIGN KEY (`sucursa
 
 -- AddForeignKey
 ALTER TABLE `cajas` ADD CONSTRAINT `cajas_usuarioId_fkey` FOREIGN KEY (`usuarioId`) REFERENCES `usuarios`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `operaciones_venta_caja` ADD CONSTRAINT `operaciones_venta_caja_pedidoId_fkey` FOREIGN KEY (`pedidoId`) REFERENCES `pedidos`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `operaciones_venta_caja` ADD CONSTRAINT `operaciones_venta_caja_cajaId_fkey` FOREIGN KEY (`cajaId`) REFERENCES `cajas`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `retiros_efectivo_caja` ADD CONSTRAINT `retiros_efectivo_caja_empresaId_fkey` FOREIGN KEY (`empresaId`) REFERENCES `empresas`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

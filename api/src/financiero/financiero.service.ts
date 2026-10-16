@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { excelReport } from '../common/excel-report';
+import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -203,19 +204,12 @@ export class FinancieroService {
     // solo bloque: se reparte entre sus medios reales (tabla `pagos`) para que
     // el desglose coincida con el de Caja. Las ventas anteriores a los pagos
     // mixtos no tienen filas en `pagos`, así que usan `metodoPago` de respaldo.
-    const mapa = new Map<string, number>();
-    for (const p of pedidos) {
-      if (p.pagos.length > 0) {
-        for (const pago of p.pagos) {
-          mapa.set(pago.metodoPago, (mapa.get(pago.metodoPago) || 0) + Number(pago.monto));
-        }
-      } else {
-        mapa.set(p.metodoPago, (mapa.get(p.metodoPago) || 0) + Number(p.total));
-      }
-    }
+    const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { empresaId, ...(where.creadoEn ? { creadoEn: where.creadoEn } : {}) } });
+    const devoluciones = operaciones.filter(o=>o.tipo==='DEVOLUCION').reduce((s,o)=>s+Number((o.detalle as any)?.valorTotal||0),0);
     return {
-      ventasPorMetodoPago: Array.from(mapa.entries()).map(([metodo, total]) => ({ metodo, total })),
-      totalVentasRango: pedidos.reduce((acc, p) => acc + Number(p.total), 0),
+      ajusteCartera: pedidos.filter(p=>p.metodoPago==='CREDITO').reduce((s,p)=>s+Number(p.total),0) - operaciones.filter(o=>o.tipo==='COBRO_CREDITO').reduce((s,o)=>s+Number(o.monto),0) - operaciones.filter(o=>o.tipo==='DEVOLUCION').reduce((s,o)=>s+Number((o.detalle as any)?.deudaReducida||0),0),
+      ventasPorMetodoPago: desgloseCobros(pedidos, operaciones),
+      totalVentasRango: pedidos.reduce((acc, p) => acc + Number(p.total), 0) - devoluciones,
       cantidadPedidosRango: pedidos.length,
     };
   }
@@ -232,15 +226,15 @@ export class FinancieroService {
     const movimientos = await this.prisma.movimientoFinanciero.findMany({ where });
 
     const totalIngresos = movimientos
-      .filter(m => m.tipo === 'INGRESO')
-      .reduce((acc, m) => acc + Number(m.monto), 0);
+      .filter(m => m.tipo === 'INGRESO' && m.categoria !== 'COSTO_VENTA')
+      .reduce((acc, m) => acc + Number(m.monto), 0) - movimientos.filter(m => m.tipo === 'EGRESO' && m.categoria === 'VENTA').reduce((acc,m)=>acc+Number(m.monto),0);
 
     // Al anular una venta se crea el movimiento contrario (EGRESO/VENTA) para
     // no perder el rastro, pero no es un gasto real del negocio -- es solo la
     // reversión de la venta, así que no debe sumar en el total de egresos.
     const totalEgresos = movimientos
       .filter(m => m.tipo === 'EGRESO' && m.categoria !== 'VENTA')
-      .reduce((acc, m) => acc + Number(m.monto), 0);
+      .reduce((acc, m) => acc + Number(m.monto), 0) - movimientos.filter(m => m.tipo === 'INGRESO' && m.categoria === 'COSTO_VENTA').reduce((acc,m)=>acc+Number(m.monto),0);
 
     const totalComprasInventario = movimientos
       .filter(m => m.tipo === 'EGRESO' && ['COMPRA_MERCANCIA', 'COMPRA_INSUMOS'].includes(m.categoria))
@@ -248,7 +242,7 @@ export class FinancieroService {
 
     // Las compras aumentan el inventario y salen de caja, pero su costo se
     // reconoce en la utilidad mediante COSTO_VENTA cuando se vende el producto.
-    const utilidad = totalIngresos - totalEgresos + totalComprasInventario;
+
 
     const porCategoria = movimientos.reduce((acc: any, m) => {
       if (!acc[m.categoria]) acc[m.categoria] = { ingreso: 0, egreso: 0 };
@@ -269,9 +263,13 @@ export class FinancieroService {
     });
     const totalVentasHoy = ventasHoy.reduce((acc, p) => acc + Number(p.total), 0);
 
-    const { ventasPorMetodoPago, totalVentasRango, cantidadPedidosRango } = await this.ventasPorMetodoPagoEnRango(empresaId, fechaDesde, fechaHasta);
+    const { ventasPorMetodoPago, totalVentasRango, cantidadPedidosRango, ajusteCartera } = await this.ventasPorMetodoPagoEnRango(empresaId, fechaDesde, fechaHasta);
 
+    const ingresosDevengados = totalIngresos + ajusteCartera;
+    const utilidad = ingresosDevengados - totalEgresos + totalComprasInventario;
     return {
+      ingresosDevengados,
+      ajusteCartera,
       totalIngresos,
       totalEgresos,
       totalComprasInventario,
@@ -292,8 +290,10 @@ export class FinancieroService {
     for (const m of movimientos) {
       const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date(m.fecha));
       const d = evolucion.get(fecha) || { ingreso: 0, egreso: 0 };
-      if (m.tipo === 'INGRESO') d.ingreso += Number(m.monto);
-      else if (m.categoria !== 'VENTA') d.egreso += Number(m.monto);
+      if (m.categoria === 'COSTO_VENTA' && m.tipo === 'INGRESO') d.egreso -= Number(m.monto);
+      else if (m.tipo === 'INGRESO') d.ingreso += Number(m.monto);
+      else if (m.categoria === 'VENTA') d.ingreso -= Number(m.monto);
+      else d.egreso += Number(m.monto);
       evolucion.set(fecha, d);
     }
 

@@ -245,7 +245,7 @@ export default function FinancieroPage() {
                 <div className="bg-green-500/10 p-2 rounded-lg">
                   <TrendingUp size={18} className="text-green-400" />
                 </div>
-                <span className="text-gray-400 text-sm">Total ingresos</span>
+                <span className="text-gray-400 text-sm">Ingresos cobrados netos</span>
               </div>
               <div className="text-2xl font-bold text-white">${resumen?.totalIngresos?.toLocaleString() || 0}</div>
             </div>

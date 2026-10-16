@@ -4,7 +4,7 @@
 
 Cada sucursal deberá tener su propia base operativa. Actualmente existen dos empresas, cada una con una única sucursal principal (empresa/sucursal 1/1 y 2/2). La aplicación productiva todavía usa una base compartida. No se ha cambiado su conexión ni se ha activado el aislamiento físico.
 
-La facturación electrónica queda fuera de esta ampliación. Los cajeros podrán operar crédito y devoluciones cuando esos flujos estén implementados y verificados. Los traslados no se habilitan mientras las empresas solo tengan su sede principal.
+La facturación electrónica queda fuera de esta ampliación. Los cajeros están autorizados para operar crédito y devoluciones. La ampliación de estos flujos se prueba por separado del cambio de conexiones. Los traslados no se habilitan mientras las empresas solo tengan su sede principal.
 
 ## Respaldo previo
 
@@ -25,4 +25,6 @@ Las URL con credenciales no pertenecen al repositorio ni a este documento. La re
 
 ## Entregas aún pendientes
 
-El enrutamiento y la migración física por sede, crédito desde el POS con cobros por caja, devoluciones parciales/reembolsos y sus efectos en inventario, puntos, caja y reportes no están terminados. No deben presentarse como publicados por las entregas de Excel, antigüedad, órdenes de compra o costos históricos.
+El enrutamiento y la migración física por sede siguen pendientes. `api/src/prisma/sede-databases.ts` aporta el registro de destinos: rechaza compartir una base con el control u otra sede (también detecta aliases de pooling), exige destinos configurados y bloquea sedes sin asignación. No está conectado a PrismaService ni activa separación por sí solo. Sus pruebas no sustituyen la migración de datos, el enrutamiento autenticado, los procesos programados ni las pruebas de aislamiento reales.
+
+Crédito y devoluciones tienen una migración aditiva independiente (`20261016020000_credito_devoluciones`). Se probó en la copia de Neon: las 54 tablas previas conservaron sus huellas. También se comprobó el recorrido real de venta a crédito, abono, devolución parcial, liquidación y devolución total, con saldos finales de inventario, cartera y caja correctos. Todos los datos de ese recorrido se revirtieron. El estado de publicación debe verificarse en los despliegues; estas pruebas no implican que el aislamiento físico esté publicado.

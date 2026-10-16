@@ -607,6 +607,7 @@ enum EstadoPedido {
 }
 
 enum MetodoPago {
+  CREDITO
   EFECTIVO
   TARJETA
   TRANSFERENCIA
@@ -666,6 +667,10 @@ model Pedido {
   claveIdempotencia String? @unique
   consumoInventario Json?
   costoVentaHistorico Decimal? @db.Decimal(14, 4)
+  puntosCreditoPendientes Int @default(0)
+  devueltoTotal Boolean @default(false)
+  cuentaCredito CuentaAdministrativa?
+  operacionesCaja OperacionVentaCaja[]
   pedidoWeb PedidoWeb?
 
   sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])
@@ -706,6 +711,8 @@ model CuentaAdministrativa {
   tipo String
   categoria CategoriaMovimiento @default(OTROS)
   compraGastoId Int? @unique
+  pedidoId Int? @unique
+  pedido Pedido? @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   gastoRecurrenteId Int?
   periodoRecurrente String?
   tercero String
@@ -838,6 +845,7 @@ model DetallePedido {
   exclusiones    String[]
   observacion    String?
   costoVentaHistorico Decimal? @db.Decimal(14, 4)
+  consumoInventario Json?
 
   // Presentación vendida (ej. "Tarro" vs "Unidad"): se guarda una copia del
   // nombre y del factor de unidades base al momento de la venta, para que el
@@ -995,10 +1003,31 @@ model Caja {
   sucursal Sucursal     @relation(fields: [sucursalId], references: [id])
   usuario  Usuario      @relation(fields: [usuarioId], references: [id])
   pedidos  Pedido[]
+  operacionesVentas OperacionVentaCaja[]
   eventos  EventoCaja[]
   retiroEfectivo RetiroEfectivoCaja?
 
   @@map("cajas")
+}
+
+model OperacionVentaCaja {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  pedidoId Int
+  cajaId Int
+  usuarioId Int
+  clave String @unique
+  tipo String
+  metodoPago MetodoPago
+  monto Decimal @db.Decimal(12, 2)
+  motivo String
+  detalle Json?
+  creadoEn DateTime @default(now())
+  pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  caja Caja @relation(fields: [cajaId], references: [id], onDelete: Restrict)
+  @@index([empresaId, pedidoId])
+  @@index([cajaId])
+  @@map("operaciones_venta_caja")
 }
 
 model RetiroEfectivoCaja {

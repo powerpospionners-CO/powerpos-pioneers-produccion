@@ -95,7 +95,7 @@ export function resumirVentas(
     sucursal.total += Number(venta.total);
     sucursal.cantidad++;
     sucursales.set(venta.sucursalId, sucursal);
-    const pagos = venta.pagos.length
+    const pagos = venta.metodoPago === 'CREDITO' ? [] : venta.pagos.length
       ? venta.pagos
       : [{ metodoPago: venta.metodoPago, monto: venta.total }];
     for (const pago of pagos)
@@ -222,10 +222,32 @@ export class EstadisticasService {
         orderBy: { nombre: 'asc' },
       }),
     ]);
+    const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { empresaId, pedido: alcance, creadoEn: { gte: anteriorDesde, lt: hasta } }, include: { pedido: { select: { sucursalId: true, sucursal: { select: { nombre: true } } } } } });
     const resumen = resumirVentas(actuales, desde, dias);
-    const totalAnterior = Number(anteriores._sum.total || 0);
+    const ventasBrutas = resumen.ventas;
+    let devoluciones = 0;
+    const medios = new Map(resumen.medios.map(m=>[m.medio,m.monto]));
+    for (const op of operaciones.filter(o=>o.creadoEn>=desde)) {
+      medios.set(op.metodoPago, (medios.get(op.metodoPago)||0)+Number(op.monto)*(op.tipo==='DEVOLUCION'?-1:1));
+      if (op.tipo !== 'DEVOLUCION') continue;
+      const valor = Number((op.detalle as any)?.valorTotal||0); devoluciones += valor;
+      const local = new Date(op.creadoEn.getTime()-5*3600000);
+      const diaria = resumen.diarias.find(d=>d.fecha===local.toISOString().slice(0,10));
+      if (diaria) diaria.total = redondear(diaria.total-valor);
+      const hora = resumen.horas[local.getUTCHours()]; hora.total=redondear(hora.total-valor); hora.promedioDiario=redondear(hora.total/dias);
+      let sucursal = resumen.sucursales.find(s=>s.id===op.pedido.sucursalId);
+      if (!sucursal) { sucursal={id:op.pedido.sucursalId,nombre:op.pedido.sucursal.nombre,total:0,cantidad:0}; resumen.sucursales.push(sucursal); }
+      sucursal.total=redondear(sucursal.total-valor);
+    }
+    resumen.ventas=redondear(ventasBrutas-devoluciones);
+    resumen.ticketPromedio=resumen.cantidad ? redondear(resumen.ventas/resumen.cantidad) : 0;
+    resumen.medios=[...medios].map(([medio,monto])=>({medio,monto:redondear(monto)}));
+    const totalAnterior = Number(anteriores._sum.total || 0) - operaciones.filter(o=>o.creadoEn<desde && o.tipo==='DEVOLUCION').reduce((s,o)=>s+Number((o.detalle as any)?.valorTotal||0),0);
     return {
       ...resumen,
+      ventasBrutas,
+      devoluciones: redondear(devoluciones),
+      ventasCredito: redondear(actuales.filter(p=>p.estado!=='ANULADO' && p.metodoPago==='CREDITO').reduce((s,p)=>s+Number(p.total),0)),
       semanales: agruparDias(resumen.diarias, 'semana'),
       mensuales: agruparDias(resumen.diarias, 'mes'),
       filtro: {

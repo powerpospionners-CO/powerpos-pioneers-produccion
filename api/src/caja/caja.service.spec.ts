@@ -22,6 +22,7 @@ function escenario() {
     ],
   };
   const db: any = {
+    operacionVentaCaja: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     sucursal: {
       findFirst: jest.fn().mockResolvedValue(caja.sucursal),
@@ -53,6 +54,22 @@ function escenario() {
 }
 
 describe('Conciliación de caja', () => {
+  it('incluye abonos y reembolsos en el turno sin sumar ventas a crédito como efectivo', async () => {
+    const { service, db, caja } = escenario();
+    caja.pedidos = [{ estado: 'ENTREGADO', metodoPago: 'CREDITO', total: 500 }];
+    db.operacionVentaCaja.findMany.mockResolvedValue([{ tipo: 'COBRO_CREDITO', metodoPago: 'EFECTIVO', monto: 70 }, { tipo: 'DEVOLUCION', metodoPago: 'EFECTIVO', monto: 20 }]);
+    expect(await service.obtenerCajaAbierta(2, 4)).toMatchObject({ totalVentas: 500, totalEfectivo: 50, totalEsperado: 150 });
+    expect(await service.cerrarCaja(1, { montoFinal: 150 }, 3, false, 4)).toMatchObject({ montoEsperado: 150, diferencia: 0 });
+  });
+
+  it('permite cerrar sin retiro cuando un reembolso usó parte de la base', async () => {
+    const { service, db, caja } = escenario();
+    caja.pedidos = [];
+    caja.sucursal.baseEfectivoCaja = 100;
+    caja.sucursal.empresa.recaudoEfectivoHabilitado = true;
+    db.operacionVentaCaja.findMany.mockResolvedValue([{ tipo: 'DEVOLUCION', metodoPago: 'EFECTIVO', monto: 50 }]);
+    expect(await service.cerrarCaja(1, { montoFinal: 50, montoRetirado: 0 }, 3, false, 4)).toMatchObject({ montoEsperado: 50, diferencia: 0 });
+  });
   it('cuenta solo efectivo, conserva el total comercial y excluye anulaciones', async () => {
     const { service } = escenario();
     const resultado = await service.cerrarCaja(

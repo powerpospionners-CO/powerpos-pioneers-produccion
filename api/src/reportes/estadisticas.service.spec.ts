@@ -77,7 +77,7 @@ describe('Estadísticas de negocio', () => {
     expect(datos.medios).toEqual([{ medio: 'EFECTIVO', monto: 100 }]);
   });
   it('rechaza una sucursal ajena antes de leer sus ventas', async () => {
-    const db: any = {
+    const db: any = { operacionVentaCaja: { findMany: jest.fn().mockResolvedValue([]) },
       sucursal: { findFirst: jest.fn().mockResolvedValue(null) },
       pedido: { findMany: jest.fn() },
     };
@@ -101,7 +101,7 @@ describe('Estadísticas de negocio', () => {
     ).rejects.toThrow('366 días');
   });
   it('consulta ambos periodos con aislamiento de empresa y sin solapar límites', async () => {
-    const db: any = {
+    const db: any = { operacionVentaCaja: { findMany: jest.fn().mockResolvedValue([]) },
       sucursal: { findMany: jest.fn().mockResolvedValue([]) },
       pedido: {
         count: jest.fn().mockResolvedValue(0),

@@ -27,6 +27,24 @@ function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado
 describe('Pedidos comerciales', () => {
   const venta = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 5, cantidad: 2 }] };
 
+  it('entrega crédito, descuenta existencias y registra cartera sin inventar efectivo', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    db.cliente = { findFirst: jest.fn().mockResolvedValue({ id: 9, nombre: 'Cliente' }), update: jest.fn() };
+    db.cuentaAdministrativa = { create: jest.fn() };
+    await service.crearEnTransaccion({ ...venta, clienteId: 9, condicionPago: 'CREDITO', pagos: [], cambio: 0, claveIdempotencia: 'credito-1', vencimientoCredito: '2099-01-01' }, 3, 1, db);
+    expect(db.producto.updateMany).toHaveBeenCalled();
+    expect(db.cuentaAdministrativa.create).toHaveBeenCalledWith({ data: expect.objectContaining({ empresaId: 1, sucursalId: 2, pedidoId: 8, tipo: 'COBRAR', monto: 20000, saldo: 20000 }) });
+    expect(db.movimientoFinanciero.create).not.toHaveBeenCalled();
+    expect(db.cliente.update).not.toHaveBeenCalled();
+    expect(db.pedido.create.mock.calls[0][0].data).toMatchObject({ metodoPago: 'CREDITO', puntosGanados: 0, pagos: { create: [] } });
+  });
+
+  it('rechaza crédito sin cliente antes de entregar mercancía', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    await expect(service.crearEnTransaccion({ ...venta, condicionPago: 'CREDITO', claveIdempotencia: 'credito-2', vencimientoCredito: '2099-01-01' }, 3, 1, db)).rejects.toThrow('requiere cliente');
+    expect(db.producto.updateMany).not.toHaveBeenCalled();
+  });
+
   it('entrega la venta comercial y descuenta dos unidades de stock', async () => {
     const { db, service } = escenario('SUPERMERCADO');
     const resultado = await service.crearEnTransaccion(venta, 3, 1, db);

@@ -12,6 +12,7 @@ function escenario() {
     puntosCanjeados: 0,
   };
   const db: any = {
+    operacionVentaCaja: { count: jest.fn().mockResolvedValue(0) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     empresa: {
       findUnique: jest.fn().mockResolvedValue({ tipoNegocio: 'RESTAURANTE' }),

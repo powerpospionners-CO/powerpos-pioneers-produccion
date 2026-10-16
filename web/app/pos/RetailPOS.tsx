@@ -6,8 +6,10 @@ import api from '@/lib/api';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import CajaControl from '@/components/CajaControl';
+import ClienteCredito from '@/components/ClienteCredito';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import VentasTurno from '@/components/VentasTurno';
+import OperacionesVenta from '@/components/OperacionesVenta';
 import VentasPendientes from '@/components/VentasPendientes';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
@@ -54,9 +56,11 @@ export default function RetailPOS() {
   // nuevo) para que el campo no "rebote" al valor viejo en cada tecla.
   const [borradorCantidad, setBorradorCantidad] = useState<Record<string, string>>({});
   const [caja, setCaja] = useState<Caja | null>(null);
+  const intentoVenta = useRef<{ firma: string; clave: string } | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
+  const [clienteCreditoId, setClienteCreditoId] = useState<number | null>(null);
   const [aviso, setAviso] = useState('');
   const [ultimoRecibo, setUltimoRecibo] = useState<any>(null);
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
@@ -353,15 +357,26 @@ export default function RetailPOS() {
       sucursalId: usuario?.sucursalId,
       metodoPago: pago.metodoPago,
       pagos: pago.pagos,
+      clienteId: clienteCreditoId,
+      condicionPago: pago.condicionPago,
+      vencimientoCredito: pago.vencimientoCredito,
       items: carrito.map(({ item, cantidad }) => ({ productoId: item.productoId, presentacionId: item.presentacionId, codigoVarianteId: item.codigoVarianteId, cantidad })),
       descuento,
       cambio: pago.cambio,
       claveIdempotencia: generarClaveVenta(),
     };
+    const firma = JSON.stringify({ ...payload, claveIdempotencia: undefined });
+    if (intentoVenta.current && intentoVenta.current.firma !== firma) {
+      setError('Hay una venta pendiente de confirmar. Reintenta con los mismos datos antes de cambiarla.'); setProcesando(false); return;
+    }
+    intentoVenta.current ??= { firma, clave: payload.claveIdempotencia };
+    payload.claveIdempotencia = intentoVenta.current.clave;
     try {
       const { data } = await api.post('/pedidos', payload);
+      intentoVenta.current = null;
       setCarrito([]);
       setDescuentoInput('');
+      setClienteCreditoId(null);
       setUltimoRecibo(data);
       setModalCobroAbierto(false);
       setFallaImpresion(false);
@@ -392,6 +407,7 @@ export default function RetailPOS() {
         // porque para el cajero la venta ya ocurrió — el cliente ya se fue.
         try {
           encolarVentaPendiente(usuario.empresaId, usuario.sucursalId, payload.claveIdempotencia, payload);
+          intentoVenta.current = null;
         } catch {
           setError('No se pudo guardar la venta en este equipo. Conserva los datos del cobro y verifica si llegó al servidor antes de repetirla.');
           return;
@@ -403,7 +419,8 @@ export default function RetailPOS() {
         setAviso('Sin conexión: la venta quedó guardada en este equipo y se enviará sola cuando vuelva la señal.');
         if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
       } else {
-        setError(e?.response?.data?.message || 'No se pudo registrar la venta.');
+        if (e?.response?.status >= 400 && e?.response?.status < 500) intentoVenta.current = null;
+        setError(e?.response?.data?.message || 'No se pudo confirmar la venta. Reintenta con los mismos datos.');
       }
     } finally { setProcesando(false); buscarRef.current?.focus(); }
   };
@@ -433,7 +450,7 @@ export default function RetailPOS() {
     if (!ventana) { setError('El navegador bloqueó la ventana del recibo. Permite ventanas emergentes para imprimir.'); return; }
     const pagos = Array.isArray(pedido.pagos) && pedido.pagos.length > 1
       ? pedido.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
-      : [`PAGO  ${pedido.metodoPago}`];
+      : [pedido.metodoPago === 'CREDITO' ? 'A CREDITO - PENDIENTE DE COBRO' : `PAGO  ${pedido.metodoPago}`];
     const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${pedido.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
       ...(pedido.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.varianteSabor ? ` — ${d.varianteSabor}` : ''}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
       '--------------------------------', `TOTAL  ${moneda(Number(pedido.total))}`, ...pagos, 'Gracias por su compra'];
@@ -575,15 +592,16 @@ export default function RetailPOS() {
                 )}
               </div>
             )}
-            <div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div>
+            <ClienteCredito id={clienteCreditoId} onChange={setClienteCreditoId} /><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div>
             <button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button>
           </div>
         </aside>
       </div>
     </div>
+    <OperacionesVenta onCambio={()=>{ void cargar(); }} />
     <VentasTurno cajaId={caja?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaDeOtro} />
     {modalCobroAbierto && (
-      <ModalCobro total={total} procesando={procesando} onConfirmar={vender} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+      <ModalCobro permitirCredito={!!clienteCreditoId} total={total} procesando={procesando} onConfirmar={vender} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
     )}
     {cambioAMostrar !== null && (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">

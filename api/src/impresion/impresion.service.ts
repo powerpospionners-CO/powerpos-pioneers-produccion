@@ -522,7 +522,7 @@ export class ImpresionService {
         lineas.push(`${this.lineaMonto(pago.metodoPago, Number(pago.monto))}\n`);
       }
     } else if (pedido.metodoPago) {
-      lineas.push(`Pago: ${pedido.metodoPago}\n`);
+      lineas.push(pedido.metodoPago === 'CREDITO' ? 'A CREDITO - PENDIENTE DE COBRO\n' : `Pago: ${pedido.metodoPago}\n`);
     }
 
     // Cuánto pagó en efectivo y cuánto se le devolvió — solo aplica si hubo

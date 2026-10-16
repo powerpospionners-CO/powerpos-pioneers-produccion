@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class ReportesService {
       },
       include: {
         usuario: { select: { id: true, nombre: true } },
+        operacionesCaja: { where: { tipo: 'DEVOLUCION' }, select: { detalle: true } },
       },
     });
 
@@ -24,7 +26,7 @@ export class ReportesService {
         totalVentas: 0,
         cantidadPedidos: 0,
       };
-      actual.totalVentas += Number(pedido.total);
+      actual.totalVentas += Number(pedido.total) - pedido.operacionesCaja.reduce((s,o)=>s+Number((o.detalle as any)?.valorTotal||0),0);
       actual.cantidadPedidos += 1;
       porEmpleado.set(pedido.usuarioId, actual);
     }
@@ -41,7 +43,7 @@ export class ReportesService {
     const clientes = await this.prisma.cliente.findMany({
       where: { empresaId, activo: true },
       include: {
-        pedidos: { where: { estado: { not: 'ANULADO' } } },
+        pedidos: { where: { estado: { not: 'ANULADO' } }, include: { operacionesCaja: { where: { tipo: 'DEVOLUCION' }, select: { detalle: true } } } },
       },
     });
 
@@ -49,7 +51,7 @@ export class ReportesService {
       .map((c) => ({
         id: c.id,
         nombre: c.nombre,
-        totalGastado: c.pedidos.reduce((acc, p) => acc + Number(p.total), 0),
+        totalGastado: c.pedidos.reduce((acc, p) => acc + Number(p.total) - p.operacionesCaja.reduce((s,o)=>s+Number((o.detalle as any)?.valorTotal||0),0), 0),
         cantidadPedidos: c.pedidos.length,
         puntos: c.puntos,
       }))
@@ -80,8 +82,9 @@ export class ReportesService {
           creadoEn: { gte: desde, ...(hasta && { lte: hasta }) },
         },
       });
+      const devoluciones = await this.prisma.operacionVentaCaja.findMany({ where: { empresaId, tipo: 'DEVOLUCION', creadoEn: { gte: desde, ...(hasta && { lte: hasta }) } }, select: { detalle: true } });
       return {
-        total: pedidos.reduce((acc, p) => acc + Number(p.total), 0),
+        total: pedidos.reduce((acc, p) => acc + Number(p.total), 0) - devoluciones.reduce((s,o)=>s+Number((o.detalle as any)?.valorTotal||0),0),
         cantidadPedidos: pedidos.length,
       };
     };
@@ -183,6 +186,7 @@ export class ReportesService {
         creadoEn: { gte: inicio, lte: fin },
       },
       include: {
+        pagos: true,
         usuario: { select: { nombre: true, email: true } },
         cliente: { select: { nombre: true, documento: true, telefono: true } },
         detalles: {
@@ -195,14 +199,12 @@ export class ReportesService {
       orderBy: { creadoEn: 'asc' },
     });
 
-    const totalVentas = pedidos.reduce((acc, pedido) => acc + Number(pedido.total), 0);
+    const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { empresaId, creadoEn: { gte: inicio, lte: fin } } });
+    const devoluciones = operaciones.filter(o=>o.tipo==='DEVOLUCION').reduce((s,o)=>s+Number((o.detalle as any)?.valorTotal||0),0);
+    const totalVentas = pedidos.reduce((acc, pedido) => acc + Number(pedido.total), 0)-devoluciones;
     const cantidadPedidos = pedidos.length;
     const promedioPedido = cantidadPedidos > 0 ? totalVentas / cantidadPedidos : 0;
-    const pagoPorMetodo = pedidos.reduce((acc, pedido) => {
-      const metodo = pedido.metodoPago;
-      acc[metodo] = (acc[metodo] || 0) + Number(pedido.total);
-      return acc;
-    }, {} as Record<string, number>);
+    const pagoPorMetodo = Object.fromEntries(desgloseCobros(pedidos, operaciones).map(m=>[m.metodo,m.total]));
 
     const productosMasVendidos = pedidos
       .flatMap((pedido) => pedido.detalles)
@@ -224,6 +226,7 @@ export class ReportesService {
         inicio: inicio.toISOString(),
         fin: fin.toISOString(),
       },
+      devoluciones,
       totalVentas: Number(totalVentas.toFixed(2)),
       cantidadPedidos,
       promedioPedido: Number(promedioPedido.toFixed(2)),

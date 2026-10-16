@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { ImpresionService } from '../impresion/impresion.service';
 import { bloquearCajaSucursal } from './caja-lock';
+import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 
 const ZONA_BOGOTA = 'America/Bogota';
 
@@ -60,22 +61,12 @@ export class CajaService {
   // Reparte el total de cada venta entre sus medios de pago reales (tabla
   // `pagos`); las ventas anteriores a los pagos mixtos no tienen filas ahí,
   // así que usan `metodoPago` de respaldo para no perder ese histórico.
-  private desglosePorMetodo(pedidos: { total: any; metodoPago: string; pagos?: { metodoPago: string; monto: any }[] }[]) {
-    const mapa = new Map<string, number>();
-    for (const p of pedidos) {
-      if (p.pagos && p.pagos.length > 0) {
-        for (const pago of p.pagos) mapa.set(pago.metodoPago, (mapa.get(pago.metodoPago) || 0) + Number(pago.monto));
-      } else {
-        mapa.set(p.metodoPago, (mapa.get(p.metodoPago) || 0) + Number(p.total));
-      }
-    }
-    return Array.from(mapa.entries()).map(([metodo, total]) => ({ metodo, total }));
+  private desglosePorMetodo(pedidos: { total: any; metodoPago: string; pagos?: { metodoPago: string; monto: any }[] }[], operaciones: { tipo: string; metodoPago: string; monto: unknown }[] = []) {
+    return desgloseCobros(pedidos, operaciones);
   }
 
-  // El dinero que debe contarse físicamente en la caja es solo lo pagado en
-  // efectivo (tarjeta/transferencia/Nequi/Daviplata no entra a la gaveta).
-  private sumarEfectivo(pedidos: { total: any; metodoPago: string; pagos?: { metodoPago: string; monto: any }[] }[]) {
-    return this.desglosePorMetodo(pedidos).find((d) => d.metodo === 'EFECTIVO')?.total || 0;
+  private sumarEfectivo(pedidos: { total: any; metodoPago: string; pagos?: { metodoPago: string; monto: any }[] }[], operaciones: { tipo: string; metodoPago: string; monto: unknown }[] = []) {
+    return this.desglosePorMetodo(pedidos, operaciones).find((d) => d.metodo === 'EFECTIVO')?.total || 0;
   }
 
   // Agrupa por nombre y presentación para que las ventas por unidad no se
@@ -311,7 +302,8 @@ export class CajaService {
 
       const pedidosValidos = caja.pedidos.filter((p) => p.estado !== 'ANULADO');
       const totalVentas = pedidosValidos.reduce((acc, p) => acc + Number(p.total), 0);
-      const ventasPorMetodoPago = this.desglosePorMetodo(pedidosValidos);
+      const operaciones = await tx.operacionVentaCaja.findMany({ where: { cajaId: caja.id } });
+      const ventasPorMetodoPago = this.desglosePorMetodo(pedidosValidos, operaciones);
       const totalEfectivo = ventasPorMetodoPago.find((d) => d.metodo === 'EFECTIVO')?.total || 0;
       const productosVendidos = this.productosVendidos(pedidosValidos);
 
@@ -329,7 +321,7 @@ export class CajaService {
           !Number.isFinite(montoRetirado) ||
           Math.round(montoRetirado * 100) !== montoRetirado * 100 ||
           montoRetirado < 0 ||
-          montoRetirado > totalEfectivo)
+          montoRetirado > Math.max(0, totalEfectivo))
       ) {
         throw new BadRequestException(
           'El retiro debe ser un valor válido y no puede superar las ventas en efectivo del turno',
@@ -512,7 +504,8 @@ export class CajaService {
       (acc, p) => acc + Number(p.total),
       0,
     );
-    const totalEfectivo = this.sumarEfectivo(pedidosValidos);
+    const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { cajaId: caja.id } });
+    const totalEfectivo = this.sumarEfectivo(pedidosValidos, operaciones);
     const totalEsperado = Number(caja.montoInicial) + totalEfectivo;
 
     return {
@@ -572,7 +565,8 @@ export class CajaService {
     if (!caja) throw new NotFoundException('Caja no encontrada');
 
     const totalVentas = caja.pedidos.reduce((acc, p) => acc + Number(p.total), 0);
-    const ventasPorMetodoPago = this.desglosePorMetodo(caja.pedidos);
+    const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { cajaId: caja.id } });
+    const ventasPorMetodoPago = this.desglosePorMetodo(caja.pedidos, operaciones);
     const totalEfectivo = ventasPorMetodoPago.find((d) => d.metodo === 'EFECTIVO')?.total || 0;
     const retiro = caja.retiroEfectivo;
     const montoEsperado =
@@ -669,7 +663,8 @@ export class CajaService {
     // El `where` de arriba ya excluye anuladas; se vuelve a filtrar aquí por
     // seguridad (defensivo, igual que en cerrarCaja/obtenerCajaAbierta).
     const pedidosValidos = caja.pedidos.filter((p) => p.estado !== 'ANULADO');
-    const totalEfectivo = this.sumarEfectivo(pedidosValidos);
+    const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { cajaId: caja.id } });
+    const totalEfectivo = this.sumarEfectivo(pedidosValidos, operaciones);
     const montoEsperado =
       Number(caja.montoInicial) +
       totalEfectivo -
