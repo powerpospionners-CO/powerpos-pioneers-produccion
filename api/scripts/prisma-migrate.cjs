@@ -17,7 +17,7 @@ async function ejecutarMigraciones(comando, env = process.env) {
   const DATABASE_URL = conexionMigraciones(env);
   const ejecutar = url => {
     const resultado = spawnSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', comando], {
-      stdio: 'pipe', encoding:'utf8', env: { ...env, DATABASE_URL:url, DIRECT_DATABASE_URL:url }, timeout:180000,
+      cwd:require('node:path').resolve(__dirname,'..'), stdio: 'pipe', encoding:'utf8', env: { ...env, DATABASE_URL:url, DIRECT_DATABASE_URL:url }, timeout:180000,
     });
     if (resultado.error || resultado.status !== 0) throw new Error('No se pudieron aplicar o verificar las migraciones; no se habilitará el despliegue');
   };
