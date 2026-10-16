@@ -51,6 +51,8 @@ export default function RetailPOS() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [carrito, setCarrito] = useState<Linea[]>([]);
+  const [ultimoAgregado, setUltimoAgregado] = useState<{ key: string } | null>(null);
+  const listaCarritoRef = useRef<HTMLDivElement>(null);
   // Mientras el cajero escribe la cantidad se guarda aquí el texto tal cual
   // (incluyendo vacío, mientras borra el número anterior para escribir uno
   // nuevo) para que el campo no "rebote" al valor viejo en cada tecla.
@@ -277,6 +279,10 @@ export default function RetailPOS() {
   const conStock = useMemo(() => itemsVendibles.filter((item) => !(item.controlaStock && item.stockBase < item.factorUnidades)), [itemsVendibles]);
 
   const termino = busqueda.trim().toLocaleLowerCase('es-CO');
+  const ultimaLinea = carrito.find(linea => linea.item.key === ultimoAgregado?.key);
+  useEffect(() => {
+    if (ultimoAgregado && !termino) listaCarritoRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [ultimoAgregado, termino]);
   const visible = useMemo(() => {
     if (!termino) return conStock;
     return conStock.filter((item) =>
@@ -306,6 +312,7 @@ export default function RetailPOS() {
         : [...actual, { item, cantidad: 1 }];
     });
     setBusqueda('');
+    setUltimoAgregado({ key: item.key });
     buscarRef.current?.focus();
   };
   const cambiarCantidad = (item: ItemVendible, cambio: number) => {
@@ -507,6 +514,9 @@ export default function RetailPOS() {
         /></div>
         <section className="min-w-0 rounded-2xl border border-gray-800 bg-gray-900 p-4">
           <form onSubmit={escanear} className="mb-4 flex items-center gap-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3"><Barcode className="text-orange-500" size={23} /><input ref={buscarRef} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setError(''); }} placeholder="Código de barras o nombre del producto" aria-label="Código de barras o nombre del producto" className="min-w-0 flex-1 bg-transparent text-white outline-none" /><button type="submit" aria-label="Buscar código" className="text-gray-400 hover:text-orange-500"><Search size={20} /></button></form>
+          {ultimaLinea && <div role="status" aria-live="polite" aria-atomic="true" className="mb-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-sm text-orange-200">
+            Último agregado: <strong>{ultimaLinea.item.nombre}</strong> · Cantidad en la venta: <strong>{ultimaLinea.cantidad}{ultimaLinea.item.porGramo ? ` ${ultimaLinea.item.unidadGranel}` : ''}</strong> · {moneda(ultimaLinea.item.precio * ultimaLinea.cantidad)}
+          </div>}
           {termino ? (
             <div className="max-h-[68vh] space-y-2 overflow-y-auto pr-1">
               {visible.map((item) => (
@@ -527,10 +537,10 @@ export default function RetailPOS() {
               {!visible.length && <div className="py-14 text-center text-gray-400">No hay productos con existencias que coincidan.</div>}
             </div>
           ) : (
-            <div className="max-h-[68vh] space-y-3 overflow-y-auto pr-1">
+            <div ref={listaCarritoRef} className="max-h-[68vh] space-y-3 overflow-y-auto pr-1">
               {carrito.length === 0 && <p className="py-16 text-center text-sm text-gray-500">Escanea un código de barras o busca un producto por nombre para comenzar la venta.</p>}
-              {carrito.map(({ item, cantidad }) => (
-                <div key={item.key} className="rounded-xl bg-gray-800 p-3">
+              {[...carrito].reverse().sort((a, b) => Number(b.item.key === ultimoAgregado?.key) - Number(a.item.key === ultimoAgregado?.key)).map(({ item, cantidad }) => (
+                <div key={item.key} className={`rounded-xl bg-gray-800 p-3 ${item.key === ultimoAgregado?.key ? 'ring-2 ring-orange-500' : ''}`}>
                   <div className="flex justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-white">{item.nombre}</div>
