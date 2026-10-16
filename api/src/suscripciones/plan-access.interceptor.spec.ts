@@ -14,6 +14,24 @@ describe('PlanAccessInterceptor optional features', () => {
   const interceptor = new PlanAccessInterceptor();
   const handler = { handle: () => of('ok') };
 
+  it('allows inventory preparations even when the kitchen screen is disabled', async () => {
+    await expect(firstValueFrom(interceptor.intercept(
+      contextFor('/preparaciones', {
+        empresaId: 1, rol: 'ADMIN_EMPRESA', empresaPlan: 'PREMIUM',
+        permisos: { inventario: true, cocina: false },
+      }), handler,
+    ))).resolves.toBe('ok');
+  });
+
+  it('blocks preparation writes when inventory access is disabled', async () => {
+    await expect(firstValueFrom(interceptor.intercept(
+      contextFor('/preparaciones/12/lotes', {
+        empresaId: 1, rol: 'ADMIN_EMPRESA', empresaPlan: 'PREMIUM',
+        permisos: { inventario: false, cocina: true },
+      }), handler,
+    ))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('blocks distributor endpoints when disabled', async () => {
     await expect(
       firstValueFrom(interceptor.intercept(

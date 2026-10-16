@@ -10,6 +10,7 @@ import RetailInventario from './RetailInventario';
 function RestauranteInventario() {
   const [ingredientes, setIngredientes] = useState<any[]>([]);
   const [preparaciones, setPreparaciones] = useState<any[]>([]);
+  const [errorCarga, setErrorCarga] = useState('');
   const [modal, setModal] = useState<any>(null);
   const [modalNuevo, setModalNuevo] = useState(false);
   const [modalEditar, setModalEditar] = useState<any>(null);
@@ -56,12 +57,16 @@ function RestauranteInventario() {
   }, [verInactivos]);
 
   const cargarDatos = async () => {
-    const [inventarioResp, preparacionesResp] = await Promise.all([
+    const [inventarioResp, preparacionesResp] = await Promise.allSettled([
       api.get(`/inventario?incluirInactivos=${verInactivos}`),
       api.get('/preparaciones'),
     ]);
-    setIngredientes(inventarioResp.data);
-    setPreparaciones(preparacionesResp.data);
+    if (inventarioResp.status === 'fulfilled') setIngredientes(inventarioResp.value.data);
+    if (preparacionesResp.status === 'fulfilled') setPreparaciones(preparacionesResp.value.data);
+    const fallos = [inventarioResp, preparacionesResp].filter((resultado) => resultado.status === 'rejected');
+    setErrorCarga(fallos.length
+      ? 'No se pudo actualizar toda la información. Revisa tu conexión o tus permisos y vuelve a intentar.'
+      : '');
   };
 
   const verHistorial = async (ing: any) => {
@@ -204,6 +209,7 @@ function RestauranteInventario() {
         <Navbar />
 
         <div className="flex-1 p-6 space-y-6">
+          {errorCarga && <p role="alert" className="rounded-xl border border-amber-700 bg-amber-950 p-3 text-amber-200">{errorCarga}</p>}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <div className="flex items-center gap-3 mb-3">
