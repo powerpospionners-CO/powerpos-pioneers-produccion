@@ -17,7 +17,7 @@ async function main(){
       if(!admin||!process.env.JWT_SECRET)throw Error('No se puede verificar la sesión');
       const token=jwt.sign({sub:admin.id,email:admin.email,rol:admin.rol,empresaId:sede.empresaId,sucursalId:sede.sucursalId},process.env.JWT_SECRET,{expiresIn:'2m'});
       const resultados=[];
-      for(const ruta of ['/empresa','/preparaciones']){
+      for(const ruta of ['/empresa','/preparaciones','/inventario?incluirInactivos=false','/tienda-admin/resumen']){
         const resp=await fetch(origen+ruta,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});
         const data=await resp.json();
         if(!resp.ok||(ruta==='/empresa'&&data.id!==sede.empresaId))throw Error('La consulta autenticada falló');

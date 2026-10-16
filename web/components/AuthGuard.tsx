@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { irALoginGenerico } from '@/lib/navegacion';
@@ -10,6 +10,12 @@ import { useProtegerAtras } from '@/lib/useProtegerAtras';
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { token, usuario, hydrated, inicioSesion, logout } = useAuthStore();
+  const [mantenimiento, setMantenimiento] = useState('');
+  useEffect(() => {
+    const actualizar = (event: Event) => setMantenimiento(String((event as CustomEvent).detail || ''));
+    window.addEventListener('powerpos:mantenimiento', actualizar);
+    return () => window.removeEventListener('powerpos:mantenimiento', actualizar);
+  }, []);
   useVersionCheck();
   useInactividadLogout();
   useProtegerAtras();
@@ -45,5 +51,5 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!token || !usuario) return null;
 
-  return <>{children}</>;
+  return <>{mantenimiento && <div role="alert" className="sticky top-0 z-[100] border-b border-amber-600 bg-amber-950 px-4 py-3 text-center text-sm text-amber-100">{mantenimiento}</div>}{children}</>;
 }

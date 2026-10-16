@@ -2,7 +2,7 @@
 
 ## Alcance acordado
 
-Cada sucursal deberá tener su propia base operativa. Actualmente existen dos empresas, cada una con una única sucursal principal (empresa/sucursal 1/1 y 2/2). La aplicación productiva todavía usa una base compartida. No se ha cambiado su conexión ni se ha activado el aislamiento físico.
+Cada sucursal deberá tener su propia base operativa. Actualmente existen dos empresas, cada una con una única sucursal principal (empresa/sucursal 1/1 y 2/2). El aislamiento físico quedó activado en producción el 16 de octubre de 2026. Cada sede opera en una base diferente con credenciales propias. La base original se conserva como control e histórico del punto de corte.
 
 La facturación electrónica queda fuera de esta ampliación. Los cajeros están autorizados para operar crédito y devoluciones. La ampliación de estos flujos se prueba por separado del cambio de conexiones. Los traslados no se habilitan mientras las empresas solo tengan su sede principal.
 
@@ -23,11 +23,11 @@ Las URL con credenciales no pertenecen al repositorio ni a este documento. La re
 7. Preparar un corte controlado de escrituras o una sincronización de cambios; una copia tomada mientras siguen entrando ventas no basta para cambiar las conexiones. Comprobar los cambios posteriores a la copia antes del corte.
 8. Cambiar una sede verificada y observar su funcionamiento antes de ampliar. Mantener el origen preservado. Si el destino recibe nuevas operaciones, volver a la base anterior exige conciliar y trasladar esas operaciones; cambiar solo la URL perdería las escrituras nuevas.
 
-## Entregas aún pendientes
+## Diagnóstico previo y validaciones
 
 El diagnóstico `node scripts/auditar-aislamiento-sedes.cjs` lee únicamente IDs, claves de relación y campos de alcance dentro de una transacción de solo lectura. No copia ni cambia datos. Revisa referencias entre empresas, señala relaciones ambiguas y limita el volumen de registros para no cargar historias completas sin control. La ejecución del 16 de octubre revisó 55 modelos y confirmó las sedes 1/1 y 2/2 sin referencias inconsistentes en ese diagnóstico. Identificó fuera del alcance de empresa una configuración de planes, un usuario de control y 16 auditorías. Esos registros requieren tratamiento de control; no deben copiarse indiscriminadamente a las bases operativas. El diagnóstico no demuestra aislamiento físico ni sustituye verificar saldos, dependencias por sede y escrituras concurrentes.
 
-El enrutamiento y la migración física por sede siguen pendientes. `api/src/prisma/sede-databases.ts` aporta el registro de destinos: rechaza compartir una base con el control u otra sede (también detecta aliases de pooling), exige destinos configurados y bloquea sedes sin asignación. No está conectado a PrismaService ni activa separación por sí solo. Sus pruebas no sustituyen la migración de datos, el enrutamiento autenticado, los procesos programados ni las pruebas de aislamiento reales.
+El registro de destinos en `api/src/prisma/sede-databases.ts` detecta bases repetidas, aliases de pooling y sedes no configuradas. PrismaService utiliza el contexto autenticado para resolver la base. La puesta en producción se confirmó con copias, huellas por columna, acceso cruzado denegado y consultas HTTP autenticadas; las pruebas unitarias del registro por sí solas no sustituyen esas comprobaciones.
 
 Crédito y devoluciones tienen una migración aditiva independiente (`20261016020000_credito_devoluciones`). Se probó en la copia de Neon: las 54 tablas previas conservaron sus huellas. También se comprobó el recorrido real de venta a crédito, abono, devolución parcial, liquidación y devolución total, con saldos finales de inventario, cartera y caja correctos. Todos los datos de ese recorrido se revirtieron. El estado de publicación debe verificarse en los despliegues; estas pruebas no implican que el aislamiento físico esté publicado.
 
@@ -54,3 +54,12 @@ En la rama de prueba se copiaron y compararon los valores de todas las columnas 
 6. Reiniciar el servicio para reconectar los canales de eventos/impresión abiertos antes del corte. Verificar lecturas autenticadas por empresa y las conexiones activas. Guardar la evidencia del despliegue y del corte antes de informar que está terminado.
 
 Si falla la copia antes de activar, `node scripts/control-aislamiento.cjs reanudar --production` devuelve las escrituras al origen sin borrar copias. Después de activar y recibir operaciones nuevas está prohibido desactivar el enrutamiento o volver a una versión anterior que use el origen: antes hay que reconciliar las nuevas operaciones. El comando rechaza una reanudación sobre el origen cuando ya existe aislamiento activo.
+
+
+## Resultado del corte productivo
+
+Versión de implementación: `49963ec614d1ccb6cff83f785cffb5abed178541`, desplegada correctamente en Vercel y Railway. El corte suspendió las operaciones con cero operaciones en curso. Se creó el respaldo sin eliminación automática `respaldo-20261016-corte-sedes` (`br-dry-hall-b5y5f47v`), hijo de production. La comparación de solo lectura de sus 54 tablas y 3.201 registros coincidió exactamente con el origen suspendido.
+
+Se verificaron las copias de las sedes 1/1 (110 registros) y 2/2 (3.075 registros). Los registros globales de control se conservaron en el origen; un perfil requerido por referencias se incluyó inactivo y sin credenciales globales. El origen no cambió durante la copia. La activación volvió a comprobar datos y permisos: las credenciales de cada sede no pudieron conectarse a la otra base ni leer las tablas del origen compartido. Se activaron ambas bases y se reanudaron las operaciones en una transacción. La comprobación HTTP autenticada devolvió 200 para empresa y preparaciones en ambas empresas, con el aislamiento activo y la suspensión desactivada.
+
+El esquema MySQL sigue siendo un borrador de compatibilidad. No se realizó una migración a Hostinger ni se cambió PostgreSQL por MySQL. La facturación electrónica continúa fuera de este alcance.

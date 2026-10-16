@@ -18,8 +18,14 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('powerpos:mantenimiento', { detail: '' }));
+    return response;
+  },
   (error) => {
+    if (error.response?.status === 503 && typeof window !== 'undefined' && String(error.response?.data?.message || '').startsWith('Estamos verificando las bases de datos')) {
+      window.dispatchEvent(new CustomEvent('powerpos:mantenimiento', { detail: 'Mantenimiento temporal: estamos verificando las bases de datos. Espera para reintentar tu operación.' }));
+    }
     if (
       error.response?.status === 403 &&
       error.response?.data?.error === 'SUBSCRIPTION_EXPIRED' &&
