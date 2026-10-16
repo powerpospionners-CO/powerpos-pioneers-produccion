@@ -2,9 +2,10 @@
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Download, Printer, Wallet, CreditCard, Smartphone, Edit, Trash2, Boxes } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Printer, Wallet, CreditCard, Smartphone, Edit, Trash2, Boxes } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import ExcelDownload from '@/components/ExcelDownload';
 
 type Periodo = 'hoy' | 'mes' | 'anio' | 'personalizado';
 
@@ -42,7 +43,6 @@ export default function FinancieroPage() {
   const [editando, setEditando] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorForm, setErrorForm] = useState('');
-  const [descargando, setDescargando] = useState(false);
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [desdePersonalizado, setDesdePersonalizado] = useState('');
   const [hastaPersonalizado, setHastaPersonalizado] = useState('');
@@ -111,27 +111,7 @@ export default function FinancieroPage() {
     cargarMovimientos();
   };
 
-  const descargarExcel = async () => {
-    setDescargando(true);
-    try {
-      const params: any = {};
-      if (rango.desde) params.fechaDesde = rango.desde;
-      if (rango.hasta) params.fechaHasta = rango.hasta;
-      const respuesta = await api.get('/financiero/exportar', { params, responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
-      const enlace = document.createElement('a');
-      enlace.href = url;
-      enlace.download = `reporte-financiero-${periodo}.xlsx`;
-      document.body.appendChild(enlace);
-      enlace.click();
-      enlace.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setDescargando(false);
-    }
-  };
+
 
   const abrirModalNuevo = () => {
     setEditando(null);
@@ -247,14 +227,7 @@ export default function FinancieroPage() {
                 <Printer size={16} />
                 Imprimir
               </button>
-              <button
-                onClick={descargarExcel}
-                disabled={descargando}
-                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
-              >
-                <Download size={16} />
-                {descargando ? 'Descargando...' : 'Descargar Excel'}
-              </button>
+              <ExcelDownload url="/financiero/exportar" filename={`reporte-financiero-${periodo}.xlsx`} params={{ ...(rango.desde ? { fechaDesde: rango.desde } : {}), ...(rango.hasta ? { fechaHasta: rango.hasta } : {}) }} />
             </div>
           </div>
 

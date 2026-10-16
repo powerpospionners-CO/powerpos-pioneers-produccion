@@ -8,9 +8,12 @@ import {
   Post,
   Query,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { CategoriaMovimiento } from '@prisma/client';
+import type { Response } from 'express';
+import { AntiguedadService } from './antiguedad.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -35,7 +38,18 @@ export class AdministracionController {
     private readonly service: AdministracionService,
     private readonly recurrentes: GastosRecurrentesService,
     private readonly conteos: ConteosService,
+    private readonly antiguedad: AntiguedadService,
   ) {}
+  @Get('antiguedad') consultarAntiguedad(@Request() req: { user: ActorAdministrativo }) {
+    return this.antiguedad.consultar(req.user.empresaId);
+  }
+  @Get('antiguedad/exportar') async exportarAntiguedad(@Request() req: { user: ActorAdministrativo }, @Res() res: Response) {
+    const buffer = await this.antiguedad.exportar(req.user.empresaId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="antiguedad-cuentas.xlsx"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
+  }
   @Get('conteos') listarConteos(@Request() req: { user: ActorAdministrativo }) {
     return this.conteos.listar(req.user.empresaId);
   }

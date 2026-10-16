@@ -7,6 +7,7 @@ import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import GastosRecurrentes from "@/components/GastosRecurrentes";
 import ConteosInventario from "@/components/ConteosInventario";
+import AntiguedadCuentas from "@/components/AntiguedadCuentas";
 import { useAuthStore } from "@/store/authStore";
 
 type Proveedor = {
@@ -55,6 +56,7 @@ type Resumen = {
   vencidas: { tipo: string; _sum: { saldo: string }; _count: number }[];
 };
 type Tab =
+  | "antiguedad"
   | "cuentas"
   | "proveedores"
   | "conciliacion"
@@ -269,6 +271,7 @@ function Controles() {
               {(
                 [
                   ["cuentas", "Cuentas y abonos"],
+                  ["antiguedad", "Antigüedad de cuentas"],
                   ["proveedores", "Proveedores"],
                   ["conciliacion", "Conciliación"],
                   ["presupuestos", "Presupuestos"],
@@ -295,6 +298,7 @@ function Controles() {
               ))}
             </nav>
             {cargando && <p role="status">Actualizando información…</p>}
+            {tab === "antiguedad" && <AntiguedadCuentas />}
             {tab === "proveedores" && (
               <section className="grid gap-4 lg:grid-cols-[360px_1fr]">
                 <form onSubmit={crearProveedor} className={panel}>

@@ -87,3 +87,11 @@ Se detectó que PgBouncer conservaba el bloqueo de Prisma de una migración term
 ## Referencia de estadísticas
 
 Se tomó como referencia la captura aportada de Vector POS: ventas por hora, sucursal/consolidado y desglose de pagos. El enlace del video no pudo recuperarse durante la revisión; no se atribuyeron funcionalidades adicionales al video. Comparaciones de cuatro viernes anteriores, propinas, cortesías y estado fiscal quedan para una ampliación con datos y definiciones verificables.
+
+## Exportaciones Excel
+
+Administración incorpora Antigüedad de cuentas: saldos actuales por cobrar/pagar al día, 1–30, 31–60, 61–90 y más de 90 días, con cantidades, totales, gráfica y Excel. Agrega todas las cuentas abiertas de la empresa, sin el límite de 500 de la lista operativa, excluye anuladas y saldadas y considera vencimiento al finalizar el día de Colombia. Las consultas usan una instantánea consistente y mantienen los permisos administrativos. No reconstruye saldos históricos ni registra movimientos. No requiere migración.
+
+Reportes avanzados, Financiero y Estadísticas permiten descargar libros XLSX con encabezados PowerPOS, fecha de generación en Colombia, tablas con filtros, filas alternadas, encabezados inmovilizados y valores monetarios numéricos en COP. Las gráficas se incluyen como imágenes; no son gráficas nativas que se recalculen al editar el libro. Las tablas contienen todos los registros devueltos por los reportes; los rankings gráficos muestran hasta 12 categorías y lo indican. Horas incluye las 24 horas y diario hasta los 93 días admitidos.
+
+Estadísticas exporta los filtros aplicados a los datos cargados (no los cambios del formulario pendientes de consultar). Financiero utiliza el periodo del resumen, también para la hoja de movimientos, independiente del filtro secundario de movimientos de la pantalla. Reportes avanzados conserva el alcance de la pantalla: empleados y clientes históricos, comparativas de semana/mes y rentabilidad estimada con costos actuales. Las exportaciones solo consultan datos, mantienen el alcance por empresa y requieren administrador o gerente. No agregan migraciones.

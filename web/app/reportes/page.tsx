@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import ExcelDownload from '@/components/ExcelDownload';
 import { Trophy, Users, TrendingUp, TrendingDown, Percent } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -78,7 +79,7 @@ export default function ReportesPage() {
         <Navbar />
 
         <div className="flex-1 p-6 space-y-6">
-          <h2 className="text-white text-xl font-bold">Reportes avanzados</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-white text-xl font-bold">Reportes avanzados</h2><ExcelDownload url="/reportes/exportar" filename="reportes-powerpos.xlsx" /></div>
 
           {/* Comparativa por periodo */}
           {periodos && (

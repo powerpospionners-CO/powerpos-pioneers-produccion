@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import api from "@/lib/api";
+import ExcelDownload from "@/components/ExcelDownload";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import { useAuthStore } from "@/store/authStore";
@@ -145,6 +146,7 @@ function EstadisticasContenido() {
             Ventas por hora, sucursal, producto y medio de pago. Fechas en hora
             de Colombia.
           </p>
+        {autorizado && <div className="mt-3"><ExcelDownload url="/reportes/estadisticas/exportar" filename={`estadisticas-${datos?.filtro.desde || desde}-${datos?.filtro.hasta || hasta}.xlsx`} disabled={cargando || !datos} params={datos ? { desde: datos.filtro.desde, hasta: datos.filtro.hasta, ...(datos.filtro.sucursalId ? { sucursalId: datos.filtro.sucursalId } : {}) } : undefined} /></div>}
         </header>
         {!autorizado ? (
           <p role="alert">

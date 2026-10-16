@@ -5,6 +5,7 @@ import { AdministracionGuard } from './administracion.guard';
 import { AdministracionService } from './administracion.service';
 import { GastosRecurrentesService } from './gastos-recurrentes.service';
 import { ConteosService } from './conteos.service';
+import { AntiguedadService } from './antiguedad.service';
 
 @Module({
   controllers: [AdministracionController],
@@ -12,6 +13,7 @@ import { ConteosService } from './conteos.service';
     AdministracionService,
     GastosRecurrentesService,
     ConteosService,
+    AntiguedadService,
     AdministracionGuard,
     RolesGuard,
   ],

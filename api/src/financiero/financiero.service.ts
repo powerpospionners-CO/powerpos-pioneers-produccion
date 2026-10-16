@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import * as XLSX from 'xlsx';
+import { excelReport } from '../common/excel-report';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -289,46 +289,11 @@ export class FinancieroService {
     const resumen = await this.resumenFinanciero(empresaId, fechaDesde, fechaHasta);
     const movimientos = await this.listarMovimientos(empresaId, { fechaDesde, fechaHasta, completo: true });
 
-    const ETIQUETAS_METODO: Record<string, string> = {
-      EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', TRANSFERENCIA: 'Transferencia', NEQUI: 'Nequi', DAVIPLATA: 'Daviplata',
-    };
-
-    const filasResumen: any[] = [
-      ['Reporte financiero'],
-      ['Periodo', `${fechaDesde ? new Date(fechaDesde).toLocaleDateString('es-CO') : 'Inicio'} a ${fechaHasta ? new Date(fechaHasta).toLocaleDateString('es-CO') : 'Hoy'}`],
-      [],
-      ['Total ingresos', resumen.totalIngresos],
-      ['Total egresos', resumen.totalEgresos],
-      ['Compras de inventario (incluidas en egresos)', resumen.totalComprasInventario],
-      ['Utilidad neta', resumen.utilidad],
-      [],
-      ['Ventas por forma de pago'],
-      ['Forma de pago', 'Total'],
-      ...resumen.ventasPorMetodoPago.map((v: any) => [ETIQUETAS_METODO[v.metodo] || v.metodo, v.total]),
-      ['Total ventas del periodo', resumen.totalVentasRango],
-      [],
-      ['Movimientos por categoría', '', 'Ingreso', 'Egreso'],
-      ...Object.entries(resumen.porCategoria as Record<string, { ingreso: number; egreso: number }>).map(([categoria, v]) => [categoria, '', v.ingreso, v.egreso]),
-    ];
-    const hojaResumen = XLSX.utils.aoa_to_sheet(filasResumen);
-    hojaResumen['!cols'] = [{ wch: 28 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
-
-    const hojaMovimientos = XLSX.utils.json_to_sheet(
-      movimientos.map((m: any) => ({
-        Fecha: new Date(m.fecha).toLocaleString('es-CO'),
-        Tipo: m.tipo,
-        Categoría: m.categoria,
-        Descripción: m.descripcion,
-        Monto: Number(m.monto),
-        Usuario: m.usuario?.nombre || '',
-      })),
-    );
-    hojaMovimientos['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 12 }, { wch: 18 }];
-
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
-    XLSX.utils.book_append_sheet(libro, hojaMovimientos, 'Movimientos');
-
-    return XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    return excelReport('Financiero', `Periodo: ${fechaDesde || 'Inicio'} a ${fechaHasta || 'Hoy'} · COP`, [
+      { name: 'Resumen', headers: ['Indicador', 'Valor'], money: [1], rows: [['Ingresos', resumen.totalIngresos], ['Egresos', resumen.totalEgresos], ['Compras inventario', resumen.totalComprasInventario], ['Utilidad neta', resumen.utilidad], ['Ventas del periodo', resumen.totalVentasRango]], chart: { title: 'Resumen financiero · COP', label: 0, value: 1 } },
+      { name: 'Medios de pago', headers: ['Medio', 'Ventas'], money: [1], rows: resumen.ventasPorMetodoPago.map(v => [v.metodo, v.total]), chart: { title: 'Ventas por medio de pago · COP', label: 0, value: 1 } },
+      { name: 'Categorias', headers: ['Categoría', 'Ingresos', 'Egresos'], money: [1,2], rows: Object.entries(resumen.porCategoria as Record<string, { ingreso: number; egreso: number }>).map(([k,v]) => [k,v.ingreso,v.egreso]) },
+      { name: 'Movimientos', headers: ['Fecha (Colombia)', 'Tipo', 'Categoría', 'Descripción', 'Monto', 'Usuario'], money: [4], rows: movimientos.map(m => [new Date(m.fecha).toLocaleString('es-CO', { timeZone: 'America/Bogota' }), m.tipo, m.categoria, m.descripcion, Number(m.monto), m.usuario?.nombre || '']) },
+    ]);
   }
 }
