@@ -6,11 +6,21 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { EstadisticasService } from './estadisticas.service';
+import { RentabilidadHistoricaService } from './rentabilidad-historica.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('reportes')
 export class ReportesController {
-  constructor(private readonly reportesService: ReportesService, private readonly estadisticasService: EstadisticasService) {}
+  constructor(private readonly reportesService: ReportesService, private readonly estadisticasService: EstadisticasService, private readonly historica: RentabilidadHistoricaService) {}
+
+  @Get('rentabilidad-historica') @UseGuards(RolesGuard) @Roles('ADMIN_EMPRESA', 'GERENTE')
+  rentabilidadHistorica(@Request() req: any, @Query('desde') desde: string, @Query('hasta') hasta: string, @Query('sucursalId') sucursalId?: string) {
+    return this.historica.consultar(req.user.empresaId, desde, hasta, sucursalId);
+  }
+  @Get('rentabilidad-historica/exportar') @UseGuards(RolesGuard) @Roles('ADMIN_EMPRESA', 'GERENTE')
+  async exportarHistorica(@Request() req: any, @Res() res: Response, @Query('desde') desde: string, @Query('hasta') hasta: string, @Query('sucursalId') sucursalId?: string) {
+    this.enviarExcel(res, await this.historica.exportar(req.user.empresaId, desde, hasta, sucursalId), 'rentabilidad-historica.xlsx');
+  }
 
   @Get('estadisticas')
   @UseGuards(RolesGuard)

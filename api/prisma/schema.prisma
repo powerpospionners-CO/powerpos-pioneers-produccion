@@ -665,6 +665,7 @@ model Pedido {
   // esta clave evita crear el pedido dos veces.
   claveIdempotencia String? @unique
   consumoInventario Json?
+  costoVentaHistorico Decimal? @db.Decimal(14, 4)
   pedidoWeb PedidoWeb?
 
   sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])
@@ -836,6 +837,7 @@ model DetallePedido {
   subtotal       Decimal @db.Decimal(10, 2)
   exclusiones    String[]
   observacion    String?
+  costoVentaHistorico Decimal? @db.Decimal(14, 4)
 
   // Presentación vendida (ej. "Tarro" vs "Unidad"): se guarda una copia del
   // nombre y del factor de unidades base al momento de la venta, para que el
@@ -1156,9 +1158,56 @@ model CompraGasto {
   detalles   DetalleCompra[]
   proveedor Proveedor? @relation(fields: [proveedorId, empresaId], references: [id, empresaId], onDelete: Restrict)
   cuentaAdministrativa CuentaAdministrativa?
+  recepcionOrden RecepcionOrdenCompra?
 
   @@index([empresaId, fecha])
   @@map("compras_gastos")
+}
+
+model OrdenCompra {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  sucursalId Int
+  proveedorId Int
+  usuarioId Int
+  referencia String
+  descripcion String
+  estado String @default("PENDIENTE")
+  creadoEn DateTime @default(now())
+  aprobadoPor Int?
+  motivoCierre String?
+  detalles DetalleOrdenCompra[]
+  recepciones RecepcionOrdenCompra[]
+  @@unique([empresaId, referencia])
+  @@index([empresaId, estado])
+  @@map("ordenes_compra")
+}
+
+model DetalleOrdenCompra {
+  id Int @id @default(autoincrement())
+  ordenId Int
+  productoId Int
+  nombre String
+  cantidad Int
+  recibida Int @default(0)
+  costoUnitario Decimal @db.Decimal(12, 2)
+  orden OrdenCompra @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  @@unique([ordenId, productoId])
+  @@map("detalles_orden_compra")
+}
+
+model RecepcionOrdenCompra {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  ordenId Int
+  compraId Int @unique
+  clave String
+  solicitud Json
+  creadoEn DateTime @default(now())
+  orden OrdenCompra @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  compra CompraGasto @relation(fields: [compraId], references: [id], onDelete: Restrict)
+  @@unique([empresaId, clave])
+  @@map("recepciones_orden_compra")
 }
 
 model DetalleCompra {

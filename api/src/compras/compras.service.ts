@@ -128,14 +128,15 @@ export class ComprasService {
     return redondearPesos(Number(montoInicial) + neto);
   }
 
-  async registrar(datos: CompraInput, usuarioId: number, empresaId: number, sucursalId: number) {
+  async registrar(datos: CompraInput, usuarioId: number, empresaId: number, sucursalId: number, transaccion?: Prisma.TransactionClient) {
+    const consulta = transaccion || this.prisma;
     const condicionPago = datos.condicionPago ?? 'CONTADO';
     if (!['CONTADO', 'CREDITO'].includes(condicionPago)) throw new BadRequestException('Condición de pago no válida');
     const credito = condicionPago === 'CREDITO';
     let documento: string | undefined;
     let vencimiento: Date | undefined;
     if (credito || datos.proveedorId !== undefined) {
-      const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { permisos: true } });
+      const empresa = await consulta.empresa.findUnique({ where: { id: empresaId }, select: { permisos: true } });
       if (process.env.ADMINISTRACION_HABILITADA !== 'true' || (empresa?.permisos as Record<string, unknown>)?.administracion !== true) throw new BadRequestException('Los controles administrativos no están habilitados');
       if (!Number.isInteger(datos.proveedorId) || datos.proveedorId <= 0) throw new BadRequestException('Selecciona un proveedor');
     }
@@ -164,14 +165,14 @@ export class ComprasService {
       throw new BadRequestException('El monto debe ser mayor a cero y no superar $99.999.999,99');
     }
 
-    const saldoInicial = await this.prisma.saldoInicialCuenta.findUnique({ where: { empresaId } });
+    const saldoInicial = await consulta.saldoInicialCuenta.findUnique({ where: { empresaId } });
     if (!saldoInicial) {
       throw new BadRequestException('Antes de registrar movimientos, configura el saldo inicial real de la cuenta');
     }
     if (fecha < saldoInicial.desde) {
       throw new BadRequestException('La fecha del movimiento no puede ser anterior al inicio del control de saldo');
     }
-    const sucursal = await this.prisma.sucursal.findFirst({
+    const sucursal = await consulta.sucursal.findFirst({
       where: { id: sucursalId, empresaId, activo: true },
       select: { id: true },
     });
@@ -182,7 +183,7 @@ export class ComprasService {
       throw new BadRequestException('Uno de los productos seleccionados no es válido');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const operar = async (tx: Prisma.TransactionClient) => {
       const proveedor = datos.proveedorId ? await tx.proveedor.findFirst({ where: { id: datos.proveedorId, empresaId, activo: true } }) : null;
       if (datos.proveedorId && !proveedor) throw new BadRequestException('Proveedor no disponible para esta empresa');
       if (credito) {
@@ -366,7 +367,8 @@ export class ComprasService {
         },
       });
       return compra;
-    }, { timeout: 15000 });
+    };
+    return transaccion ? operar(transaccion) : this.prisma.$transaction(operar, { timeout: 15000 });
   }
 
   async listar(empresaId: number, fechaDesde?: string, fechaHasta?: string) {

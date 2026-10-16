@@ -141,7 +141,7 @@ describe('Combos/canastas', () => {
     };
     const ventaCombo = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 9, cantidad: 3 }] };
     await service.crearEnTransaccion(ventaCombo, 3, 1, db);
-    expect(db.comboComponente.findMany).toHaveBeenCalledWith({ where: { comboId: 9 }, include: { producto: true } });
+    expect(db.comboComponente.findMany).toHaveBeenCalledWith({ where: { comboId: 9, producto: { empresaId: 1 } }, include: { producto: true } });
     // 3 canastas × 2 tomates cada una = 6; 3 canastas × 1 cebolla cada una = 3
     expect(db.producto.updateMany).toHaveBeenCalledWith({
       where: { id: 10, empresaId: 1, stockActual: { gte: 6 } },

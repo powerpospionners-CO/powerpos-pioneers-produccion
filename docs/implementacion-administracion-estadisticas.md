@@ -61,7 +61,7 @@ Estas verificaciones no sustituyen la aplicación de la migración, pruebas de c
 | Devoluciones parciales, cambios y reembolsos | Pendiente; coordinar inventario, caja, puntos, documentos fiscales y notas crédito. |
 | Stock por sucursal y traslados | Pendiente de definir distribución inicial real del stock global y aprobación de saldos; no repartir existencias por suposición. |
 | Conteos físicos y ajustes aprobados | Implementados para productos con stock en el inventario actual de la empresa. No incluyen ingredientes, stock por sucursal ni bloqueo operativo de ventas durante el conteo. |
-| Órdenes de compra y recepción parcial | Pendiente; la compra actual recibe mercancía al registrarse. |
+| Órdenes de compra y recepción parcial | Implementadas con aprobación administrativa, recepción parcial/idempotente, compra asociada y cierre de pendientes sin revertir mercancía recibida. Cantidades en unidades base. |
 | Aprobaciones por operación | Pendiente de definir responsables, límites y separación entre quien solicita y quien aprueba. |
 | Gastos recurrentes | Implementados con generación manual e idempotente de obligaciones mensuales; no ejecutan pagos automáticos. |
 | Personal, turnos, anticipos y nómina | Pendiente de reglas laborales, permisos y proveedor/integración de nómina. |
@@ -95,3 +95,16 @@ Administración incorpora Antigüedad de cuentas: saldos actuales por cobrar/pag
 Reportes avanzados, Financiero y Estadísticas permiten descargar libros XLSX con encabezados PowerPOS, fecha de generación en Colombia, tablas con filtros, filas alternadas, encabezados inmovilizados y valores monetarios numéricos en COP. Las gráficas se incluyen como imágenes; no son gráficas nativas que se recalculen al editar el libro. Las tablas contienen todos los registros devueltos por los reportes; los rankings gráficos muestran hasta 12 categorías y lo indican. Horas incluye las 24 horas y diario hasta los 93 días admitidos.
 
 Estadísticas exporta los filtros aplicados a los datos cargados (no los cambios del formulario pendientes de consultar). Financiero utiliza el periodo del resumen, también para la hoja de movimientos, independiente del filtro secundario de movimientos de la pantalla. Reportes avanzados conserva el alcance de la pantalla: empleados y clientes históricos, comparativas de semana/mes y rentabilidad estimada con costos actuales. Las exportaciones solo consultan datos, mantienen el alcance por empresa y requieren administrador o gerente. No agregan migraciones.
+
+
+## Ampliación de compras y costos
+
+La migración aditiva `20261016010000_costos_ordenes_compra` agrega órdenes y recepciones y costos opcionales en pedidos/detalles. No completa costos históricos anteriores. Cada venta nueva conserva sus costos completos cuando están definidos, incluyendo presentaciones, combos, exclusiones y extras enlazados. Los costos incompletos se identifican como desconocidos. El nuevo reporte de rentabilidad histórica incluye cobertura, margen bruto antes de gastos y exportación Excel; excluye domicilios y ventas sin costos completos. Los movimientos financieros previos conservan su cálculo.
+
+Crear/aprobar órdenes no afecta caja ni stock. Recibir utiliza la misma transacción del registro de compras, evita duplicar recepciones por reintentos, impide exceder cantidades pendientes y genera compra al contado u obligación a crédito. El administrador aprueba/cierra; administrador y gerente registran/reciben. No impone un aprobador distinto del creador.
+
+## Aislamiento por sede solicitado
+
+El usuario confirmó una sede principal por empresa y solicita una base física distinta por sede futura. La arquitectura actual sigue usando una base compartida con alcance por empresa; no se presenta como aislamiento físico. La separación requiere provisionamiento, conexiones, revisión de autenticación, procesos programados, acceso público, consolidación y migración validada antes de activarse. No se cambia la conexión productiva como parte de la ampliación de compras/costos.
+
+Se creó en Neon `respaldo-20261016-antes-aislamiento` (rama `br-tiny-field-b5q83nxl`, sin borrado automático). Se compararon 52 tablas de respaldo/origen sin diferencias de conteos. Se creó una copia de prueba `prueba-costos-ordenes-20261016` (`br-rapid-mud-b5qodctm`), se aplicó allí la migración y se compararon conteos y huellas de todas las columnas previas de 51 tablas operativas, sin cambios; se excluyó únicamente el historial de migraciones. El respaldo original no se utilizó para pruebas de escritura. Esto no sustituye la verificación de una futura migración física por sede.

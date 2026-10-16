@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import ExcelDownload from '@/components/ExcelDownload';
+import RentabilidadHistorica from '@/components/RentabilidadHistorica';
 import { Trophy, Users, TrendingUp, TrendingDown, Percent } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -82,6 +83,7 @@ export default function ReportesPage() {
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-white text-xl font-bold">Reportes avanzados</h2><ExcelDownload url="/reportes/exportar" filename="reportes-powerpos.xlsx" /></div>
 
           {/* Comparativa por periodo */}
+          <RentabilidadHistorica />
           {periodos && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">

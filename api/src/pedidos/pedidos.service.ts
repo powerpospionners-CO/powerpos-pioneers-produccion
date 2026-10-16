@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { PedidosEventosService } from './pedidos-eventos.service';
 import { bloquearCajaSucursal } from '../caja/caja-lock';
+import { costoHistoricoItem } from './costo-historico';
 
 const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
@@ -285,6 +286,7 @@ export class PedidosService {
         varianteSabor,
         factorUnidades,
         precioUnitario,
+        componentes: producto.esCombo ? await db.comboComponente.findMany({ where: { comboId: producto.id, producto: { empresaId } }, include: { producto: true } }) : [],
       });
     }
 
@@ -311,7 +313,7 @@ export class PedidosService {
       // cada producto que lo compone (ej. vender 1 "Canasta básica" baja
       // tomate, cebolla y huevos por separado, según lo que se armó).
       if (item.producto.esCombo) {
-        const componentes = await db.comboComponente.findMany({ where: { comboId: item.producto.id }, include: { producto: true } });
+        const componentes = item.componentes;
         for (const componente of componentes) {
           if (!componente.producto.controlaStock) continue;
           const unidadesBase = componente.cantidad * item.cantidad;
@@ -352,6 +354,10 @@ export class PedidosService {
     }
 
     const numero = await this.generarNumeroPedido(sucursalId, db);
+    const costosHistoricos = itemsValidados.map(costoHistoricoItem);
+    const sumaHistorica = costosHistoricos.reduce((sum, c) => sum + (c ?? 0), 0);
+    const costoHistorico = costosHistoricos.every(c => c !== null) && sumaHistorica <= 9999999999
+      ? Math.round(sumaHistorica * 10000) / 10000 : null;
 
     const pedido = await db.pedido.create({
       data: {
@@ -369,11 +375,13 @@ export class PedidosService {
         estado: esRestaurante ? 'PENDIENTE' : 'ENTREGADO',
         claveIdempotencia,
         consumoInventario,
+        costoVentaHistorico: costoHistorico,
         pagos: {
           create: pagos.map((p) => ({ metodoPago: p.metodoPago as any, monto: p.monto })),
         },
         detalles: {
-          create: itemsValidados.map((item) => ({
+          create: itemsValidados.map((item, indice) => ({
+            costoVentaHistorico: costosHistoricos[indice],
             productoId: item.producto.id,
             cantidad: item.cantidad,
             // precioUnitario guarda el precio de la presentación vendida (o el del producto si no aplica); subtotal ya incluye adicionales

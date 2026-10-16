@@ -18,7 +18,7 @@ describe('Report downloads', () => {
     };
     stats = { consultar: jest.fn() };
     response = { setHeader: jest.fn(), send: jest.fn() };
-    controller = new ReportesController(reports, stats);
+    controller = new ReportesController(reports, stats, {} as any);
   });
   it('uses the authenticated company for every report dataset', async () => {
     await controller.exportar(req, response);

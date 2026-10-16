@@ -14,6 +14,8 @@ import {
 import { CategoriaMovimiento } from '@prisma/client';
 import type { Response } from 'express';
 import { AntiguedadService } from './antiguedad.service';
+import { OrdenesCompraService } from './ordenes-compra.service';
+import type { OrdenInput, RecepcionInput } from './ordenes-compra.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -39,7 +41,12 @@ export class AdministracionController {
     private readonly recurrentes: GastosRecurrentesService,
     private readonly conteos: ConteosService,
     private readonly antiguedad: AntiguedadService,
+    private readonly ordenes: OrdenesCompraService,
   ) {}
+  @Get('ordenes') listarOrdenes(@Request() req: { user: ActorAdministrativo }) { return this.ordenes.listar(req.user.empresaId); }
+  @Post('ordenes') crearOrden(@Body() datos: OrdenInput, @Request() req: { user: ActorAdministrativo }) { return this.ordenes.crear(datos, req.user); }
+  @Post('ordenes/:id/resolver') @Roles('ADMIN_EMPRESA') resolverOrden(@Param('id', ParseIntPipe) id: number, @Body() datos: { aprobar: boolean; motivo: string }, @Request() req: { user: ActorAdministrativo }) { return this.ordenes.resolver(id, datos.aprobar, datos.motivo, req.user); }
+  @Post('ordenes/:id/recibir') recibirOrden(@Param('id', ParseIntPipe) id: number, @Body() datos: RecepcionInput, @Request() req: { user: ActorAdministrativo }) { return this.ordenes.recibir(id, datos, req.user); }
   @Get('antiguedad') consultarAntiguedad(@Request() req: { user: ActorAdministrativo }) {
     return this.antiguedad.consultar(req.user.empresaId);
   }
