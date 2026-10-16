@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
@@ -37,15 +37,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sedes, setSedes] = useState<{id:number;nombre:string;empresa:string}[]>([]);
+  const [sucursalElegida, setSucursalElegida] = useState('');
   const [tecladoVisible, setTecladoVisible] = useState(false);
   const [campoActivo, setCampoActivo] = useState<'email' | 'password'>('email');
+
+  useEffect(() => { setSedes([]); setSucursalElegida(''); }, [email, password]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.post('/auth/login', { email, password });
+      const { data } = await api.post('/auth/login', { email, password, ...(sucursalElegida ? { sucursalId:Number(sucursalElegida) } : {}) });
       const usuario = data.usuario;
       const destino = rutaPorRol(usuario.rol);
 
@@ -65,8 +69,9 @@ export default function LoginPage() {
 
       setAuth(data.access_token, usuario);
       router.push(destino);
-    } catch {
-      setError('Credenciales inválidas. Verifica tu email y contraseña.');
+    } catch (e: any) {
+      if (e?.response?.data?.error==='SEDE_REQUERIDA') { setSedes(e.response.data.sedes); setError('Selecciona la sede con la que vas a trabajar.'); }
+      else setError(e?.response?.status===503 ? 'No se pudo consultar la sede. Intenta nuevamente.' : 'Credenciales inválidas. Verifica tu email y contraseña.');
     } finally {
       setLoading(false);
     }
@@ -198,6 +203,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {sedes.length > 0 && <label className="block text-sm">Sede<select required value={sucursalElegida} onChange={e=>setSucursalElegida(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-500 bg-transparent p-3"><option value="">Selecciona una sede</option>{sedes.map(s=><option key={s.id} value={s.id}>{s.empresa} · {s.nombre}</option>)}</select></label>}
               <button
                 type="submit"
                 disabled={loading}

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Subject, filter, map, firstValueFrom, timeout, catchError, of } from 'rxjs';
+import { contextoSede } from '../prisma/sede-context';
 
 export interface TrabajoImpresion {
   id: string;
@@ -16,12 +17,15 @@ interface Confirmacion {
 
 @Injectable()
 export class ImpresionEventosService {
-  private readonly trabajos = new Subject<{ empresaId: number; trabajo: TrabajoImpresion }>();
+  private readonly trabajos = new Subject<{ empresaId: number; sucursalId?: number; trabajo: TrabajoImpresion }>();
   private readonly confirmaciones = new Subject<Confirmacion>();
+  private readonly pendientes = new Map<string,{empresaId:number;sucursalId?:number}>();
 
   paraEmpresa(empresaId: number) {
+    const scope = contextoSede.getStore();
+    const sucursalId = scope && scope!=='CONTROL' ? scope.sucursalId : undefined;
     return this.trabajos.asObservable().pipe(
-      filter((item) => item.empresaId === empresaId),
+      filter((item) => item.empresaId === empresaId && item.sucursalId===sucursalId),
       map((item) => item.trabajo),
     );
   }
@@ -36,6 +40,9 @@ export class ImpresionEventosService {
     timeoutMs = 6000,
   ): Promise<{ ok: boolean; motivo?: string }> {
     const id = randomUUID();
+    const scope = contextoSede.getStore();
+    const sucursalId = scope && scope!=='CONTROL' ? scope.sucursalId : undefined;
+    this.pendientes.set(id,{empresaId,sucursalId});
 
     const esperaConfirmacion = firstValueFrom(
       this.confirmaciones.asObservable().pipe(
@@ -53,14 +60,19 @@ export class ImpresionEventosService {
 
     this.trabajos.next({
       empresaId,
+      sucursalId,
       trabajo: { id, tipo, datosBase64: datos.toString('base64') },
     });
 
     const resultado = await esperaConfirmacion;
+    this.pendientes.delete(id);
     return { ok: resultado.ok, motivo: resultado.motivo };
   }
 
-  confirmar(id: string, ok: boolean, motivo?: string) {
+  confirmar(id: string, ok: boolean, motivo?: string, empresaId?: number) {
+    const pendiente = this.pendientes.get(id), scope = contextoSede.getStore();
+    if (!pendiente || (empresaId !== undefined && empresaId !== pendiente.empresaId)) return;
+    if (pendiente.sucursalId !== undefined && (!scope || scope==='CONTROL' || scope.sucursalId!==pendiente.sucursalId || scope.empresaId!==pendiente.empresaId)) return;
     this.confirmaciones.next({ id, ok, motivo });
   }
 }

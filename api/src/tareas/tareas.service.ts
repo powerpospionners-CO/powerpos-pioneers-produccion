@@ -16,7 +16,8 @@ export class TareasService {
   @Cron('0 8 * * *')
   async revisarCumpleanos() {
     this.logger.log('Revisando cumpleaños del día...');
-    await this.notificarCumpleanosDeHoy();
+    if (this.prisma.enCadaSede) await this.prisma.enCadaSede(()=>this.notificarCumpleanosDeHoy());
+    else await this.notificarCumpleanosDeHoy();
   }
 
   /**

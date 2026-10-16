@@ -9,7 +9,7 @@ import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 import { useNotificar } from '@/components/Notificaciones';
 
-type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean };
+type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number };
 
 const MODULOS = [
   { id: 'pos', label: 'POS y caja' },
@@ -33,6 +33,7 @@ const TIPOS_NEGOCIO: { value: TipoNegocio; label: string }[] = [
 ];
 
 interface Empresa {
+  aislamientoFisico?: boolean;
   id: number;
   nombre: string;
   nit: string;
@@ -123,7 +124,7 @@ export default function SuperadminPage() {
 
   const { aviso } = useNotificar();
   const [adminsEmpresa, setAdminsEmpresa] = useState<AdministradorEmpresa[]>([]);
-  const [editandoAdminId, setEditandoAdminId] = useState<number | null>(null);
+  const [editandoAdminId, setEditandoAdminId] = useState<string | null>(null);
   const [formAdmin, setFormAdmin] = useState({ nombre: '', email: '', password: '', activo: true });
   const [guardandoAdmin, setGuardandoAdmin] = useState(false);
   const [pagoExonerado, setPagoExonerado] = useState(false);
@@ -143,14 +144,14 @@ export default function SuperadminPage() {
   };
 
   const abrirEdicionAdmin = (admin: AdministradorEmpresa) => {
-    setEditandoAdminId(admin.id);
+    setEditandoAdminId(`${admin.sucursalId || 0}:${admin.id}`);
     setFormAdmin({ nombre: admin.nombre, email: admin.email, password: '', activo: admin.activo });
   };
 
   const guardarAdministrador = async (admin: AdministradorEmpresa) => {
     setGuardandoAdmin(true);
     try {
-      const cuerpo: Record<string, unknown> = { nombre: formAdmin.nombre, email: formAdmin.email, activo: formAdmin.activo };
+      const cuerpo: Record<string, unknown> = { nombre: formAdmin.nombre, email: formAdmin.email, activo: formAdmin.activo, empresaId: admin.empresaId, sucursalId: admin.sucursalId };
       if (formAdmin.password) cuerpo.password = formAdmin.password;
       await api.patch(`/superadmin/administradores/${admin.id}`, cuerpo);
       setEditandoAdminId(null);
@@ -161,6 +162,14 @@ export default function SuperadminPage() {
     } finally {
       setGuardandoAdmin(false);
     }
+  };
+
+  const prepararSedes = async () => {
+    if (!seleccionada) return;
+    setGuardandoAdmin(true);
+    try { await api.post(`/superadmin/empresas/${seleccionada.id}/preparar-sedes`); aviso('Las sedes pendientes quedaron preparadas.', 'exito'); await cargarDatos(); }
+    catch (e:any) { aviso(e?.response?.data?.message || 'No se pudo completar la preparación.', 'error'); }
+    finally { setGuardandoAdmin(false); }
   };
 
   const seleccionarEmpresa = (empresa: Empresa) => {
@@ -465,6 +474,7 @@ export default function SuperadminPage() {
             {!seleccionada ? <div className="py-8 text-center text-slate-500"><ShieldCheck size={30} className="mx-auto mb-3 text-slate-600" /><p>Selecciona una empresa para administrar su plan y permisos.</p></div> : <>
               <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-slate-500 uppercase tracking-wider">Configuracion</p><h3 className="text-xl font-black mt-1">{seleccionada.nombre}</h3><p className="text-xs text-slate-500 mt-1">NIT {seleccionada.nit}</p></div><button onClick={() => cambiarEstado(seleccionada)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 hover:border-orange-500">{seleccionada.activo ? 'Desactivar' : 'Activar'}</button></div>
               <div className="flex gap-2 mt-4"><button type="button" onClick={abrirEdicion} className="flex-1 flex items-center justify-center gap-2 text-sm border border-slate-700 rounded-lg px-3 py-2 hover:border-orange-500"><Pencil size={14} /> Editar datos</button><button type="button" onClick={() => setConfirmarEliminar(true)} className="flex items-center justify-center gap-2 text-sm border border-red-900 text-red-300 rounded-lg px-3 py-2 hover:bg-red-950"><Trash2 size={14} /> Eliminar</button></div>
+              {seleccionada.aislamientoFisico && <button type="button" disabled={guardandoAdmin} onClick={prepararSedes} className="mt-3 w-full rounded-lg border border-orange-700 p-2 text-sm text-orange-300 disabled:opacity-50">{guardandoAdmin ? 'Preparando...' : 'Preparar sedes pendientes'}</button>}
               <label className="block text-sm text-slate-400 mt-6 mb-2">Tipo de negocio</label>
               <select value={tipoNegocio} onChange={(event) => setTipoNegocio(event.target.value as TipoNegocio)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white">{TIPOS_NEGOCIO.map((tipo) => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select>
               <p className="text-slate-500 text-xs mt-2">Restaurante conserva cocina, recetas y comandas. Los demás tipos usan el POS comercial y existencias por producto. Si cambias una empresa existente, revisa sus productos y existencias antes de vender.</p>
@@ -514,8 +524,8 @@ export default function SuperadminPage() {
                 ) : (
                   <div className="space-y-3">
                     {adminsEmpresa.map((admin) => (
-                      <div key={admin.id} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                        {editandoAdminId === admin.id ? (
+                      <div key={`${admin.sucursalId || 0}:${admin.id}`} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                        {editandoAdminId === `${admin.sucursalId || 0}:${admin.id}` ? (
                           <div className="space-y-3">
                             <label className="block text-xs text-slate-400">Nombre
                               <input value={formAdmin.nombre} onChange={(e) => setFormAdmin({ ...formAdmin, nombre: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />

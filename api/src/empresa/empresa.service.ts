@@ -23,10 +23,12 @@ export class EmpresaService {
       where: { id: empresaId },
       data: { impresionAgenteToken: token },
     });
+    if (this.prisma.aislamientoActivo) await this.prisma.registrarAgente(token);
     return { token };
   }
 
   async actualizar(empresaId: number, datos: any) {
+    if (this.prisma.aislamientoActivo) await this.prisma.control.empresa.update({where:{id:empresaId},data:{nombre:datos.nombre,nit:datos.nit,email:datos.email,telefono:datos.telefono,direccion:datos.direccion}});
     return this.prisma.empresa.update({
       where: { id: empresaId },
       data: { nombre: datos.nombre, nit: datos.nit, email: datos.email, telefono: datos.telefono, direccion: datos.direccion },

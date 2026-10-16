@@ -194,6 +194,11 @@ export class CajaService {
 
   @Cron('*/5 * * * *')
   async cerrarCajaAutomaticaPorHorario() {
+    if (this.prisma.enCadaSede) return this.prisma.enCadaSede(()=>this.cerrarCajaAutomaticaSede());
+    return this.cerrarCajaAutomaticaSede();
+  }
+
+  private async cerrarCajaAutomaticaSede() {
     // Sin una configuración explícita por empresa no se cierran cajas.
     // JSON: { "empresaId": { "hora": "22:00", "zonaHoraria": "America/Bogota" } }
     let horarios: Record<string, { hora: string; zonaHoraria: string }>;

@@ -17,7 +17,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const usuario = await this.prisma.usuario.findUnique({
+    if (this.prisma.control) await this.prisma.estadoAislamiento();
+    let base = this.prisma.control || this.prisma;
+    if (this.prisma.aislamientoActivo && payload.rol !== 'SUPERADMIN') {
+      if (!Number.isSafeInteger(payload.empresaId) || !Number.isSafeInteger(payload.sucursalId)) throw new UnauthorizedException('La sesión requiere una sede válida');
+      base = (await this.prisma.contexto(payload.empresaId,payload.sucursalId)).cliente;
+    }
+    const usuario = await base.usuario.findUnique({
       where: { id: payload.sub },
       include: {
         empresa: {
@@ -36,6 +42,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (
       !usuario ||
       !usuario.activo ||
+      (this.prisma.aislamientoActivo && payload.rol === 'SUPERADMIN' && usuario.rol !== 'SUPERADMIN') ||
+      (this.prisma.aislamientoActivo && payload.rol !== 'SUPERADMIN' && (usuario.empresaId !== payload.empresaId || (usuario.sucursalId != null && usuario.sucursalId !== payload.sucursalId && !['ADMIN_EMPRESA','GERENTE'].includes(usuario.rol)))) ||
       (usuario.empresa &&
         !usuario.empresa.activo &&
         usuario.rol !== 'SUPERADMIN')
@@ -47,7 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: usuario.email,
       rol: usuario.rol,
       empresaId: usuario.empresaId,
-      sucursalId: usuario.sucursalId,
+      sucursalId: this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN' ? payload.sucursalId : usuario.sucursalId,
       distribuidorId: usuario.distribuidorId,
       empresaPlan: usuario.empresa?.plan,
       permisos: usuario.empresa?.permisos,

@@ -16,7 +16,10 @@ export class AgenteImpresionGuard implements CanActivate {
       throw new UnauthorizedException('Falta el token del agente de impresión');
     }
 
-    const empresa = await this.prisma.empresa.findUnique({
+    if (this.prisma.control) await this.prisma.estadoAislamiento();
+    const scope = this.prisma.aislamientoActivo ? await this.prisma.sedeAgente(token) : null;
+    const base = scope?.cliente || this.prisma;
+    const empresa = await base.empresa.findUnique({
       where: { impresionAgenteToken: token },
       select: { id: true, activo: true },
     });
@@ -26,6 +29,8 @@ export class AgenteImpresionGuard implements CanActivate {
     }
 
     request.empresaId = empresa.id;
+    request.sedeContext = scope;
+    request.sucursalId = scope?.sucursalId;
     return true;
   }
 }

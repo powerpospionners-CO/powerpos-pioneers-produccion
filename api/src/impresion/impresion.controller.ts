@@ -50,8 +50,8 @@ export class ImpresionAgenteController {
 
   @Post('confirmar')
   @UseGuards(AgenteImpresionGuard)
-  confirmar(@Body() body: { id: string; ok: boolean; motivo?: string }) {
-    this.eventos.confirmar(body.id, body.ok, body.motivo);
+  confirmar(@Body() body: { id: string; ok: boolean; motivo?: string }, @Request() req: any) {
+    this.eventos.confirmar(body.id, body.ok, body.motivo, req.empresaId);
     return { recibido: true };
   }
 }

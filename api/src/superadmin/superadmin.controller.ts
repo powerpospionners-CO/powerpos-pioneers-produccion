@@ -68,6 +68,11 @@ export class SuperadminController {
     return this.superadminService.listarAdministradores(+id);
   }
 
+  @Post('empresas/:id/preparar-sedes')
+  prepararSedes(@Param('id') id:string) {
+    return this.superadminService.prepararSedesEmpresa(+id);
+  }
+
   @Patch('administradores/:id')
   editarAdministrador(
     @Param('id') id: string,

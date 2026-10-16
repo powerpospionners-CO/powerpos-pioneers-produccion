@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TipoNegocio } from '@prisma/client';
 import { sumarMeses } from '../suscripciones/fechas';
+import { SedesProvisionService } from '../prisma/sedes-provision.service';
 
 const tiposNegocio = Object.values(TipoNegocio);
 
@@ -17,7 +18,7 @@ function validarTipoNegocio(valor: unknown): TipoNegocio {
 
 @Injectable()
 export class SuperadminService {
-  constructor(private readonly prisma: PrismaService, private readonly auditoria: AuditoriaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly auditoria: AuditoriaService, @Optional() private readonly sedes?: SedesProvisionService) {}
 
   async crearEmpresa(datos: any, usuarioId?: number) {
     const { empresa, admin, administradores, plan = 'BASICO', permisos = {} } = datos;
@@ -70,7 +71,7 @@ export class SuperadminService {
         permisos,
         suscripcionVenceEn: new Date(),
         soporteIncluidoHasta: sumarMeses(new Date(), 3),
-        sucursales: { create: { nombre: 'Sucursal Principal', direccion: empresa.direccion || null, telefono: empresa.telefono || null } },
+        sucursales: { create: { nombre: 'Sucursal Principal', activo: !this.prisma.aislamientoActivo, direccion: empresa.direccion || null, telefono: empresa.telefono || null } },
       },
       include: { sucursales: true },
     });
@@ -107,6 +108,10 @@ export class SuperadminService {
       detalle: { plan, tipoNegocio, administradores: administradoresCreados.map((admin) => ({ nombre: admin.nombre, email: admin.email })) },
     });
 
+    if (this.prisma.aislamientoActivo) {
+      if (!this.sedes) throw new ServiceUnavailableException('La empresa está registrada y pendiente de activar su base');
+      await this.sedes.preparar(creada.id,creada.sucursales[0].id);
+    }
     return {
       id: creada.id,
       nombre: creada.nombre,
@@ -132,7 +137,7 @@ export class SuperadminService {
     return {
       empresas,
       empresasActivas: activas,
-      usuariosActivos: usuarios,
+      usuariosActivos: this.prisma.aislamientoActivo ? await this.contarUsuariosSedes() : usuarios,
     };
   }
 
@@ -144,7 +149,33 @@ export class SuperadminService {
       orderBy: { creadoEn: 'desc' },
     });
 
-    return empresas;
+    if (this.prisma.aislamientoActivo) for (const empresa of empresas) empresa._count.usuarios = await this.contarUsuariosSedes(empresa.id);
+    return empresas.map(empresa=>({...empresa,aislamientoFisico:this.prisma.aislamientoActivo}));
+  }
+
+  async prepararSedesEmpresa(empresaId:number) {
+    if (!this.prisma.aislamientoActivo || !this.sedes) throw new BadRequestException('El aislamiento por sede todavía no está activo');
+    const sucursales=await this.prisma.control.sucursal.findMany({where:{empresaId},orderBy:{id:'asc'}});
+    if (!sucursales.length) throw new NotFoundException('No hay sedes para esta empresa');
+    const bases=await this.prisma.control.baseSede.findMany({where:{empresaId}});
+    const origen=bases.find(b=>b.estado==='ACTIVA'&&sucursales.some(s=>s.id===b.sucursalId&&s.activo));
+    let preparadas=0;
+    for (const sede of sucursales) {
+      if (bases.some(b=>b.sucursalId===sede.id&&b.estado==='ACTIVA')) continue;
+      await this.sedes.preparar(empresaId,sede.id,origen?.sucursalId);
+      preparadas++;
+    }
+    return {empresaId,preparadas};
+  }
+
+  private async contarUsuariosSedes(empresaId?: number) {
+    const sedes=await this.prisma.control.baseSede.findMany({where:{estado:'ACTIVA',...(empresaId ? {empresaId} : {})}});
+    let total=0;
+    for (const sede of sedes) {
+      const scope=await this.prisma.contexto(sede.empresaId,sede.sucursalId,true);
+      total+=await scope.cliente.usuario.count({where:{empresaId:sede.empresaId,...(empresaId ? {} : {activo:true})}});
+    }
+    return total;
   }
 
   async cambiarEstadoEmpresa(id: number, activo: boolean, usuarioId?: number) {
@@ -181,6 +212,7 @@ export class SuperadminService {
   }
 
   async eliminarEmpresa(id: number, usuarioId?: number) {
+    if (this.prisma.aislamientoActivo && await this.prisma.control.baseSede.count({where:{empresaId:id}})) throw new ConflictException('La empresa tiene bases independientes. Desactívala para conservar su historial.');
     await this.prisma.$transaction(async (tx) => {
       const empresa = await tx.empresa.findUnique({ where: { id }, select: { id: true, nombre: true, nit: true } });
       if (!empresa) throw new NotFoundException('Empresa no encontrada');
@@ -265,6 +297,16 @@ export class SuperadminService {
   async listarAdministradores(empresaId: number) {
     const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { id: true } });
     if (!empresa) throw new NotFoundException('Empresa no encontrada');
+    if (this.prisma.aislamientoActivo) {
+      const sedes=await this.prisma.control.baseSede.findMany({where:{empresaId,estado:'ACTIVA'}});
+      const admins: any[]=[];
+      for (const sede of sedes) {
+        const scope=await this.prisma.contexto(empresaId,sede.sucursalId,true);
+        const usuarios=await scope.cliente.usuario.findMany({where:{empresaId,rol:'ADMIN_EMPRESA'},select:{id:true,nombre:true,email:true,activo:true},orderBy:{id:'asc'}});
+        admins.push(...usuarios.map(u=>({...u,empresaId,sucursalId:sede.sucursalId})));
+      }
+      return admins;
+    }
     return this.prisma.usuario.findMany({
       where: { empresaId, rol: 'ADMIN_EMPRESA' },
       select: { id: true, nombre: true, email: true, activo: true },
@@ -274,10 +316,15 @@ export class SuperadminService {
 
   async editarAdministrador(
     usuarioId: number,
-    datos: { nombre?: string; email?: string; password?: string; activo?: boolean },
+    datos: { nombre?: string; email?: string; password?: string; activo?: boolean; empresaId?:number; sucursalId?:number },
     superadminId?: number,
   ) {
-    const usuario = await this.prisma.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, rol: true, empresaId: true } });
+    let db = this.prisma.control || this.prisma;
+    if (this.prisma.aislamientoActivo) {
+      if (!Number.isSafeInteger(datos.empresaId)||!Number.isSafeInteger(datos.sucursalId)) throw new BadRequestException('Selecciona la empresa y sede del administrador');
+      db=(await this.prisma.contexto(datos.empresaId!,datos.sucursalId!,true)).cliente;
+    }
+    const usuario = await db.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, rol: true, empresaId: true } });
     if (!usuario || usuario.rol !== 'ADMIN_EMPRESA' || !usuario.empresaId) throw new NotFoundException('Administrador no encontrado');
 
     const data: Record<string, unknown> = {};
@@ -289,7 +336,7 @@ export class SuperadminService {
     if (datos.email !== undefined) {
       const email = String(datos.email).trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('El email no es válido');
-      const existente = await this.prisma.usuario.findUnique({ where: { email }, select: { id: true } });
+      const existente = await db.usuario.findUnique({ where: { email }, select: { id: true } });
       if (existente && existente.id !== usuarioId) throw new ConflictException('Ya existe un usuario con ese email');
       data.email = email;
     }
@@ -299,7 +346,7 @@ export class SuperadminService {
     }
     if (datos.activo !== undefined) data.activo = !!datos.activo;
 
-    const actualizado = await this.prisma.usuario.update({
+    const actualizado = await db.usuario.update({
       where: { id: usuarioId },
       data,
       select: { id: true, nombre: true, email: true, activo: true },

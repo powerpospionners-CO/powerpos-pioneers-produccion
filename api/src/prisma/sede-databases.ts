@@ -1,6 +1,6 @@
 /** Configuration foundation only. Production routing remains on PrismaService until cutover validation. */
 export type DestinoSede = { empresaId: number; sucursalId: number; variable: string };
-function identidadBase(valor: string) {
+export function identidadBase(valor: string) {
   const url = new URL(valor);
   if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname || url.pathname.length < 2 || (url.searchParams.get('schema') || 'public') !== 'public') throw new Error('La sede requiere una base PostgreSQL independiente con esquema public');
   return `${url.hostname.toLowerCase().replace('-pooler.', '.')}|${url.port || '5432'}|${decodeURIComponent(url.pathname)}`;

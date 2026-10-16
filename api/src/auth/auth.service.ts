@@ -2,21 +2,50 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { sumarMeses } from '../suscripciones/fechas';
+import { SedesProvisionService } from '../prisma/sedes-provision.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    @Optional() private readonly sedes?: SedesProvisionService,
   ) {}
 
-  async login(email: string, password: string) {
-    const usuario = await this.prisma.usuario.findUnique({
+  async login(email: string, password: string, sucursalId?: number) {
+    if (typeof email !== 'string' || typeof password !== 'string' || email.length > 250 || password.length > 500) throw new UnauthorizedException('Credenciales inválidas');
+    if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId < 1)) throw new UnauthorizedException('Sede inválida');
+    if (this.prisma.control) await this.prisma.estadoAislamiento();
+    let usuario: any;
+    let sedeElegida: number | undefined;
+    if (this.prisma.aislamientoActivo) {
+      const root = await this.prisma.control.usuario.findUnique({ where: { email }, include: { empresa:true, sucursal:true, distribuidor:true } });
+      if (root?.rol === 'SUPERADMIN' && root.activo && await bcrypt.compare(password,root.password)) usuario = root;
+      else {
+        const sedes = await this.prisma.control.baseSede.findMany({ where: { estado:'ACTIVA', ...(sucursalId ? { sucursalId } : {}) } });
+        const coincidencias: { usuario:any; sucursalId:number }[] = [];
+        let fallos = false;
+        for (const sede of sedes) {
+          try {
+            const scope = await this.prisma.contexto(sede.empresaId,sede.sucursalId);
+            const candidato = await scope.cliente.usuario.findUnique({ where:{email}, include:{empresa:true,sucursal:true,distribuidor:true} });
+            if (!candidato || candidato.rol === 'SUPERADMIN' || !candidato.activo || candidato.empresaId !== sede.empresaId || !candidato.empresa?.activo) continue;
+            if (candidato.sucursalId != null && candidato.sucursalId !== sede.sucursalId && !['ADMIN_EMPRESA','GERENTE'].includes(candidato.rol)) continue;
+            if (await bcrypt.compare(password,candidato.password)) coincidencias.push({usuario:candidato,sucursalId:sede.sucursalId});
+          } catch { fallos = true; }
+        }
+        if (coincidencias.length > 1) throw new ConflictException({ error:'SEDE_REQUERIDA', message:'Selecciona la sede para iniciar sesión', sedes:coincidencias.map(c=>({id:c.sucursalId,nombre:c.usuario.sucursal?.nombre || 'Sede',empresa:c.usuario.empresa?.nombre})) });
+        if (coincidencias.length === 1) { usuario=coincidencias[0].usuario; sedeElegida=coincidencias[0].sucursalId; }
+        else if (fallos) throw new ServiceUnavailableException('No se pudo consultar la sede. Intenta nuevamente.');
+      }
+    } else usuario = await this.prisma.usuario.findUnique({
       where: { email },
       include: { empresa: true, sucursal: true, distribuidor: true },
     });
@@ -41,7 +70,7 @@ export class AuthService {
       email: usuario.email,
       rol: usuario.rol,
       empresaId: usuario.empresaId,
-      sucursalId: usuario.sucursalId,
+      sucursalId: sedeElegida ?? usuario.sucursalId,
     };
 
     return {
@@ -54,7 +83,7 @@ export class AuthService {
         empresa: usuario.empresa?.nombre,
         sucursal: usuario.sucursal?.nombre,
         empresaId: usuario.empresaId,
-        sucursalId: usuario.sucursalId,
+        sucursalId: sedeElegida ?? usuario.sucursalId,
         plan: usuario.empresa?.plan,
         tipoNegocio: usuario.empresa?.tipoNegocio,
         permisos: usuario.empresa?.permisos,
@@ -96,7 +125,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(datos.admin.password, 10);
 
     // Empresa, sucursal y administrador deben confirmarse juntos.
-    return this.prisma.$transaction(async (tx) => {
+    const registrada = await this.prisma.$transaction(async (tx) => {
       const empresa = await tx.empresa.create({
         data: {
           nombre: datos.empresa.nombre,
@@ -108,6 +137,7 @@ export class AuthService {
           sucursales: {
             create: {
               nombre: 'Sucursal Principal',
+              activo: !this.prisma.aislamientoActivo,
             },
           },
         },
@@ -141,5 +171,10 @@ export class AuthService {
         },
       };
     });
+    if (this.prisma.aislamientoActivo) {
+      if (!this.sedes) throw new ServiceUnavailableException('La empresa está registrada y pendiente de activar su base');
+      await this.sedes.preparar(registrada.empresa.id, registrada.sucursal.id);
+    }
+    return registrada;
   }
 }

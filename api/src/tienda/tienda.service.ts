@@ -148,6 +148,7 @@ export class TiendaService {
       productosExcluidos: p.productosExcluidos,
     };
     try {
+      if (body.slug !== undefined && this.prisma.aislamientoActivo) await this.prisma.reservarSlug(slug);
       await this.prisma.empresa.update({
         where: { id: empresaId },
         data: {

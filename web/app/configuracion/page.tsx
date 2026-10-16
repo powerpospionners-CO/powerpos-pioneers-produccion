@@ -63,6 +63,7 @@ export default function ConfiguracionPage() {
   const [modalNuevaSucursal, setModalNuevaSucursal] = useState(false);
   const [sucursalEditando, setSucursalEditando] = useState<any | null>(null);
   const [loadingSucursal, setLoadingSucursal] = useState(false);
+  const [mensajeSucursal, setMensajeSucursal] = useState('');
   const [formNuevaSucursal, setFormNuevaSucursal] = useState({ nombre: '', direccion: '', telefono: '' });
 
   useEffect(() => {
@@ -266,6 +267,7 @@ export default function ConfiguracionPage() {
   const guardarSucursal = async () => {
     if (!formNuevaSucursal.nombre.trim()) return;
     setLoadingSucursal(true);
+    setMensajeSucursal('');
     try {
       if (sucursalEditando) {
         await api.patch(`/sucursales/${sucursalEditando.id}`, formNuevaSucursal);
@@ -276,20 +278,28 @@ export default function ConfiguracionPage() {
       setModalNuevaSucursal(false);
       setSucursalEditando(null);
       setFormNuevaSucursal({ nombre: '', direccion: '', telefono: '' });
-      cargarSucursales();
-    } catch (e) {
-      console.error(e);
+      await cargarSucursales();
+    } catch (e: any) {
+      setMensajeSucursal(e?.response?.data?.message || 'No se pudo guardar la sucursal.');
+      await cargarSucursales();
     } finally {
       setLoadingSucursal(false);
     }
+  };
+
+  const prepararSucursal = async (s: any) => {
+    setLoadingSucursal(true); setMensajeSucursal('Preparando la sede. Este proceso puede tardar unos minutos.');
+    try { await api.post(`/sucursales/${s.id}/preparar-base`); setMensajeSucursal('Sede lista. Inicia sesión seleccionándola para trabajar en ella.'); }
+    catch (e: any) { setMensajeSucursal(e?.response?.data?.message || 'No se pudo preparar la sede.'); }
+    finally { setLoadingSucursal(false); await cargarSucursales(); }
   };
 
   const toggleActivoSucursal = async (s: any) => {
     try {
       await api.patch(`/sucursales/${s.id}/toggle-activo`);
       cargarSucursales();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setMensajeSucursal(e?.response?.data?.message || 'No se pudo cambiar el estado de la sede.');
     }
   };
 
@@ -300,6 +310,7 @@ export default function ConfiguracionPage() {
 
         <div className="flex-1 p-6 max-w-3xl mx-auto w-full">
           <h2 className="text-white text-xl font-bold mb-6">Configuración</h2>
+          {mensajeSucursal && <p role="status" className="mb-4 rounded-xl border border-orange-700 p-3 text-orange-200">{mensajeSucursal}</p>}
 
           {/* Tabs */}
           <div className="flex gap-2 mb-6 border-b border-gray-800 overflow-x-auto">
@@ -587,6 +598,7 @@ export default function ConfiguracionPage() {
                       <div>
                         <div className="text-white text-sm font-medium flex items-center gap-2">
                           {s.nombre}
+                          {s.estadoBase && s.estadoBase !== 'ACTIVA' && <span className="text-xs text-amber-300">Pendiente de preparación</span>}
                           {!s.activo && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-400">Inactiva</span>}
                         </div>
                         <div className="text-gray-500 text-xs mt-0.5">
@@ -601,12 +613,13 @@ export default function ConfiguracionPage() {
                           Editar
                         </button>
                         <button
-                          onClick={() => toggleActivoSucursal(s)}
+                          onClick={() => s.estadoBase && s.estadoBase !== 'ACTIVA' ? prepararSucursal(s) : toggleActivoSucursal(s)}
+                          disabled={loadingSucursal}
                           className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                             s.activo ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400' : 'bg-green-500/10 hover:bg-green-500/20 text-green-400'
                           }`}
                         >
-                          {s.activo ? 'Inactivar' : 'Activar'}
+                          {s.estadoBase && s.estadoBase !== 'ACTIVA' ? 'Preparar sede' : s.activo ? 'Inactivar' : 'Activar'}
                         </button>
                       </div>
                     </div>
