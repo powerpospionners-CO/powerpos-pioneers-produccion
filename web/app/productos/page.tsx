@@ -468,6 +468,7 @@ export default function ProductosPage() {
   const [resultadoImportar, setResultadoImportar] = useState<{ creados: number; totalFilas: number; errores: { fila: number; motivo: string }[] } | null>(null);
   const [errorImportar, setErrorImportar] = useState('');
   const [modalAdicionales, setModalAdicionales] = useState(false);
+  const [errorAdicional, setErrorAdicional] = useState('');
   const [editando, setEditando] = useState<Producto | null>(null);
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null);
   const [selectorIconoAbierto, setSelectorIconoAbierto] = useState(false);
@@ -586,11 +587,19 @@ export default function ProductosPage() {
   };
 
   const guardarAdicional = async () => {
-    if (!formAdicional.nombre || !formAdicional.precio) return;
+    setErrorAdicional('');
+    if (!formAdicional.nombre.trim() || formAdicional.precio.trim() === '' || !Number.isFinite(Number(formAdicional.precio)) || Number(formAdicional.precio) < 0) {
+      setErrorAdicional('Escribe el nombre y un precio válido. Puedes usar 0 si está incluido.');
+      return;
+    }
+    if (formAdicional.empaqueParaLlevar && (!formAdicional.ingredienteId || !Number.isFinite(Number(formAdicional.cantidad)) || Number(formAdicional.cantidad) <= 0)) {
+      setErrorAdicional('Para el empaque automático, selecciona el ingrediente del inventario e indica cuánto descontar por producto. Ejemplo: 1 porta hamburguesa.');
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
-        nombre: formAdicional.nombre,
+        nombre: formAdicional.nombre.trim(),
         precio: Number(formAdicional.precio),
         ingredienteId: formAdicional.ingredienteId ? Number(formAdicional.ingredienteId) : null,
         cantidad: formAdicional.cantidad ? Number(formAdicional.cantidad) : null,
@@ -603,14 +612,16 @@ export default function ProductosPage() {
       }
       setFormAdicional({ id: null, nombre: '', precio: '', ingredienteId: '', cantidad: '' });
       cargarDatos();
-    } catch (e) {
-      console.error(e);
+    } catch (e: unknown) {
+      const respuesta = (e as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      setErrorAdicional(Array.isArray(respuesta) ? respuesta.join('. ') : respuesta || 'No se pudo guardar el adicional. Inténtalo nuevamente.');
     } finally {
       setLoading(false);
     }
   };
 
   const editarAdicional = (adicional: Adicional) => {
+    setErrorAdicional('');
     setFormAdicional({
       id: adicional.id,
       nombre: adicional.nombre,
@@ -1700,10 +1711,12 @@ export default function ProductosPage() {
                   <label className="text-gray-500 text-xs">Cantidad a descontar</label>
                   <input
                     type="number"
+                    min="0.001"
+                    step="0.001"
                     value={formAdicional.cantidad}
                     disabled={!formAdicional.ingredienteId}
                     onChange={(e) => setFormAdicional({ ...formAdicional, cantidad: e.target.value })}
-                    placeholder="Ej: 20"
+                    placeholder={formAdicional.empaqueParaLlevar ? 'Ej: 1 porta por hamburguesa' : 'Ej: 20'}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-orange-500 disabled:opacity-40"
                   />
                   <label className="flex gap-2 mt-3 text-gray-300 text-xs">
@@ -1714,6 +1727,7 @@ export default function ProductosPage() {
                   <p className="text-gray-400 text-xs mt-1">Asócialo a los productos que lo usan. Se descuenta por cada unidad para llevar. No lo incluyas también en la receta base. Precio $0 si está incluido.</p>
                 </div>
               </div>
+              {errorAdicional && <p role="alert" className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{errorAdicional}</p>}
               <div className="flex gap-2">
                 {formAdicional.id && (
                   <button
