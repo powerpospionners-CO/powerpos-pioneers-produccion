@@ -143,7 +143,7 @@ export class ProductosController {
   @Post(':id/codigos-barras')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   agregarCodigoBarras(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.productosService.agregarCodigoBarras(+id, body, req.user.empresaId);
+    return this.productosService.agregarCodigoBarras(+id, body, req.user.empresaId, req.user.id);
   }
 
   @Delete(':id/codigos-barras/:codigoId')

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { randomUUID } from 'node:crypto';
 
 const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || '').toLowerCase().trim());
@@ -633,8 +634,9 @@ export class ProductosService {
     return this.prisma.productoPresentacion.update({ where: { id: presentacionId }, data: { activo: false } });
   }
 
-  async agregarCodigoBarras(productoId: number, datos: any, empresaId: number) {
-    await this.obtener(productoId, empresaId);
+  async agregarCodigoBarras(productoId: number, datos: any, empresaId: number, usuarioId?: number) {
+    const destino = await this.obtener(productoId, empresaId);
+    if (destino.activo === false) throw new BadRequestException('No se pueden agregar códigos a un producto eliminado');
     const codigoBarras = String(datos.codigoBarras || '').trim();
     const sabor = String(datos.sabor || '').trim();
     if (!codigoBarras) throw new BadRequestException('El código de barras es obligatorio');
@@ -642,18 +644,33 @@ export class ProductosService {
     if (!sabor) throw new BadRequestException('El sabor es obligatorio');
     if (sabor.length > 80) throw new BadRequestException('El sabor no puede superar 80 caracteres');
 
-    const [producto, variante, presentacion] = await Promise.all([
-      this.prisma.producto.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } }),
-      this.prisma.productoCodigoBarras.findFirst({ where: { empresaId, codigoBarras }, select: { id: true } }),
-      this.prisma.productoPresentacion.findFirst({ where: { codigoBarras, producto: { empresaId } }, select: { id: true } }),
-    ]);
-    if (producto || variante || presentacion) {
-      throw new ConflictException('El código de barras ya está registrado en esta empresa');
-    }
-
     try {
-      return await this.prisma.productoCodigoBarras.create({
-        data: { empresaId, productoId, codigoBarras, sabor },
+      return await this.prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(74222, ${empresaId}::int)`;
+        const [producto, variante, presentacion] = await Promise.all([
+          tx.producto.findFirst({ where: { empresaId, activo: true, codigoBarras }, select: { id: true } }),
+          tx.productoCodigoBarras.findFirst({ where: { empresaId, codigoBarras, producto: { activo: true } }, select: { id: true } }),
+          tx.productoPresentacion.findFirst({ where: { codigoBarras, activo: true, producto: { empresaId, activo: true } }, select: { id: true } }),
+        ]);
+        if (producto || variante || presentacion) throw new ConflictException('El código de barras ya está registrado en un producto activo de esta empresa');
+
+        const [productosRetirados, saboresRetirados, presentacionesRetiradas] = await Promise.all([
+          tx.producto.findMany({ where: { empresaId, activo: false, codigoBarras }, select: { id: true, nombre: true } }),
+          tx.productoCodigoBarras.findMany({ where: { empresaId, codigoBarras, producto: { activo: false } }, select: { id: true, productoId: true, sabor: true } }),
+          tx.productoPresentacion.findMany({ where: { codigoBarras, producto: { empresaId }, OR: [{ activo: false }, { producto: { activo: false } }] }, select: { id: true, productoId: true, nombre: true } }),
+        ]);
+        // Keep the historical rows; release only mappings that cannot be sold.
+        // Original codes and owners are preserved in the same transaction's audit.
+        for (const p of productosRetirados) await tx.producto.update({ where: { id: p.id }, data: { codigoBarras: null } });
+        for (const v of saboresRetirados) await tx.productoCodigoBarras.update({ where: { id: v.id }, data: { codigoBarras: `ARCHIVADO-${v.id}-${randomUUID()}` } });
+        for (const p of presentacionesRetiradas) await tx.productoPresentacion.update({ where: { id: p.id }, data: { codigoBarras: null } });
+
+        const codigo = await tx.productoCodigoBarras.create({ data: { empresaId, productoId, codigoBarras, sabor } });
+        if (productosRetirados.length || saboresRetirados.length || presentacionesRetiradas.length) await tx.auditoria.create({ data: {
+          empresaId, usuarioId, accion: 'REUTILIZAR_CODIGO_BARRAS', entidad: 'ProductoCodigoBarras', entidadId: codigo.id,
+          detalle: { codigoBarras, productoDestinoId: productoId, sabor, productosRetirados, saboresRetirados, presentacionesRetiradas },
+        } });
+        return codigo;
       });
     } catch (e: any) {
       if (e?.code === 'P2002') throw new ConflictException('El código de barras ya está registrado en esta empresa');

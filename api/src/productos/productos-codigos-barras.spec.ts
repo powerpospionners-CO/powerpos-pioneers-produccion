@@ -7,14 +7,18 @@ describe('Códigos de barras por sabor', () => {
 
   function crearServicio() {
     const prisma: any = {
-      producto: { findFirst: jest.fn().mockResolvedValue(producto) },
+      producto: { findFirst: jest.fn().mockResolvedValue(producto), findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
       productoCodigoBarras: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 11, ...data })),
         update: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
       },
-      productoPresentacion: { findFirst: jest.fn().mockResolvedValue(null) },
+      productoPresentacion: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
+      auditoria: { create: jest.fn() },
+      $executeRaw: jest.fn(),
     };
+    prisma.$transaction = jest.fn((fn) => fn(prisma));
     return { prisma, service: new ProductosService(prisma, notificaciones as any) };
   }
 
@@ -50,5 +54,35 @@ describe('Códigos de barras por sabor', () => {
       .rejects.toThrow(BadRequestException);
     await expect(service.agregarCodigoBarras(7, { codigoBarras: '750123', sabor: ' ' }, 2))
       .rejects.toThrow(BadRequestException);
+  });
+
+  it('libera el código de un sabor cuyo producto fue eliminado y conserva su registro histórico', async () => {
+    const { prisma, service } = crearServicio();
+    prisma.producto.findFirst.mockResolvedValueOnce(producto).mockResolvedValueOnce(null);
+    prisma.productoCodigoBarras.findMany.mockResolvedValue([{ id: 4, productoId: 3, sabor: 'Vegano' }]);
+    await service.agregarCodigoBarras(7, { codigoBarras: '8801043022705', sabor: 'Vegano' }, 2, 8);
+    expect(prisma.productoCodigoBarras.update).toHaveBeenCalledWith({ where: { id: 4 }, data: { codigoBarras: expect.stringMatching(/^ARCHIVADO-4-/) } });
+    expect(prisma.auditoria.create).toHaveBeenCalledWith({ data: expect.objectContaining({ usuarioId: 8, empresaId: 2, accion: 'REUTILIZAR_CODIGO_BARRAS', detalle: expect.objectContaining({ codigoBarras: '8801043022705', saboresRetirados: [{ id: 4, productoId: 3, sabor: 'Vegano' }] }) }) });
+    expect(prisma.productoCodigoBarras.create).toHaveBeenCalledWith({ data: { empresaId: 2, productoId: 7, codigoBarras: '8801043022705', sabor: 'Vegano' } });
+  });
+
+  it('libera también códigos base o presentaciones retiradas, sin tocar ventas ni existencias', async () => {
+    const { prisma, service } = crearServicio();
+    prisma.producto.findFirst.mockResolvedValueOnce(producto).mockResolvedValueOnce(null);
+    prisma.producto.findMany.mockResolvedValue([{ id: 2, nombre: 'Ramen eliminado' }]);
+    prisma.productoPresentacion.findMany.mockResolvedValue([{ id: 8, productoId: 3, nombre: 'Caja' }]);
+    await service.agregarCodigoBarras(7, { codigoBarras: '12345', sabor: 'Vegano' }, 2);
+    expect(prisma.producto.update).toHaveBeenCalledWith({ where: { id: 2 }, data: { codigoBarras: null } });
+    expect(prisma.productoPresentacion.update).toHaveBeenCalledWith({ where: { id: 8 }, data: { codigoBarras: null } });
+    expect(prisma.productoCodigoBarras.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { empresaId: 2, codigoBarras: '12345', producto: { activo: false } } }));
+  });
+
+  it('no libera ningún código si pertenece a un producto activo', async () => {
+    const { prisma, service } = crearServicio();
+    prisma.producto.findFirst.mockResolvedValueOnce(producto).mockResolvedValueOnce({ id: 99 });
+    await expect(service.agregarCodigoBarras(7, { codigoBarras: '12345', sabor: 'Vegano' }, 2)).rejects.toThrow(ConflictException);
+    expect(prisma.producto.update).not.toHaveBeenCalled();
+    expect(prisma.productoCodigoBarras.update).not.toHaveBeenCalled();
+    expect(prisma.productoCodigoBarras.create).not.toHaveBeenCalled();
   });
 });
