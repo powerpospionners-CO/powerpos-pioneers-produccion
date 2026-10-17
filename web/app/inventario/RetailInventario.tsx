@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Boxes, CalendarClock, History, Package, Search, Trash2, X } from 'lucide-react';
 import api from '@/lib/api';
+import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
@@ -167,6 +168,7 @@ export default function RetailInventario() {
               <p className="mt-1 text-sm text-gray-400">Controla las existencias por producto y registra entradas, salidas y ajustes.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              {usuario && ['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol) && <Link href="/inventario/empaques" className="rounded-lg border border-orange-500 px-3 py-2 text-sm text-orange-400">Bodega y empaque</Link>}
               <button
                 type="button"
                 onClick={abrirMerma}
