@@ -168,20 +168,28 @@ function intentarConexion(config, datos) {
 // Impresora en red. Si no conecta en la IP guardada, busca la impresora en
 // la red local y, si la encuentra en otra IP, actualiza config.json y
 // reintenta una sola vez — así el cambio de IP se autocorrige solo.
-async function imprimirRed(config, datosBase64, reintentando = false) {
+async function imprimirRed(config, datosBase64, reintentando = false, dependencias = {}) {
+  const enviar = dependencias.enviar || intentarConexion;
+  const buscar = dependencias.buscar || buscarImpresoraEnRed;
+  const guardar = dependencias.guardar || guardarIpImpresora;
   const datos = Buffer.from(datosBase64, 'base64');
-  const resultado = await intentarConexion(config, datos);
+  let resultado = await enviar(config, datos);
   if (!resultado) return null;
 
   if (!reintentando) {
     console.warn(`No se pudo conectar a ${config.impresoraHost}:${config.impresoraPuerto}. Buscando la impresora en la red...`);
-    const ipEncontrada = await buscarImpresoraEnRed(config);
-    if (ipEncontrada && ipEncontrada !== config.impresoraHost) {
-      console.log(`Impresora encontrada en ${ipEncontrada} (antes ${config.impresoraHost}). Guardando en config.json...`);
-      config.impresoraHost = ipEncontrada;
-      guardarIpImpresora(ipEncontrada);
-      return imprimirRed(config, datosBase64, true);
+    const ipEncontrada = await buscar(config);
+    if (ipEncontrada) {
+      if (ipEncontrada !== config.impresoraHost) {
+        console.log(`Impresora encontrada en ${ipEncontrada} (antes ${config.impresoraHost}). Guardando en config.json...`);
+        config.impresoraHost = ipEncontrada;
+        guardar(ipEncontrada);
+      }
     }
+    // Un sondeo corto puede no detectar una impresora que recién despierta.
+    // Reintentar una vez también en la IP guardada si la búsqueda no encontró otra.
+    resultado = await enviar(config, datos);
+    if (!resultado) return null;
   }
 
   return resultado === 'timeout'
@@ -286,7 +294,7 @@ function conectar(config) {
         try {
           const trabajo = JSON.parse(linea.slice(5).trim());
           if (trabajo.tipo === 'PING') continue; // latido de conexión, no es un trabajo real
-          manejarTrabajo(config, trabajo);
+          colaTrabajos = colaTrabajos.then(() => manejarTrabajo(config, trabajo)).catch(error => console.error('No se pudo completar el trabajo:', error.message));
         } catch (error) {
           console.error('No se pudo interpretar el trabajo recibido:', error.message);
         }
@@ -319,6 +327,10 @@ function programarReconexion(config) {
   }, 5000);
 }
 
-console.log('=== Agente de impresión PowerPOS ===');
-const config = cargarConfig();
-conectar(config);
+let colaTrabajos = Promise.resolve();
+if (require.main === module) {
+  console.log('=== Agente de impresión PowerPOS · 2026-10-19.2 ===');
+  const config = cargarConfig();
+  conectar(config);
+}
+module.exports = { imprimirRed };

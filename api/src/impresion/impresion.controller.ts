@@ -24,8 +24,8 @@ export class ImpresionController {
   }
 
   @Post('comandas')
-  imprimirComandas(@Body() datos: { comandas: any[] }, @Request() req: any) {
-    return this.impresionService.imprimirComandas(datos?.comandas, req.user.empresaId);
+  imprimirComandas(@Body() datos: { comandas: any[]; abrirCajon?: boolean }, @Request() req: any) {
+    return this.impresionService.imprimirComandas(datos?.comandas, req.user.empresaId, datos?.abrirCajon === true);
   }
 
   @Post('abrir-cajon')

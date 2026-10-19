@@ -106,4 +106,28 @@ describe('ImpresionService', () => {
     await expect(service.imprimirComandas([comanda], 2)).rejects.toThrow();
     expect(eventos.enviarYEsperar).not.toHaveBeenCalled();
   });
+
+  it('abre el cajón antes de las comandas, sin descargar el logo ni repetir consultas de empresa', async () => {
+    process.env.ESC_POS_ENABLED='true';process.env.IMPRESION_MODO='agente';
+    const prisma={empresa:{findUnique:jest.fn().mockResolvedValue({nombre:'Trailer',logo:'https://example.test/logo.png'})}};
+    const eventos={enviarYEsperar:jest.fn().mockResolvedValue({ok:true})};
+    const service=new ImpresionService(prisma as any,eventos as any);
+    const logo=jest.spyOn(service as any,'generarLogoEscPos').mockRejectedValue(new Error('No se debe descargar'));
+    await service.imprimirComandas([{numero:'42',ladoNombre:'PLANCHA',detalles:[{cantidad:1,producto:{nombre:'Hamburguesa'}}]},{numero:'42',ladoNombre:'VAPORERA',detalles:[{cantidad:1,producto:{nombre:'Perro'}}]}],1,true);
+    expect(logo).not.toHaveBeenCalled();expect(prisma.empresa.findUnique).toHaveBeenCalledTimes(1);
+    const bytes=eventos.enviarYEsperar.mock.calls[0][2] as Buffer;
+    expect(bytes.indexOf(Buffer.from([27,112,0,25,250]))).toBeLessThan(bytes.indexOf(Buffer.from('PLANCHA')));
+    expect(eventos.enviarYEsperar).toHaveBeenCalledTimes(1);
+    expect(eventos.enviarYEsperar.mock.calls[0][3]).toBe(15000);
+  });
+
+  it('procesa un logo real con el módulo sharp del servidor y reutiliza su caché', async () => {
+    const sharp=require('sharp');const png=await sharp({create:{width:8,height:8,channels:3,background:'#000'}}).png().toBuffer();
+    const consulta=jest.spyOn(global,'fetch').mockResolvedValue({ok:true,headers:new Headers({'content-type':'image/png'}),arrayBuffer:async()=>png} as any);
+    try {
+      const service=new ImpresionService();const empresa={logo:'https://example.test/logo.png'};
+      const logo=await (service as any).generarLogoEscPos(empresa);
+      expect(logo.length).toBeGreaterThan(0);await (service as any).generarLogoEscPos(empresa);expect(consulta).toHaveBeenCalledTimes(1);
+    }finally{consulta.mockRestore();}
+  });
 });

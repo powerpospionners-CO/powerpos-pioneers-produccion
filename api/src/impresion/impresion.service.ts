@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Socket } from 'node:net';
-import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
+
+const sharp: typeof import('sharp').default = require('sharp');
 
 const INICIO = Buffer.from([0x1b, 0x40]);
 const CORTE = Buffer.from([0x1d, 0x56, 0x41, 0x03]);
@@ -60,10 +61,11 @@ export class ImpresionService {
     datos: Buffer,
     host?: string,
     port?: number,
+    timeoutAgenteMs?: number,
   ): Promise<string | null> {
     if (this.modoAgente()) {
       if (!this.eventos) return 'Agente de impresión no disponible en este servidor';
-      const resultado = await this.eventos.enviarYEsperar(empresaId, tipo, datos);
+      const resultado = await this.eventos.enviarYEsperar(empresaId, tipo, datos, timeoutAgenteMs);
       return resultado.ok ? null : resultado.motivo || 'El agente de impresión no confirmó la impresión';
     }
     if (!host) return 'Falta ESC_POS_HOST';
@@ -127,22 +129,23 @@ export class ImpresionService {
   }
 
   /** Un solo envío al agente/puerto para que las estaciones no se interrumpan. */
-  async imprimirComandas(comandas: any[], empresaId: number) {
+  async imprimirComandas(comandas: any[], empresaId: number, abrirCajon = false) {
     if (empresaId !== 1 || !Array.isArray(comandas) || comandas.length < 1 || comandas.length > 2 ||
       comandas.some(c => !['PLANCHA', 'VAPORERA', 'PERROS Y FRITURAS'].includes(c?.ladoNombre) || !Array.isArray(c.detalles) || !c.detalles.length) ||
       new Set(comandas.map(c => c.ladoNombre)).size !== comandas.length)
       throw new BadRequestException('Selecciona una o las dos estaciones del Trailer para imprimir.');
     if (String(process.env.ESC_POS_ENABLED).toLowerCase() !== 'true')
       return { impreso: false, modo: 'browser', fallbackBrowser: true, motivo: 'ESC_POS_ENABLED no está activo' };
-    const partes: Buffer[] = [];
-    for (const comanda of comandas) partes.push(INICIO, await this.formatearComanda(comanda, empresaId), CORTE);
+    const partes: Buffer[] = abrirCajon ? [INICIO, CAJON] : [];
+    const empresa = await this.obtenerEmpresa(empresaId);
+    for (const comanda of comandas) partes.push(INICIO, await this.formatearComanda(comanda, empresaId, empresa), CORTE);
     const modo = this.modoAgente() ? 'agente' : 'tcp';
-    const error = await this.enviarAgenteOTcp(empresaId, 'COMANDA', Buffer.concat(partes), process.env.ESC_POS_HOST, Number(process.env.ESC_POS_PORT || 9100));
+    const error = await this.enviarAgenteOTcp(empresaId, 'COMANDA', Buffer.concat(partes), process.env.ESC_POS_HOST, Number(process.env.ESC_POS_PORT || 9100), 15000);
     if (error) {
       this.logger.warn(`No se pudo imprimir el lote de comandas (${modo}): ${error}`);
       return { impreso: false, modo, fallbackBrowser: true, motivo: error };
     }
-    return { impreso: true, modo, estaciones: comandas.map(c => c.ladoNombre) };
+    return { impreso: true, modo, estaciones: comandas.map(c => c.ladoNombre), ...(abrirCajon ? { cajonEnviado: true } : {}) };
   }
 
   async imprimirRecibo(pedido: any, empresaId: number) {
@@ -402,15 +405,16 @@ export class ImpresionService {
     }
   }
 
-  private async formatearComanda(pedido: any, empresaId: number) {
-    const empresa = await this.obtenerEmpresa(empresaId);
+  private async formatearComanda(pedido: any, empresaId: number, datosEmpresa?: any) {
+    const empresa = datosEmpresa === undefined ? await this.obtenerEmpresa(empresaId) : datosEmpresa;
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
     const nit = empresa?.nit ? `NIT: ${empresa.nit}` : 'NIT: N/A';
     const direccion = empresa?.direccion ? `DIR: ${empresa.direccion}` : 'DIR: N/A';
     const telefono = empresa?.telefono ? `TEL: ${empresa.telefono}` : 'TEL: N/A';
     const nombreCliente = pedido?.cliente?.nombre ? `CLIENTE: ${pedido.cliente.nombre}` : 'CLIENTE: GENERAL';
     const telefonoCliente = pedido?.cliente?.telefono ? `TEL: ${pedido.cliente.telefono}` : 'TEL: NO REGISTRADO';
-    const logo = await this.generarLogoEscPos(empresa);
+    // Cocina necesita texto inmediato; no descargar ni procesar imágenes al cobrar.
+    const logo = empresaId === 1 ? Buffer.alloc(0) : await this.generarLogoEscPos(empresa);
 
     const lineas: Array<string | Buffer> = [
       '\n',
