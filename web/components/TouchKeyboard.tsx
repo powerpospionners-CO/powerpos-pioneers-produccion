@@ -1,6 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowBigUp, Delete, X } from 'lucide-react';
+import { useTecladoTactilEmpresa } from '@/lib/useTecladoTactilEmpresa';
 
 interface TouchKeyboardProps {
   value: string;
@@ -22,6 +23,21 @@ const FILA_SIMBOLOS = [
 ];
 
 export default function TouchKeyboard({ value, onChange, onClose, titulo }: TouchKeyboardProps) {
+  const automatico = useTecladoTactilEmpresa();
+  const cerrar = useRef(onClose);
+  cerrar.current = onClose;
+  useEffect(() => {
+    if (!automatico) return;
+    const cerrarManual = () => cerrar.current();
+    window.addEventListener('powerpos:teclado-cerrado', cerrarManual);
+    window.dispatchEvent(new Event('powerpos:abrir-teclado'));
+    return () => window.removeEventListener('powerpos:teclado-cerrado', cerrarManual);
+  }, [automatico]);
+  if (automatico) return null;
+  return <TecladoManual value={value} onChange={onChange} onClose={onClose} titulo={titulo} />;
+}
+
+function TecladoManual({ value, onChange, onClose, titulo }: TouchKeyboardProps) {
   const [mayusculas, setMayusculas] = useState(false);
   const [modoSimbolos, setModoSimbolos] = useState(false);
 

@@ -1,0 +1,10 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
+const codigo=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../lib/edicionTeclado.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+const contexto=vm.createContext({exports:{}});vm.runInContext(codigo,contexto);
+const {editarConTeclado,empresaConTeclado}=contexto.exports;
+const editar=(...args)=>JSON.parse(JSON.stringify(editarConTeclado(...args)));
+test('reemplaza el importe seleccionado sin concatenarlo al anterior',()=>{assert.deepEqual(editar('12000',{inicio:0,fin:5},'2'),{valor:'2',cursor:1});});
+test('inserta en el cursor y permite corregir una parte del texto',()=>{assert.deepEqual(editar('sal marina',{inicio:4,fin:10},'rosada'),{valor:'sal rosada',cursor:10});assert.deepEqual(editar('caja',{inicio:2,fin:2},'ñ'),{valor:'cañja',cursor:3});});
+test('borra la selección o el carácter anterior y puede limpiar el campo',()=>{assert.deepEqual(editar('20000',{inicio:5,fin:5},'BORRAR'),{valor:'2000',cursor:4});assert.deepEqual(editar('20000',{inicio:0,fin:5},'BORRAR'),{valor:'',cursor:0});assert.deepEqual(editar('texto',{inicio:2,fin:2},'LIMPIAR'),{valor:'',cursor:0});});
+test('admite ceros rápidos, decimales, tildes y saltos de línea',()=>{assert.equal(editar('2',{inicio:1,fin:1},'00').valor,'200');assert.equal(editar('12.',{inicio:3,fin:3},'5').valor,'12.5');assert.equal(editar('café',{inicio:4,fin:4},'\n').valor,'café\n');});
+test('solo habilita el teclado automático para Trailer del Sabor',()=>{assert.equal(empresaConTeclado(1),true);for(const id of [undefined,null,0,2,3])assert.equal(empresaConTeclado(id),false);});

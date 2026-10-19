@@ -3,6 +3,7 @@ import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import RegistroServiceWorker from "@/components/RegistroServiceWorker";
 import { NotificacionesProvider } from "@/components/Notificaciones";
+import TecladoTactilEmpresa from "@/components/TecladoTactilEmpresa";
 
 export const metadata: Metadata = {
   title: "PowerPOS",
@@ -36,6 +37,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <RegistroServiceWorker />
         <ThemeProvider><NotificacionesProvider>{children}</NotificacionesProvider></ThemeProvider>
+        <TecladoTactilEmpresa />
       </body>
     </html>
   );
