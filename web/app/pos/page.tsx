@@ -694,23 +694,40 @@ function RestaurantePOS() {
     return true;
   };
 
-  const imprimirDocumentos = async (pedido: any, comandas: boolean, recibo: boolean, ventana?: Window | null) => {
+  const comandasConfiguradas = async (pedido: any, estacion?: string) => {
+    const { data } = await api.get('/productos/comandas/configuracion');
+    return prepararComandas(pedido, usuario?.empresaId, productos, data.asignaciones).filter(g => !estacion || g.ladoNombre === estacion);
+  };
+
+  const comandasDesdeNavegador = async (pedido: any) => {
+    const ventana = window.open('', '_blank', 'width=380,height=700');
+    try {
+      const grupos = await comandasConfiguradas(pedido);
+      if (!grupos.length) { ventana?.close(); setEstadoImpresion('Esta venta no tiene productos asignados a comandas.'); return; }
+      if (!ventana) { setEstadoImpresion('Permite ventanas emergentes para imprimir.'); return; }
+      imprimirComandasNavegador(grupos, ventana);
+      setEstadoImpresion('Comandas abiertas para imprimir desde el navegador.');
+    } catch { ventana?.close(); setEstadoImpresion('No se pudo consultar la distribución de productos. Reintenta la impresión sin volver a cobrar.'); }
+  };
+
+  const imprimirDocumentos = async (pedido: any, comandas: boolean, recibo: boolean, ventana?: Window | null, estacion?: string) => {
     setImprimiendo(true);
+    setEstadoImpresion('Preparando impresión…');
     const pendientes: any[] = [];
     const avisos: string[] = [];
     try {
       if (comandas) {
-        const grupos = prepararComandas(pedido, usuario?.empresaId, productos);
+        const grupos = await comandasConfiguradas(pedido, estacion);
         if (!grupos.length) avisos.push('Esta venta no tiene productos para comandas.');
-        for (const grupo of grupos) {
-          try { const r = await api.post('/impresion/comanda', grupo); if (!r.data?.impreso) pendientes.push(grupo); }
-          catch { pendientes.push(grupo); }
+        if (grupos.length) {
+          try { const r = await api.post('/impresion/comandas', { comandas: grupos }); if (!r.data?.impreso) pendientes.push(...grupos); }
+          catch { pendientes.push(...grupos); }
         }
         if (pendientes.length) {
           const abierta = imprimirComandasNavegador(pendientes, ventana);
           ventana = null;
           avisos.push(abierta ? 'Comandas abiertas para imprimir desde el navegador.' : 'El navegador bloqueó la impresión. Usa «Comandas desde navegador» y permite ventanas emergentes.');
-        } else if (grupos.length) avisos.push('Comandas enviadas a la impresora.');
+        } else if (grupos.length) avisos.push(`Enviado a la impresora: ${grupos.map(g => `${g.ladoNombre} (${g.detalles.reduce((n: number, d: any) => n + Number(d.cantidad), 0)} unidades)`).join(' / ')}.`);
       }
       if (recibo) {
         let impreso = false;
@@ -963,11 +980,11 @@ function RestaurantePOS() {
       const comandasElegidas = (esTrailer || modoPreparacion === 'COMANDAS') && imprimirComanda;
       const reciboElegido = !esTrailer || imprimirReciboCliente;
       setImprimirReciboCliente(false);
-      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) {
-        api.post('/impresion/abrir-cajon').catch(() => undefined);
-      }
       await imprimirDocumentos(data, comandasElegidas, reciboElegido, ventanaImpresion);
       ventanaImpresion = null;
+      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) {
+        await api.post('/impresion/abrir-cajon').catch(() => undefined);
+      }
 
       }
 
@@ -1020,8 +1037,10 @@ function RestaurantePOS() {
           <p role="status" className="my-2 text-sm text-orange-200">{estadoImpresion}</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false)} className="min-h-12 rounded-lg bg-orange-600 px-4 disabled:opacity-50">Volver a imprimir comandas</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, undefined, 'PLANCHA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Plancha</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, undefined, 'VAPORERA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Vaporera</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, false, true)} className="min-h-12 rounded-lg bg-gray-700 px-4 disabled:opacity-50">Imprimir recibo del cliente</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => { const grupos = prepararComandas(ultimoImprimible, usuario?.empresaId, productos); setEstadoImpresion(!grupos.length ? 'Esta venta no tiene productos para comandas.' : imprimirComandasNavegador(grupos) ? 'Comandas abiertas para imprimir.' : 'Permite ventanas emergentes para imprimir.'); }} className="min-h-12 rounded-lg border border-gray-600 px-4 disabled:opacity-50">Comandas desde navegador</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void comandasDesdeNavegador(ultimoImprimible)} className="min-h-12 rounded-lg border border-gray-600 px-4 disabled:opacity-50">Comandas desde navegador</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => { const ventana = window.open('', '_blank', 'width=320,height=700'); if (ventana) void imprimirTicket(ultimoImprimible, ventana); else setEstadoImpresion('Permite ventanas emergentes para imprimir el recibo.'); }} className="min-h-12 rounded-lg border border-gray-600 px-4 disabled:opacity-50">Recibo desde navegador</button>
           </div>
         </section>}

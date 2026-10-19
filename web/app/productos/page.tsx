@@ -6,6 +6,7 @@ import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
+import ConfiguracionComandas from '@/components/ConfiguracionComandas';
 
 interface Categoria {
   id: number;
@@ -428,6 +429,9 @@ export default function ProductosPage() {
   const tipoNegocio = useAuthStore((state) => state.usuario?.tipoNegocio);
   const esRestaurante = !tipoNegocio || tipoNegocio === 'RESTAURANTE';
   const esEnchilaMarket = useAuthStore((state) => state.usuario?.empresaId) === 2;
+  const usuario = useAuthStore(state => state.usuario);
+  const puedeConfigurarComandas = usuario?.empresaId === 1 && ['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol);
+  const [mostrarComandas, setMostrarComandas] = useState(false);
   const [descargandoExcel, setDescargandoExcel] = useState(false);
   const descargarExcel = async () => {
     setDescargandoExcel(true);
@@ -894,6 +898,8 @@ export default function ProductosPage() {
           </div>
         </div>
 
+        {puedeConfigurarComandas && <div className="mb-4"><button type="button" onClick={() => setMostrarComandas(v => !v)} className="min-h-12 rounded-lg bg-orange-600 px-5 font-semibold text-white">{mostrarComandas ? 'Cerrar distribución de comandas' : 'Plancha y vaporera · agrupar productos'}</button></div>}
+        {puedeConfigurarComandas && mostrarComandas && <ConfiguracionComandas productos={productos} />}
         {/* Chips de categorías */}
         {categorias.length > 0 && (
           <div className="flex gap-2 mb-4 flex-wrap">
