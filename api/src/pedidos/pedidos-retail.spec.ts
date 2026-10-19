@@ -27,6 +27,35 @@ function escenario(tipoNegocio: 'RESTAURANTE' | 'SUPERMERCADO', stockActualizado
 describe('Pedidos comerciales', () => {
   const venta = { sucursalId: 2, metodoPago: 'EFECTIVO', items: [{ productoId: 5, cantidad: 2 }] };
 
+  it('ofrece extras globales del Trailer aunque el producto tenga otros asociados y descuenta gramos', async () => {
+    const { db, service } = escenario('RESTAURANTE');
+    const queso = { id: 9, nombre: 'Queso', precio: 2000, ingredienteId: 40, cantidad: 30, ingrediente: { id: 40, activo: true, costoUnitario: 20 }, activo: true, disponible: true };
+    db.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Hamburguesa', categoria: { nombre: 'Plancha' }, precio: 10000, disponible: true, ingredientes: [], aceptaAdicionales: false, adicionales: [{ adicional: { id: 8, activo: true, disponible: true } }] });
+    db.adicional = { findMany: jest.fn().mockResolvedValue([queso]) }; db.ingrediente = { update: jest.fn() };
+    await service.crearEnTransaccion({ ...venta, items: [{ productoId: 5, cantidad: 2, adicionales: [{ adicionalId: 9, cantidad: 2 }] }] }, 3, 1, db);
+    const data = db.pedido.create.mock.calls[0][0].data;
+    expect(Number(data.total)).toBe(28000);
+    expect(data.consumoInventario).toContainEqual({ tipo: 'INGREDIENTE', id: 40, cantidad: 120 });
+    expect(db.adicional.findMany.mock.calls[0][0].where).toMatchObject({ empresaId: 1, empaqueParaLlevar: false });
+  });
+
+  it.each([
+    { nombre: 'Coca Cola personal', categoria: { nombre: 'Otros' } },
+    { nombre: 'Personal 250 ml', categoria: { nombre: 'Personales', categoriaPadre: { nombre: 'Bebidas' } } },
+  ])('rechaza extras en bebidas del Trailer también desde la API: $nombre', async producto => {
+    const { db, service } = escenario('RESTAURANTE');
+    db.producto.findFirst.mockResolvedValue({ ...producto, id: 5, precio: 1000, disponible: true, ingredientes: [], adicionales: [], aceptaAdicionales: true });
+    await expect(service.crearEnTransaccion({ ...venta, items: [{ productoId: 5, cantidad: 1, adicionales: [{ adicionalId: 9 }] }] }, 3, 1, db)).rejects.toThrow('no está disponible');
+    expect(db.pedido.create).not.toHaveBeenCalled();
+  });
+
+  it('no vende adicionales pendientes de gramaje ni ingredientes desactivados', async () => {
+    const { db, service } = escenario('RESTAURANTE');
+    db.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Perro', precio: 10000, disponible: true, ingredientes: [], adicionales: [] });
+    db.adicional = { findMany: jest.fn().mockResolvedValue([{ id: 9, ingredienteId: 40, cantidad: null, disponible: true }]) };
+    await expect(service.crearEnTransaccion({ ...venta, items: [{ productoId: 5, cantidad: 1, adicionales: [{ adicionalId: 9 }] }] }, 3, 1, db)).rejects.toThrow('no está disponible');
+  });
+
   it.each(['AQUI', 'PARA_LLEVAR'])('guarda y descuenta el empaque real de dos hamburguesas %s', async tipoConsumo => {
     const { db, service } = escenario('RESTAURANTE');
     const bolsa = { id: 21, nombre: 'Bolsita metalizada', costoUnitario: 100 };

@@ -12,6 +12,7 @@ import { bloquearCajaSucursal } from '../caja/caja-lock';
 import { costoHistoricoItem } from './costo-historico';
 import { fechaDia } from '../administracion/administracion.service';
 import { adicionalesConEmpaque } from './empaque';
+import { esBebida, adicionalListo } from '../adicionales/reglas-trailer';
 
 const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
@@ -166,6 +167,7 @@ export class PedidosService {
         where: { id: item.productoId, empresaId, activo: true },
         include: {
           ingredientes: { include: { ingrediente: true } },
+          categoria: { include: { categoriaPadre: true } },
           adicionales: {
             include: { adicional: { include: { ingrediente: true } } },
           },
@@ -225,7 +227,20 @@ export class PedidosService {
       // o todo el catálogo activo de la empresa si el producto no tiene ninguno marcado
       // y "aceptaAdicionales" (las bebidas suelen tenerlo en false).
       const adicionalesPermitidos = new Map<number, any>();
-      if (producto.adicionales.length > 0) {
+      if (empresaId === 1) {
+        // Los empaques siguen ligados a su producto; los extras de comida son globales.
+        for (const pa of producto.adicionales) {
+          if (pa.adicional.empaqueParaLlevar && adicionalListo(pa.adicional))
+            adicionalesPermitidos.set(pa.adicional.id, pa.adicional);
+        }
+        if (!esBebida(producto) && Array.isArray(item.adicionales) && item.adicionales.length) {
+          const catalogo = await db.adicional.findMany({
+            where: { empresaId, activo: true, disponible: true, empaqueParaLlevar: false },
+            include: { ingrediente: true },
+          });
+          for (const ad of catalogo) if (adicionalListo(ad)) adicionalesPermitidos.set(ad.id, ad);
+        }
+      } else if (producto.adicionales.length > 0) {
         for (const pa of producto.adicionales) {
           if (pa.adicional.activo && pa.adicional.disponible) {
             adicionalesPermitidos.set(pa.adicional.id, pa.adicional);

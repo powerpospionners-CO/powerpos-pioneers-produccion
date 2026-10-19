@@ -464,6 +464,9 @@ export class ProductosService {
             unidad: ing.unidad,
             stock: ing.stockInicial || 0,
             stockMinimo: ing.stockMinimo || 0,
+            ...(empresaId === 1 ? { adicionales: { create: {
+              empresaId, nombre: ing.nombre, precio: 0, cantidad: null, disponible: false,
+            } } } : {}),
           },
         });
         await this.prisma.productoIngrediente.create({

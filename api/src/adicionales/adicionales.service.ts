@@ -14,16 +14,33 @@ export class AdicionalesService {
       where: {
         empresaId,
         activo: true,
-        ...(productoId && { productos: { some: { productoId } } }),
+        ...(productoId && empresaId !== 1 && { productos: { some: { productoId } } }),
       },
       include: { ingrediente: true },
       orderBy: { nombre: 'asc' },
     });
   }
 
+  async sincronizarIngredientes(empresaId: number) {
+    if (empresaId !== 1) throw new BadRequestException('Esta opción pertenece al Trailer del Sabor');
+    return this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(74224, ${empresaId})`;
+      const ingredientes = await tx.ingrediente.findMany({ where: { empresaId, activo: true } });
+      // Incluso los desactivados cuentan: no revivir adicionales eliminados por el administrador.
+      const existentes = await tx.adicional.findMany({ where: { empresaId }, select: { ingredienteId: true } });
+      const ids = new Set(existentes.map(a => a.ingredienteId));
+      const faltantes = ingredientes.filter(i => !ids.has(i.id));
+      if (faltantes.length) await tx.adicional.createMany({ data: faltantes.map(i => ({
+        empresaId, ingredienteId: i.id, nombre: i.nombre, precio: 0, cantidad: null, disponible: false,
+      })) });
+      return { creados: faltantes.length };
+    });
+  }
+
   async crear(datos: any, empresaId: number) {
     const ingredienteId = await this.validarIngrediente(datos.ingredienteId, empresaId);
     this.validarEmpaque(datos.empaqueParaLlevar ?? false, ingredienteId, datos.cantidad);
+    if (empresaId === 1) this.validarConfiguracion(datos.precio, ingredienteId, datos.cantidad);
 
     return this.prisma.adicional.create({
       data: {
@@ -48,13 +65,16 @@ export class AdicionalesService {
     this.validarEmpaque(datos.empaqueParaLlevar ?? actual.empaqueParaLlevar,
       tieneIngrediente ? ingredienteId : actual.ingredienteId,
       datos.cantidad === undefined ? actual.cantidad : datos.cantidad);
+    if (empresaId === 1) this.validarConfiguracion(datos.precio ?? actual.precio,
+      tieneIngrediente ? ingredienteId : actual.ingredienteId,
+      datos.cantidad === undefined ? actual.cantidad : datos.cantidad);
 
     return this.prisma.adicional.update({
       where: { id },
       data: {
         nombre: datos.nombre,
         precio: datos.precio,
-        disponible: datos.disponible,
+        disponible: empresaId === 1 ? (datos.disponible ?? true) : datos.disponible,
         empaqueParaLlevar: datos.empaqueParaLlevar,
         ...(tieneIngrediente && {
           ingredienteId,
@@ -87,6 +107,13 @@ export class AdicionalesService {
     if (typeof empaque !== 'boolean') throw new BadRequestException('La opción de empaque debe ser válida');
     if (empaque && (!ingredienteId || !Number.isFinite(Number(cantidad)) || Number(cantidad) <= 0))
       throw new BadRequestException('El empaque requiere un ingrediente y una cantidad mayor que cero');
+  }
+
+  private validarConfiguracion(precio: unknown, ingredienteId: number | null | undefined, cantidad: unknown) {
+    if (precio === null || precio === '' || !Number.isFinite(Number(precio)) || Number(precio) < 0)
+      throw new BadRequestException('Indica un precio válido; puede ser cero si está incluido');
+    if (ingredienteId && (!Number.isFinite(Number(cantidad)) || Number(cantidad) <= 0))
+      throw new BadRequestException('Indica el gramaje o cantidad a descontar por cada adicional');
   }
 
   private async validarIngrediente(

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Socket } from 'node:net';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
+import { reciboTrailer } from './recibo-trailer';
 
 const sharp: typeof import('sharp').default = require('sharp');
 
@@ -474,6 +475,7 @@ export class ImpresionService {
 
   private async formatearRecibo(pedido: any, empresaId: number) {
     const empresa = await this.obtenerEmpresa(empresaId);
+    if (empresaId === 1) return reciboTrailer(pedido, empresa, await this.generarLogoEscPos(empresa));
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
     const esRestaurante = empresa?.tipoNegocio === 'RESTAURANTE';
     const logo = await this.generarLogoEscPos(empresa);

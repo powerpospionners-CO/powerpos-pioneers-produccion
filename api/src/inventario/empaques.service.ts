@@ -65,7 +65,9 @@ export class EmpaquesService {
     return this.ejecutar('CREAR_MATERIA_PRIMA', datos, { nombre, gramos }, actor, async tx => {
       if (await tx.ingrediente.findFirst({ where: { empresaId: actor.empresaId, activo: true, nombre: { equals: nombre, mode: 'insensitive' } } }))
         throw new BadRequestException('Esta materia prima ya existe. Registra una entrada o un conteo sobre la existente');
-      const ingrediente = await tx.ingrediente.create({ data: { empresaId: actor.empresaId, nombre, unidad: 'gramos', unidadCompra: 'kg', factorConversion: 1000, stock: gramos, stockMinimo: 0 } });
+      const ingrediente = await tx.ingrediente.create({ data: { empresaId: actor.empresaId, nombre, unidad: 'gramos', unidadCompra: 'kg', factorConversion: 1000, stock: gramos, stockMinimo: 0,
+        ...(actor.empresaId === 1 ? { adicionales: { create: { empresaId: actor.empresaId, nombre, precio: 0, cantidad: null, disponible: false } } } : {}),
+      } });
       await tx.movimientoInventario.create({ data: { ingredienteId: ingrediente.id, usuarioId: actor.id, tipo: 'AJUSTE', cantidadMovida: gramos, stockAnterior: 0, stockNuevo: gramos, descripcion: 'Saldo inicial contado de materia prima sin empacar' } });
       return { ingredienteId: ingrediente.id, materia: nombre, gramos, stockNuevo: gramos };
     });

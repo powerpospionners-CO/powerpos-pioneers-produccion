@@ -44,6 +44,9 @@ export class InventarioService {
         unidadCompra: datos.unidadCompra || null,
         factorConversion: datos.factorConversion || null,
         costoUnitario: datos.costoUnitario || null,
+        ...(empresaId === 1 ? { adicionales: { create: {
+          empresaId, nombre: datos.nombre, precio: 0, cantidad: null, disponible: false,
+        } } } : {}),
       },
     });
 
