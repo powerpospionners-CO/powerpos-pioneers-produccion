@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Socket } from 'node:net';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
@@ -124,6 +124,25 @@ export class ImpresionService {
     }
 
     return { impreso: true, modo };
+  }
+
+  /** Un solo envío al agente/puerto para que las estaciones no se interrumpan. */
+  async imprimirComandas(comandas: any[], empresaId: number) {
+    if (empresaId !== 1 || !Array.isArray(comandas) || comandas.length < 1 || comandas.length > 2 ||
+      comandas.some(c => !['PLANCHA', 'VAPORERA', 'PERROS Y FRITURAS'].includes(c?.ladoNombre) || !Array.isArray(c.detalles) || !c.detalles.length) ||
+      new Set(comandas.map(c => c.ladoNombre)).size !== comandas.length)
+      throw new BadRequestException('Selecciona una o las dos estaciones del Trailer para imprimir.');
+    if (String(process.env.ESC_POS_ENABLED).toLowerCase() !== 'true')
+      return { impreso: false, modo: 'browser', fallbackBrowser: true, motivo: 'ESC_POS_ENABLED no está activo' };
+    const partes: Buffer[] = [];
+    for (const comanda of comandas) partes.push(INICIO, await this.formatearComanda(comanda, empresaId), CORTE);
+    const modo = this.modoAgente() ? 'agente' : 'tcp';
+    const error = await this.enviarAgenteOTcp(empresaId, 'COMANDA', Buffer.concat(partes), process.env.ESC_POS_HOST, Number(process.env.ESC_POS_PORT || 9100));
+    if (error) {
+      this.logger.warn(`No se pudo imprimir el lote de comandas (${modo}): ${error}`);
+      return { impreso: false, modo, fallbackBrowser: true, motivo: error };
+    }
+    return { impreso: true, modo, estaciones: comandas.map(c => c.ladoNombre) };
   }
 
   async imprimirRecibo(pedido: any, empresaId: number) {

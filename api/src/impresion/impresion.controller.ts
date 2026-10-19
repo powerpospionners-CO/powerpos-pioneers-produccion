@@ -23,6 +23,11 @@ export class ImpresionController {
     return this.impresionService.imprimirRecibo(pedido, req.user.empresaId);
   }
 
+  @Post('comandas')
+  imprimirComandas(@Body() datos: { comandas: any[] }, @Request() req: any) {
+    return this.impresionService.imprimirComandas(datos?.comandas, req.user.empresaId);
+  }
+
   @Post('abrir-cajon')
   abrirCajon(@Request() req: any) {
     return this.impresionService.abrirCajon(req.user.empresaId);

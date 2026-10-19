@@ -94,6 +94,17 @@ export class ProductosController {
     res.send(buffer);
   }
 
+  @Get('comandas/configuracion')
+  configuracionComandas(@Request() req: any) {
+    return this.productosService.configuracionComandas(req.user.empresaId);
+  }
+
+  @Patch('comandas/configuracion')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  guardarComandas(@Body() datos: any, @Request() req: any) {
+    return this.productosService.guardarComandas(datos?.cambios, req.user.empresaId, req.user.id);
+  }
+
   @Get(':id')
   obtener(@Param('id') id: string, @Request() req: any) {
     return this.productosService.obtener(+id, req.user.empresaId);

@@ -336,6 +336,32 @@ export class ProductosService {
     });
   }
 
+  async configuracionComandas(empresaId: number) {
+    if (empresaId !== 1) throw new BadRequestException('Esta configuración corresponde al Trailer del Sabor.');
+    const registro = await this.prisma.auditoria.findFirst({ where: { empresaId, entidad: 'ConfiguracionComandas' }, orderBy: { id: 'desc' } });
+    return { asignaciones: (registro?.detalle as any)?.asignaciones || {} };
+  }
+
+  async guardarComandas(cambios: any, empresaId: number, usuarioId: number) {
+    if (empresaId !== 1) throw new BadRequestException('Esta configuración corresponde al Trailer del Sabor.');
+    if (!Array.isArray(cambios) || !cambios.length || cambios.length > 5000 || cambios.some(c => !Number.isSafeInteger(c?.productoId) || c.productoId < 1 || !['PLANCHA', 'VAPORERA', 'SIN_COMANDA', 'AUTO'].includes(c.estacion)) || new Set(cambios.map(c => c.productoId)).size !== cambios.length)
+      throw new BadRequestException('Selecciona los productos y un lado válido para cada uno.');
+    return this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(74223, ${empresaId})`;
+      const productos = await tx.producto.count({ where: { empresaId, activo: true, id: { in: cambios.map(c => c.productoId) } } });
+      if (productos !== cambios.length) throw new BadRequestException('Uno de los productos ya no está activo o no pertenece a esta empresa. Recarga la lista.');
+      const anterior = await tx.auditoria.findFirst({ where: { empresaId, entidad: 'ConfiguracionComandas' }, orderBy: { id: 'desc' } });
+      const asignaciones = { ...((anterior?.detalle as any)?.asignaciones || {}) };
+      for (const cambio of cambios) {
+        if (cambio.estacion === 'AUTO') delete asignaciones[cambio.productoId];
+        else asignaciones[cambio.productoId] = cambio.estacion;
+      }
+      // La configuración y su historial se conservan juntos sin modificar recetas, ventas o existencias.
+      await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: 'ConfiguracionComandas', accion: 'ACTUALIZAR', detalle: { asignaciones, cambios } } });
+      return { asignaciones };
+    });
+  }
+
   // Lista plana del inventario (nombre, peso, precio) en Excel, separando el
   // peso del nombre cuando viene incluido (ej. "ACACIA DE LA INDIA ENTERO
   // 125 G" -> nombre "ACACIA DE LA INDIA ENTERO", peso "125 g").
