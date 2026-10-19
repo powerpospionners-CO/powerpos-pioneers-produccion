@@ -14,7 +14,8 @@ import VentasPendientes from '@/components/VentasPendientes';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import RetailPOS from './RetailPOS';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
-import { prepararComandas, documentoComandas } from '@/lib/comandas';
+import { prepararComandas } from '@/lib/comandas';
+import { crearColaImpresion } from '@/lib/colaImpresion';
 import OpcionesImpresionTrailer from '@/components/OpcionesImpresionTrailer';
 
 interface AdicionalProducto {
@@ -97,7 +98,11 @@ function RestaurantePOS() {
   const [ultimoImprimible, setUltimoImprimible] = useState<any>(null);
   const [estadoImpresion, setEstadoImpresion] = useState('');
   const [imprimiendo, setImprimiendo] = useState(false);
-  useEffect(() => { setImprimirComanda(true); setImprimirReciboCliente(false); setUltimoImprimible(null); setEstadoImpresion(''); }, [usuario?.empresaId]);
+  const colaImpresion = useRef(crearColaImpresion());
+  const trabajosImpresion = useRef(0);
+  const ultimoImprimibleRef = useRef<any>(null);
+  const [fallosImpresion, setFallosImpresion] = useState<{ clave: string; pedido: any; mensaje: string; comandas: boolean; recibo: boolean; estacion?: string }[]>([]);
+  useEffect(() => { setImprimirComanda(true); setImprimirReciboCliente(false); setUltimoImprimible(null); ultimoImprimibleRef.current = null; setFallosImpresion([]); setEstadoImpresion(''); }, [usuario?.empresaId]);
   const [ultimoPedido, setUltimoPedido] = useState<string | null>(null);
   const canalPantalla = useRef<BroadcastChannel | null>(null);
 
@@ -684,64 +689,49 @@ function RestaurantePOS() {
     }, 500);
   };
 
-  const imprimirComandasNavegador = (comandas: any[], reservada?: Window | null) => {
-    if (!comandas.length) { reservada?.close(); return false; }
-    const ventana = reservada || window.open('', '_blank', 'width=380,height=700');
-    if (!ventana) return false;
-    ventana.document.open(); ventana.document.write(documentoComandas(comandas, nombreEmpresa)); ventana.document.close();
-    ventana.focus();
-    setTimeout(() => { if (!ventana.closed) { ventana.print(); ventana.close(); } }, 500);
-    return true;
-  };
-
-  const comandasConfiguradas = async (pedido: any, estacion?: string) => {
-    const { data } = await api.get('/productos/comandas/configuracion');
-    return prepararComandas(pedido, usuario?.empresaId, productos, data.asignaciones).filter(g => !estacion || g.ladoNombre === estacion);
-  };
-
-  const comandasDesdeNavegador = async (pedido: any) => {
-    const ventana = window.open('', '_blank', 'width=380,height=700');
-    try {
-      const grupos = await comandasConfiguradas(pedido);
-      if (!grupos.length) { ventana?.close(); setEstadoImpresion('Esta venta no tiene productos asignados a comandas.'); return; }
-      if (!ventana) { setEstadoImpresion('Permite ventanas emergentes para imprimir.'); return; }
-      imprimirComandasNavegador(grupos, ventana);
-      setEstadoImpresion('Comandas abiertas para imprimir desde el navegador.');
-    } catch { ventana?.close(); setEstadoImpresion('No se pudo consultar la distribución de productos. Reintenta la impresión sin volver a cobrar.'); }
-  };
-
-  const imprimirDocumentos = async (pedido: any, comandas: boolean, recibo: boolean, ventana?: Window | null, estacion?: string) => {
-    setImprimiendo(true);
-    setEstadoImpresion('Preparando impresión…');
-    const pendientes: any[] = [];
-    const avisos: string[] = [];
-    try {
-      if (comandas) {
-        const grupos = await comandasConfiguradas(pedido, estacion);
-        if (!grupos.length) avisos.push('Esta venta no tiene productos para comandas.');
-        if (grupos.length) {
-          try { const r = await api.post('/impresion/comandas', { comandas: grupos }); if (!r.data?.impreso) pendientes.push(...grupos); }
-          catch { pendientes.push(...grupos); }
+  const imprimirDocumentos = (pedido: any, comandas: boolean, recibo: boolean, estacion?: string, abrirCajon = false) => {
+    const sesion = useAuthStore.getState();
+    const vigente = () => { const actual = useAuthStore.getState(); return actual.token === sesion.token && actual.usuario?.empresaId === sesion.usuario?.empresaId && actual.usuario?.sucursalId === sesion.usuario?.sucursalId; };
+    const informar = (texto: string) => { if (vigente() && ultimoImprimibleRef.current?.numero === pedido.numero) setEstadoImpresion(texto); };
+    const verificarSesion = () => { if (!vigente()) throw new Error('La sesión cambió. Consulta esta venta desde su empresa para reimprimir.'); };
+    const clave = pedido.numero + ':' + (estacion || 'TODAS');
+    trabajosImpresion.current++; setImprimiendo(true); informar('Venta guardada. Impresión pendiente por el agente…');
+    return colaImpresion.current.encolar(async () => {
+      const avisos: string[] = []; const errores: string[] = [];
+      let falloComandas = false, falloRecibo = false, cajonIncluido = false;
+      try {
+        verificarSesion(); informar('Venta guardada. Enviando al agente…');
+        if (comandas) {
+          try {
+            const { data: configuracion } = await api.get('/productos/comandas/configuracion'); verificarSesion();
+            const grupos = prepararComandas(pedido, sesion.usuario?.empresaId, productos, configuracion.asignaciones).filter(g => !estacion || g.ladoNombre === estacion);
+            if (!grupos.length) avisos.push('Esta venta no tiene productos asignados a comandas.');
+            else {
+              cajonIncluido = abrirCajon;
+              const { data } = await api.post('/impresion/comandas', { comandas: grupos, abrirCajon });
+              if (!data?.impreso) throw new Error(data?.motivo || 'El agente no confirmó la impresión.');
+              avisos.push('Comandas enviadas por el agente: ' + grupos.map(g => g.ladoNombre).join(' / ') + '.');
+            }
+          } catch (e: any) { falloComandas = true; errores.push('Comandas: ' + (e?.response?.data?.message || e.message || 'Sin confirmación del agente.')); }
         }
-        if (pendientes.length) {
-          const abierta = imprimirComandasNavegador(pendientes, ventana);
-          ventana = null;
-          avisos.push(abierta ? 'Comandas abiertas para imprimir desde el navegador.' : 'El navegador bloqueó la impresión. Usa «Comandas desde navegador» y permite ventanas emergentes.');
-        } else if (grupos.length) avisos.push(`Enviado a la impresora: ${grupos.map(g => `${g.ladoNombre} (${g.detalles.reduce((n: number, d: any) => n + Number(d.cantidad), 0)} unidades)`).join(' / ')}.`);
-      }
-      if (recibo) {
-        let impreso = false;
-        try { const r = await api.post('/impresion/ticket', pedido); impreso = !!r.data?.impreso; } catch { /* Ofrecer navegador. */ }
-        if (impreso) avisos.push('Recibo enviado a la impresora.');
-        else {
-          const abierta = await imprimirTicket(pedido, ventana);
-          ventana = null;
-          avisos.push(abierta ? 'Recibo abierto para imprimir desde el navegador.' : 'Usa «Recibo desde navegador» y permite ventanas emergentes para imprimirlo.');
+        if (abrirCajon && !cajonIncluido) {
+          verificarSesion();
+          try { const { data } = await api.post('/impresion/abrir-cajon'); if (!data?.abierto) errores.push('Cajón: ' + (data?.motivo || 'El agente no confirmó la apertura.')); }
+          catch { errores.push('No se pudo confirmar la apertura del cajón.'); }
         }
+        if (recibo) {
+          verificarSesion();
+          try { const { data } = await api.post('/impresion/ticket', pedido); if (!data?.impreso) throw new Error(data?.motivo || 'El agente no confirmó el recibo.'); avisos.push('Recibo enviado por el agente.'); }
+          catch (e: any) { falloRecibo = true; errores.push('Recibo: ' + (e?.response?.data?.message || e.message || 'Sin confirmación del agente.')); }
+        }
+        if (!comandas && !recibo) avisos.push('Venta registrada sin imprimir documentos.');
+      } catch (e: any) { errores.push(e.message || 'No fue posible completar la impresión.'); falloComandas = comandas; falloRecibo = recibo; }
+      if (vigente()) {
+        const mensaje = [...avisos, ...errores].join(' ');
+        informar(mensaje);
+        setFallosImpresion(prev => [...prev.filter(f => f.clave !== clave), ...(falloComandas || falloRecibo ? [{ clave, pedido, mensaje, comandas: falloComandas, recibo: falloRecibo, estacion }] : [])]);
       }
-      if (!comandas && !recibo) avisos.push('Venta registrada sin imprimir.');
-    } catch { avisos.push('La venta ya está registrada. No vuelvas a cobrar: usa los botones de impresión de la última venta.'); }
-    finally { ventana?.close(); setImprimiendo(false); setEstadoImpresion(avisos.join(' ')); }
+    }).finally(() => { trabajosImpresion.current--; if (!trabajosImpresion.current) setImprimiendo(false); });
   };
 
   const categoriasPrincipales = categorias.filter((cat) => !cat.parentId);
@@ -896,13 +886,6 @@ function RestaurantePOS() {
       return;
     }
     if (carrito.length === 0) return;
-    // Abrir durante el toque de Confirmar evita que el navegador bloquee el
-    // respaldo después de esperar la venta y la respuesta del agente local.
-    let ventanaImpresion: Window | null = null;
-    if (esTrailer && (imprimirComanda || imprimirReciboCliente)) {
-      ventanaImpresion = window.open('', '_blank', 'width=380,height=700');
-      if (ventanaImpresion) ventanaImpresion.document.body.textContent = 'Preparando impresión… Puedes cerrar esta ventana si no deseas imprimir.';
-    }
     setLoading(true);
     try {
       const payload = {
@@ -976,15 +959,12 @@ function RestaurantePOS() {
       }
 
       } else {
-      setUltimoImprimible(data);
+      setUltimoImprimible(data); ultimoImprimibleRef.current = data;
       const comandasElegidas = (esTrailer || modoPreparacion === 'COMANDAS') && imprimirComanda;
       const reciboElegido = !esTrailer || imprimirReciboCliente;
       setImprimirReciboCliente(false);
-      await imprimirDocumentos(data, comandasElegidas, reciboElegido, ventanaImpresion);
-      ventanaImpresion = null;
-      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) {
-        await api.post('/impresion/abrir-cajon').catch(() => undefined);
-      }
+      void imprimirDocumentos(data, comandasElegidas, reciboElegido, undefined,
+        pago.metodoPago === 'EFECTIVO' || pago.pagos.some(p => p.metodoPago === 'EFECTIVO'));
 
       }
 
@@ -999,7 +979,6 @@ function RestaurantePOS() {
         message: e?.response?.data?.message || e.message || 'Reintenta con los mismos datos para confirmar la venta.',
       });
     } finally {
-      ventanaImpresion?.close();
       setLoading(false);
     }
   };
@@ -1037,12 +1016,14 @@ function RestaurantePOS() {
           <p role="status" className="my-2 text-sm text-orange-200">{estadoImpresion}</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false)} className="min-h-12 rounded-lg bg-orange-600 px-4 disabled:opacity-50">Volver a imprimir comandas</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, undefined, 'PLANCHA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Plancha</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, undefined, 'VAPORERA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Vaporera</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'PLANCHA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Plancha</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'VAPORERA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Vaporera</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, false, true)} className="min-h-12 rounded-lg bg-gray-700 px-4 disabled:opacity-50">Imprimir recibo del cliente</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => void comandasDesdeNavegador(ultimoImprimible)} className="min-h-12 rounded-lg border border-gray-600 px-4 disabled:opacity-50">Comandas desde navegador</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => { const ventana = window.open('', '_blank', 'width=320,height=700'); if (ventana) void imprimirTicket(ultimoImprimible, ventana); else setEstadoImpresion('Permite ventanas emergentes para imprimir el recibo.'); }} className="min-h-12 rounded-lg border border-gray-600 px-4 disabled:opacity-50">Recibo desde navegador</button>
           </div>
+        </section>}
+        {esTrailer && fallosImpresion.length > 0 && <section aria-label="Impresiones pendientes" className="mx-4 mb-3 rounded-xl border border-amber-600 bg-amber-950/30 p-4 text-amber-100">
+          <p className="font-bold">Ventas guardadas con impresión sin confirmar</p><p className="text-sm">Revisa el agente y la conexión de la impresora. Antes de reintentar, comprueba si salió papel para evitar copias.</p>
+          {fallosImpresion.map(f => <div key={f.clave} className="mt-3 border-t border-amber-700 pt-3"><p className="font-semibold">{f.pedido.numero}</p><p className="text-sm">{f.mensaje}</p><button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(f.pedido, f.comandas, f.recibo, f.estacion)} className="mt-2 min-h-12 rounded-lg bg-amber-700 px-4 disabled:opacity-40">Reintentar impresión pendiente</button></div>)}
         </section>}
         {alertDialog.open && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[60]">
@@ -1290,7 +1271,7 @@ function RestaurantePOS() {
                 <span>Total</span>
                 <span className="text-orange-500">${total.toLocaleString()}</span>
               </div>
-              {esTrailer && <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading || imprimiendo} />}
+              {esTrailer && <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading} />}
               <button
                 onClick={() => setModalCobroAbierto(true)}
                 disabled={carrito.length === 0 || loading || !cajaAbierta || cajaBloqueadaPorUsuario}
@@ -1483,7 +1464,7 @@ function RestaurantePOS() {
     <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
 
         {modalCobroAbierto && (
-          <ModalCobro opcionesImpresion={esTrailer ? <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading || imprimiendo} /> : undefined} permitirCredito={!!clienteSeleccionado && !canjeAplicado} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+          <ModalCobro opcionesImpresion={esTrailer ? <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading} /> : undefined} permitirCredito={!!clienteSeleccionado && !canjeAplicado} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
         )}
         {cambioAMostrar !== null && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
