@@ -7,6 +7,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import { useAuthStore } from '@/store/authStore';
+import SelectorEmpleadoConsumo, { type EmpleadoConsumo } from '@/components/SelectorEmpleadoConsumo';
 
 interface Producto {
   id: number;
@@ -33,6 +34,10 @@ export default function ConsumoEmpleadosPage() {
 
   const [sucursalId, setSucursalId] = useState<number | null>(null);
   const [empleadoNombre, setEmpleadoNombre] = useState('');
+  const [empleados, setEmpleados] = useState<EmpleadoConsumo[]>([]);
+  const [cargandoEmpleados, setCargandoEmpleados] = useState(false);
+  const [errorEmpleados, setErrorEmpleados] = useState('');
+  const [reintentoEmpleados, setReintentoEmpleados] = useState(0);
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [items, setItems] = useState<ItemTemp[]>([]);
   const [observacion, setObservacion] = useState('');
@@ -41,6 +46,19 @@ export default function ConsumoEmpleadosPage() {
   const [error, setError] = useState('');
 
   const [tecladoCampo, setTecladoCampo] = useState<'empleado' | 'observacion' | 'producto' | null>(null);
+
+  useEffect(() => {
+    let vigente = true;
+    setEmpleados([]); setErrorEmpleados('');
+    if (!usuario?.empresaId || !usuario.consumoEmpleadosHabilitado || !['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol)) return;
+    setCargandoEmpleados(true);
+    api.get('/usuarios').then(({ data }) => {
+      if (!vigente) return;
+      setEmpleados(data.filter((e: any) => e.activo === true && e.rol !== 'SUPERADMIN').map((e: any) => ({ id: e.id, nombre: e.nombre, rol: e.rol, sucursal: e.sucursal })).sort((a: EmpleadoConsumo,b: EmpleadoConsumo) => a.nombre.localeCompare(b.nombre, 'es')));
+    }).catch(() => { if (vigente) setErrorEmpleados('No se pudo cargar la lista. Puedes reintentar o escribir el nombre.'); })
+      .finally(() => { if (vigente) setCargandoEmpleados(false); });
+    return () => { vigente = false; };
+  }, [usuario?.empresaId, usuario?.rol, usuario?.consumoEmpleadosHabilitado, reintentoEmpleados]);
 
   useEffect(() => {
     if (!usuario) {
@@ -207,26 +225,7 @@ export default function ConsumoEmpleadosPage() {
                 </div>
 
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4 h-fit">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Empleado</label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={empleadoNombre}
-                        onChange={(e) => setEmpleadoNombre(e.target.value)}
-                        onFocus={() => setTecladoCampo('empleado')}
-                        placeholder="Nombre del empleado"
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 pr-9 text-white text-sm focus:outline-none focus:border-orange-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setTecladoCampo((prev) => prev === 'empleado' ? null : 'empleado')}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded ${tecladoCampo === 'empleado' ? 'text-orange-500' : 'text-gray-500 hover:text-white'}`}
-                      >
-                        <Keyboard size={15} />
-                      </button>
-                    </div>
-                  </div>
+                  <SelectorEmpleadoConsumo value={empleadoNombre} onChange={setEmpleadoNombre} empleados={empleados} cargando={cargandoEmpleados} error={errorEmpleados} disabled={guardando} onReintentar={() => setReintentoEmpleados(v => v + 1)} tecladoAbierto={tecladoCampo === 'empleado'} onSeleccionar={() => setTecladoCampo(null)} onTeclado={() => setTecladoCampo(prev => prev === 'empleado' ? null : 'empleado')} />
 
                   {sucursales.length > 1 && (
                     <div>
