@@ -405,6 +405,7 @@ export class ImpresionService {
     lineas.push(
       `${this.centrarTexto(nombre, 32)}\n`,
       `${this.centrarTexto('COMANDA', 32)}\n`,
+      ...(empresaId === 1 && pedido.ladoNombre ? [NEGRITA_ON, `${this.centrarTexto(String(pedido.ladoNombre), 32)}\n`, NEGRITA_OFF] : []),
       `${this.centrarTexto(`PEDIDO ${pedido.numero}`, 32)}\n`,
       '--------------------------------\n',
       `${this.recortarTexto(nit, 32)}\n`,

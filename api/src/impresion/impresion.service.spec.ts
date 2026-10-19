@@ -73,4 +73,13 @@ describe('ImpresionService', () => {
     expect(direccionImpresora!.replace(/\s+/g, ' ').trim()).toBe(direccion);
     expect(direccionImpresora!.split('\n').every((linea) => linea.length <= 32)).toBe(true);
   });
+
+  it('identifica la estación del Trailer y conserva las instrucciones de cocina en ESC/POS', async () => {
+    const service = new ImpresionService();
+    const datos = { numero: '42', ladoNombre: 'PERROS Y FRITURAS', detalles: [{ cantidad: 2, producto: { nombre: 'Perro' }, exclusiones: ['cebolla'], adicionales: [{ nombre: 'Queso', cantidad: 2 }], observacion: '[Para llevar] Sin sal' }] };
+    const contenido = (await (service as any).formatearComanda(datos, 1)).toString('ascii');
+    for (const texto of ['PERROS Y FRITURAS', '2x Perro', 'SIN: cebolla', 'Queso x2', '[Para llevar] Sin sal']) expect(contenido).toContain(texto);
+    const otraEmpresa = (await (service as any).formatearComanda(datos, 2)).toString('ascii');
+    expect(otraEmpresa).not.toContain('PERROS Y FRITURAS');
+  });
 });

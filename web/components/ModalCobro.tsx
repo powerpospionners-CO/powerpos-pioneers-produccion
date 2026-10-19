@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import { Plus, Trash2, X, Banknote, CreditCard, ArrowLeftRight, Smartphone } from 'lucide-react';
 import { moneda } from '@/lib/formato';
@@ -26,9 +26,10 @@ export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; 
 
 type Linea = { metodoPago: string; monto: string };
 
-export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false }: {
+export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion }: {
   total: number;
   permitirCredito?: boolean;
+  opcionesImpresion?: ReactNode;
   procesando?: boolean;
   onConfirmar: (pago: PagoConfirmado) => void;
   onCancelar: () => void;
@@ -115,6 +116,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
         {permitirCredito && <label className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/40 p-3 text-amber-200"><input type="checkbox" checked={credito} disabled={procesando} onChange={e=>setCredito(e.target.checked)} /> Venta a crédito · pendiente de cobro</label>}
         {credito && <div className="mb-4 rounded-xl bg-gray-950 p-4"><label>Fecha de vencimiento<input type="date" min={hoy} value={vencimiento} onChange={e=>setVencimiento(e.target.value)} className="ml-3 rounded border border-gray-700 bg-gray-900 p-2" /></label><p className="mt-3 text-sm text-gray-400">Se entrega la mercancía y se registra la deuda del cliente. El dinero ingresará a caja al registrar los abonos.</p></div>}
+        {opcionesImpresion && <div className="mb-4">{opcionesImpresion}</div>}
         <div hidden={credito}>
         <button
           type="button"
