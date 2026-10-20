@@ -12,6 +12,7 @@ import { bloquearCajaSucursal } from '../caja/caja-lock';
 import { costoHistoricoItem } from './costo-historico';
 import { fechaDia } from '../administracion/administracion.service';
 import { adicionalesConEmpaque } from './empaque';
+import { estadisticasCalendario } from './estadisticas-calendario';
 import { esBebida, adicionalListo } from '../adicionales/reglas-trailer';
 
 const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
@@ -785,36 +786,7 @@ export class PedidosService {
       },
     });
 
-    const haceTreintaDias = new Date();
-    haceTreintaDias.setDate(haceTreintaDias.getDate() - 29);
-
-    // Ventas por día (últimos 7 días)
-    const ventasPorDiaMap = new Map<string, number>();
-    for (let i = 6; i >= 0; i--) {
-      const fecha = new Date();
-      fecha.setDate(fecha.getDate() - i);
-      const clave = fecha.toLocaleDateString('es-CO', {
-        weekday: 'short',
-        day: 'numeric',
-      });
-      ventasPorDiaMap.set(clave, 0);
-    }
-    for (const pedido of pedidos) {
-      if (new Date(pedido.creadoEn) < haceTreintaDias) continue;
-      const clave = new Date(pedido.creadoEn).toLocaleDateString('es-CO', {
-        weekday: 'short',
-        day: 'numeric',
-      });
-      if (ventasPorDiaMap.has(clave)) {
-        ventasPorDiaMap.set(
-          clave,
-          ventasPorDiaMap.get(clave) + Number(pedido.total),
-        );
-      }
-    }
-    const ventasPorDia = Array.from(ventasPorDiaMap.entries()).map(
-      ([dia, total]) => ({ dia, total }),
-    );
+    const { ventasPorDia, ventasPorMes, pedidosHoy } = estadisticasCalendario(pedidos);
 
     // Productos más vendidos
     const productosMap = new Map<string, number>();
@@ -859,46 +831,9 @@ export class PedidosService {
       ([categoria, total]) => ({ categoria, total }),
     );
 
-    const ventasPorMesMap = new Map<string, number>();
-    for (let i = 11; i >= 0; i--) {
-      const fecha = new Date();
-      fecha.setDate(1);
-      fecha.setMonth(fecha.getMonth() - i);
-      const clave = fecha.toLocaleDateString('es-CO', {
-        month: 'short',
-        year: 'numeric',
-      });
-      ventasPorMesMap.set(clave, 0);
-    }
-    for (const pedido of pedidos) {
-      const fecha = new Date(pedido.creadoEn);
-      const clave = fecha.toLocaleDateString('es-CO', {
-        month: 'short',
-        year: 'numeric',
-      });
-      if (ventasPorMesMap.has(clave)) {
-        ventasPorMesMap.set(
-          clave,
-          ventasPorMesMap.get(clave) + Number(pedido.total),
-        );
-      }
-    }
-
-    const hoy = new Date();
-    const pedidosHoy = pedidos.filter((pedido) => {
-      const fecha = new Date(pedido.creadoEn);
-      return (
-        fecha.getFullYear() === hoy.getFullYear() &&
-        fecha.getMonth() === hoy.getMonth() &&
-        fecha.getDate() === hoy.getDate()
-      );
-    });
-
     return {
       ventasPorDia,
-      ventasPorMes: Array.from(ventasPorMesMap.entries()).map(
-        ([mes, total]) => ({ mes, total }),
-      ),
+      ventasPorMes,
       productosMasVendidos,
       ventasPorMetodoPago,
       ventasPorCategoria,
