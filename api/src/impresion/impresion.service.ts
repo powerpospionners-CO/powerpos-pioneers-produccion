@@ -18,8 +18,8 @@ const NEGRITA_OFF = Buffer.from([0x1b, 0x45, 0x00]);
 const TIMEOUT_MS = 3000;
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
-// Mensaje de fe al pie de la tirilla, a pedido puntual de Enchila Market
-// Pereira (empresaId 2) — no se activa para ninguna otra empresa. Son
+// Mensaje de fe al pie de la tirilla para Enchila Market (2) y Trailer (1).
+// No se activa para las demás empresas. Son
 // bendiciones cortas y cálidas, no citas bíblicas formales — la idea es
 // alegrarle el día a quien las lee, no que suene a lectura de iglesia.
 const MENSAJES_FE: string[] = [
@@ -456,7 +456,7 @@ export class ImpresionService {
 
   private async formatearRecibo(pedido: any, empresaId: number) {
     const empresa = await this.obtenerEmpresa(empresaId);
-    if (empresaId === 1) return reciboTrailer(pedido, empresa, await this.generarLogoEscPos(empresa));
+    if (empresaId === 1) return reciboTrailer(pedido, empresa, await this.generarLogoEscPos(empresa), MENSAJES_FE[Math.floor(Math.random() * MENSAJES_FE.length)]);
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
     const esRestaurante = empresa?.tipoNegocio === 'RESTAURANTE';
     const logo = await this.generarLogoEscPos(empresa);

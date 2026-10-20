@@ -4,6 +4,20 @@ import { ImpresionService } from './impresion.service';
 describe('ImpresionService', () => {
   const originalEnv = { ...process.env };
 
+  it.each([1, 2])('elige un mensaje cristiano aleatorio al pie para empresa %s', async empresaId => {
+    const azar = jest.spyOn(Math, 'random');
+    const service = new ImpresionService();
+    try {
+      azar.mockReturnValueOnce(0);
+      const primero = (await (service as any).formatearRecibo({ numero: '1', total: 0, detalles: [] }, empresaId)).toString('ascii');
+      azar.mockReturnValueOnce(0.999999);
+      const segundo = (await (service as any).formatearRecibo({ numero: '1', total: 0, detalles: [] }, empresaId)).toString('ascii');
+      expect(primero).toContain('Que Dios bendiga tu dia');
+      expect(segundo).not.toEqual(primero);
+      expect(primero.indexOf('Que Dios')).toBeGreaterThan(primero.indexOf('GRACIAS'));
+    } finally { azar.mockRestore(); }
+  });
+
   afterEach(() => {
     process.env = { ...originalEnv };
   });

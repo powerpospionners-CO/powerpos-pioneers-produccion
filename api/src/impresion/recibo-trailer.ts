@@ -1,5 +1,5 @@
 /** Diseño térmico de 32 columnas. No depende del navegador ni abre diálogos. */
-export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.alloc(0)): Buffer {
+export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.alloc(0), mensajeCristiano?: string): Buffer {
   const partes: Array<string | Buffer> = [];
   const ancho = 32;
   const texto = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7e]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -63,6 +63,8 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
   if (pedido.observacion) { linea('--------------------------------'); envolver('Nota: ' + pedido.observacion).forEach(linea); }
   linea('================================');
   negrita(true); centro('GRACIAS POR ELEGIRNOS'); negrita(false);
-  centro('Te esperamos de nuevo'); linea('');
+  centro('Te esperamos de nuevo');
+  if (mensajeCristiano) { linea(''); centro(mensajeCristiano); }
+  linea('');
   return Buffer.concat(partes.map(p => Buffer.isBuffer(p) ? p : Buffer.from(p, 'ascii')));
 }
