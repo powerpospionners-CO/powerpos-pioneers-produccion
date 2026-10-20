@@ -21,6 +21,7 @@ type Catalogo = {
   telefono: string | null;
   color: string;
   productos: Producto[];
+  origenes?: { codigo: string; nombre: string }[];
 };
 
 const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -67,7 +68,8 @@ export default function CatalogoPublicoPage() {
   const cats = ["Todos", ...Array.from(new Set(catalogo.productos.map((p) => p.categoria).filter(Boolean) as string[]))];
   const tieneOrigenes = catalogo.productos.some((p) => p.origen);
   const tieneUsos = catalogo.productos.some((p) => p.usos?.length);
-  const etiquetasOrigen: Record<string, string> = { MEXICANO: "Mexicano", PERUANO: "Peruano" };
+  const etiquetasOrigen: Record<string, string> = { MEXICANO: "Mexicano", PERUANO: "Peruano", COLOMBIANO: "Colombiano", ASIATICO: "Asiático", ...Object.fromEntries((catalogo.origenes || []).map(o => [o.codigo, o.nombre])) };
+  const origenesVisibles = Array.from(new Set(catalogo.productos.map(p => p.origen).filter(Boolean) as string[]));
   const etiquetasUso: Record<string, string> = { RESTAURANTE: "Restaurantes", TIENDA: "Tiendas", SUPERMERCADO: "Supermercados", MAYORISTA: "Mayoristas" };
   const visibles = catalogo.productos.filter(
     (p) =>
@@ -99,9 +101,9 @@ export default function CatalogoPublicoPage() {
       <div className="catalogo-filtros">
         {tieneOrigenes && (
           <div className="catalogo-categorias">
-            {["Todos", "MEXICANO", "PERUANO"].map((o) => (
+            {["Todos", ...origenesVisibles].map((o) => (
               <button key={o} aria-pressed={origen === o} onClick={() => setOrigen(o)}>
-                {o === "Todos" ? "Todos los orígenes" : etiquetasOrigen[o]}
+                {o === "Todos" ? "Todos los orígenes" : etiquetasOrigen[o] || o.replace(/_/g, ' ')}
               </button>
             ))}
           </div>

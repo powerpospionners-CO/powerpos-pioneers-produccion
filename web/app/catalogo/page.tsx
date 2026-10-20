@@ -9,7 +9,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
 
-const ORIGENES = [['MEXICANO', 'Mexicano'], ['PERUANO', 'Peruano']] as const;
+const ORIGENES = [['MEXICANO', 'Mexicano'], ['PERUANO', 'Peruano'], ['COLOMBIANO', 'Colombiano'], ['ASIATICO', 'Asiático']];
 const USOS = [['RESTAURANTE', 'Restaurantes'], ['TIENDA', 'Tiendas'], ['SUPERMERCADO', 'Supermercados'], ['MAYORISTA', 'Mayoristas']] as const;
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com';
@@ -32,6 +32,11 @@ export default function CatalogoPage() {
   const { aviso, confirmar } = useNotificar();
   const usuario = useAuthStore((state) => state.usuario);
   const esEnchilaMarket = usuario?.empresaId === 2;
+  const [origenes, setOrigenes] = useState<string[][]>(ORIGENES);
+  const [modalOrigen, setModalOrigen] = useState(false);
+  const [nuevoOrigen, setNuevoOrigen] = useState('');
+  const [guardandoOrigen, setGuardandoOrigen] = useState(false);
+  const [errorOrigen, setErrorOrigen] = useState('');
   const [items, setItems] = useState<ItemCatalogo[]>([]);
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState<ItemCatalogo | null>(null);
@@ -82,6 +87,22 @@ export default function CatalogoPage() {
   const cargarDatos = async () => {
     const { data } = await api.get('/catalogo');
     setItems(data);
+    if (useAuthStore.getState().usuario?.empresaId === 2) {
+      try { const { data: opciones } = await api.get('/catalogo/origenes'); setOrigenes(opciones.map((o: { codigo: string; nombre: string }) => [o.codigo, o.nombre])); }
+      catch { aviso('No se pudieron cargar los orígenes. Recarga antes de guardar una clasificación.', 'error'); }
+    }
+  };
+
+  const crearOrigen = async () => {
+    setErrorOrigen(''); setGuardandoOrigen(true);
+    try {
+      const { data } = await api.post('/catalogo/origenes', { nombre: nuevoOrigen });
+      setOrigenes(actuales => actuales.some(o => o[0] === data.codigo) ? actuales : [...actuales, [data.codigo, data.nombre]]);
+      if (modal) setForm(actual => ({ ...actual, origen: data.codigo }));
+      setModalOrigen(false); setNuevoOrigen('');
+      aviso('Origen disponible en el catálogo', 'exito');
+    } catch (e: any) { setErrorOrigen(e?.response?.data?.message || 'No se pudo crear el origen. Inténtalo de nuevo.'); }
+    finally { setGuardandoOrigen(false); }
   };
 
   const abrirModal = (item?: ItemCatalogo) => {
@@ -138,8 +159,8 @@ export default function CatalogoPage() {
       }
       setModal(false);
       cargarDatos();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      aviso(e?.response?.data?.message || 'No se pudo guardar el producto del catálogo', 'error');
     } finally {
       setLoading(false);
     }
@@ -310,6 +331,7 @@ export default function CatalogoPage() {
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
+              {esEnchilaMarket && usuario?.rol === 'ADMIN_EMPRESA' && <button type="button" onClick={() => { setErrorOrigen(''); setModalOrigen(true); }} className="rounded-lg bg-gray-800 px-4 py-2 font-medium text-white">Nuevo origen</button>}
               {urlCatalogoWeb && (
                 <a
                   href={urlCatalogoWeb}
@@ -453,7 +475,7 @@ export default function CatalogoPage() {
 
               {esEnchilaMarket && (
                 <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                  {([['Todos', 'Todos los orígenes'], ['MEXICANO', 'Mexicano'], ['PERUANO', 'Peruano'], ['SIN', 'Sin clasificar']] as const).map(([valor, etiqueta]) => (
+                  {[['Todos', 'Todos los orígenes'], ...origenes, ['SIN', 'Sin clasificar']].map(([valor, etiqueta]) => (
                     <button key={valor} onClick={() => setOrigenFiltro(valor)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${origenFiltro === valor ? 'bg-orange-500/15 text-orange-400 border border-orange-500/30' : 'bg-gray-800 text-gray-400 border border-transparent hover:text-white'}`}>{etiqueta}</button>
                   ))}
                   <span className="text-gray-600 px-1">|</span>
@@ -480,6 +502,7 @@ export default function CatalogoPage() {
                   <div className="p-3">
                     {item.categoria && <div className="text-orange-500 text-[11px] font-bold uppercase tracking-wide mb-0.5">{item.categoria}</div>}
                     <div className="text-white font-medium text-sm">{item.nombre}</div>
+                    {esEnchilaMarket && <div className="mt-1 text-xs text-orange-300">Origen: {origenes.find(o => o[0] === item.origen)?.[1] || item.origen || 'Sin clasificar'}</div>}
                     {item.presentacion && <div className="text-gray-500 text-xs mt-0.5">{item.presentacion}</div>}
                     {item.precio && <div className="text-gray-300 font-bold text-sm mt-1">${Number(item.precio).toLocaleString()}</div>}
                     <div className="flex items-center gap-2 mt-3">
@@ -579,10 +602,11 @@ export default function CatalogoPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm text-gray-400 mb-1">Origen</label>
-                      <select value={form.origen} onChange={(e) => setForm({ ...form, origen: e.target.value })} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">
+                      <select aria-label="Origen del producto" value={form.origen} onChange={(e) => setForm({ ...form, origen: e.target.value })} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">
                         <option value="">Sin clasificar</option>
-                        {ORIGENES.map(([valor, etiqueta]) => (<option key={valor} value={valor}>{etiqueta}</option>))}
+                        {origenes.map(([valor, etiqueta]) => (<option key={valor} value={valor}>{etiqueta}</option>))}
                       </select>
+                      {usuario?.rol === 'ADMIN_EMPRESA' && <button type="button" onClick={() => { setErrorOrigen(''); setModalOrigen(true); }} className="mt-2 text-sm text-orange-400">Crear otro origen</button>}
                     </div>
                     <div>
                       <label className="block text-sm text-gray-400 mb-1">Se usa para</label>
@@ -953,6 +977,14 @@ export default function CatalogoPage() {
             </div>
           </div>
         )}
+        {modalOrigen && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4"><div role="dialog" aria-modal="true" aria-label="Crear origen" className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 text-white">
+          <h3 className="text-lg font-bold">Nuevo origen</h3>
+          <p className="mt-2 text-sm text-gray-400">Quedará disponible para todos los productos del catálogo de Enchila Market.</p>
+          <label className="mt-4 block text-sm" htmlFor="nombre-origen">Nombre del origen</label>
+          <input id="nombre-origen" value={nuevoOrigen} onChange={e => setNuevoOrigen(e.target.value)} maxLength={50} placeholder="Ejemplo: Europeo" className="mt-2 w-full rounded-lg border border-gray-600 bg-gray-800 p-3" disabled={guardandoOrigen} />
+          {errorOrigen && <p role="alert" className="mt-3 text-sm text-red-400">{errorOrigen}</p>}
+          <div className="mt-5 flex gap-3"><button type="button" disabled={guardandoOrigen} onClick={() => setModalOrigen(false)} className="flex-1 rounded-lg bg-gray-800 p-3">Cancelar</button><button type="button" disabled={guardandoOrigen || nuevoOrigen.trim().length < 2} onClick={() => void crearOrigen()} className="flex-1 rounded-lg bg-orange-500 p-3 font-bold disabled:opacity-40">{guardandoOrigen ? 'Guardando…' : 'Crear origen'}</button></div>
+        </div></div>}
       </div>
     </AuthGuard>
   );
