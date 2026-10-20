@@ -62,15 +62,7 @@ export class InventarioService {
       },
     });
 
-    if (stockInicial <= stockMinimo) {
-      await this.notificaciones.enviarAlerta({
-        tipo: 'STOCK BAJO',
-        mensaje: `⚠️ ${ingrediente.nombre} fue creado con stock bajo: ${stockInicial} ${ingrediente.unidad} (mínimo: ${stockMinimo})`,
-        empresa: 'PowerPOS',
-        sucursal: 'Sucursal Principal',
-        empresaId,
-      });
-    }
+    // El resumen programado notifica stock sin bloquear ni duplicar correos.
 
     return ingrediente;
   }
@@ -146,15 +138,7 @@ export class InventarioService {
       },
     });
 
-    if (stockNuevo <= Number(ingrediente.stockMinimo)) {
-      await this.notificaciones.enviarAlerta({
-        tipo: 'STOCK BAJO',
-        mensaje: `⚠️ ${ingrediente.nombre} tiene stock bajo: ${stockNuevo} ${ingrediente.unidad} (mínimo: ${ingrediente.stockMinimo})`,
-        empresa: 'PowerPOS',
-        sucursal: 'Sucursal Principal',
-        empresaId,
-      });
-    }
+    // Las alertas de stock se agrupan cada cinco minutos, incluidas las ventas.
 
     return { ...actualizado, stockAnterior, stockNuevo, cantidadMovida: cantidadReal, factorAplicado };
   }

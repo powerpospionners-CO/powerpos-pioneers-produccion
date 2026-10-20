@@ -981,12 +981,13 @@ export class CajaService {
       include: { sucursal: { select: { nombre: true } } },
     });
 
-    await this.notificaciones.enviarAlerta({
+    void this.notificaciones.enviarAlerta({
       tipo: 'APERTURA IRREGULAR DE CAJA',
       mensaje: `🚨 ${descripcion}`,
       empresa: 'PowerPOS',
       sucursal: caja?.sucursal.nombre || 'Desconocida',
-    });
+      empresaId,
+    }).catch(() => this.logger.warn('No se pudo notificar la apertura irregular'));
   }
 
   async obtenerEventos(sucursalId: number, empresaId: number) {

@@ -577,15 +577,7 @@ export class ProductosService {
 
     return { ...actualizado, stockAnterior, stockNuevo };
     });
-    if (resultado.stockNuevo <= resultado.stockMinimo) {
-      void Promise.resolve().then(() => this.notificaciones.enviarAlerta({
-        tipo: 'STOCK BAJO',
-        mensaje: `⚠️ ${resultado.nombre} tiene existencias bajas: ${resultado.stockNuevo} unidades (mínimo: ${resultado.stockMinimo})`,
-        empresa: 'PowerPOS',
-        sucursal: 'Sucursal Principal',
-        empresaId,
-      })).catch(() => undefined);
-    }
+    // La revisión programada agrupa alertas de stock de ajustes y ventas.
 
     return resultado;
   }

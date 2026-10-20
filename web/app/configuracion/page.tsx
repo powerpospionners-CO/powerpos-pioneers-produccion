@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { Upload, Settings, User, Users, Plus, X, Shield, MapPin, Image as ImageIcon, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
+import AlertasAdministradores from '@/components/AlertasAdministradores';
 
 const MODULOS = [
   { key: 'pos', label: 'POS' },
@@ -632,6 +633,7 @@ export default function ConfiguracionPage() {
           {/* TAB: Usuarios y permisos */}
           {tab === 'usuarios' && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl">
+              {usuario && ['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol) && <AlertasAdministradores />}
               <div className="p-4 border-b border-gray-800 flex items-center justify-between">
                 <h3 className="text-white font-semibold">Usuarios de la empresa</h3>
                 <button

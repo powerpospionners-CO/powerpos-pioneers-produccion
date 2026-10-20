@@ -772,6 +772,9 @@ export class PedidosService {
       pedidoId: id,
       estado: actualizado.estado,
     });
+    if (actualizado.estado === 'ANULADO') {
+      void Promise.resolve().then(() => this.notificaciones.enviarAlerta({ empresaId, tipo: 'ANULACIÓN DE VENTA', empresa: 'PowerPOS', sucursal: String(actualizado.sucursalId), mensaje: `Se anuló la venta ${actualizado.numero}, por $${Number(actualizado.total).toLocaleString('es-CO')}. Usuario responsable: ${usuarioId ?? actualizado.usuarioId}.` })).catch(() => undefined);
+    }
     return actualizado;
   }
 
