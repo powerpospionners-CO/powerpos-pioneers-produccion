@@ -1,7 +1,7 @@
-/** Diseño térmico de 32 columnas. No depende del navegador ni abre diálogos. */
+/** Recibo del Trailer: rollo de 80 mm, 48 columnas con la fuente normal. */
 export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.alloc(0), mensajeCristiano?: string): Buffer {
   const partes: Array<string | Buffer> = [];
-  const ancho = 32;
+  const ancho = 48;
   const texto = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7e]/g, ' ').replace(/\s+/g, ' ').trim();
   const dinero = (v: unknown) => '$' + Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: 0 });
   const envolver = (v: unknown, prefijo = '') => {
@@ -25,16 +25,16 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
   if (empresa?.nit) centro('NIT ' + texto(empresa.nit));
   if (empresa?.direccion) envolver(empresa.direccion).forEach(linea);
   if (empresa?.telefono) centro('Tel. ' + texto(empresa.telefono));
-  linea('================================');
+  linea('='.repeat(ancho));
   centro('COMPROBANTE DE VENTA');
   negrita(true); centro('PEDIDO'); centro(pedido.numero); negrita(false);
   const fecha = new Date(pedido.creadoEn || Date.now());
   envolver(fecha.toLocaleString('es-CO', { timeZone: 'America/Bogota' })).forEach(linea);
   if (pedido.usuario?.nombre) envolver('Atendio: ' + pedido.usuario.nombre).forEach(linea);
   if (pedido.cliente?.nombre) envolver('Cliente: ' + pedido.cliente.nombre).forEach(linea);
-  linea('--------------------------------');
-  linea('CANT. / PRODUCTO         IMPORTE');
-  linea('--------------------------------');
+  linea('-'.repeat(ancho));
+  linea('CANT. / PRODUCTO'.padEnd(ancho - 'IMPORTE'.length) + 'IMPORTE');
+  linea('-'.repeat(ancho));
   for (const d of pedido.detalles || []) {
     const cantidad = Number(d.cantidad || 1);
     negrita(true); envolver(cantidad + ' x ' + (d.producto?.nombre || 'Producto') + (d.presentacionNombre ? ' (' + d.presentacionNombre + ')' : '')).forEach(linea); negrita(false);
@@ -48,10 +48,10 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
     if (d.observacion) envolver(d.observacion, '  ').forEach(linea);
     monto('Importe producto', importe); linea('');
   }
-  linea('--------------------------------');
+  linea('-'.repeat(ancho));
   if (Number(pedido.descuento) > 0) { monto('Subtotal', pedido.subtotal); monto('Descuento', -Number(pedido.descuento)); }
   alto(true); negrita(true); monto('TOTAL A PAGAR', pedido.total); negrita(false); alto(false);
-  linea('--------------------------------');
+  linea('-'.repeat(ancho));
   if (pedido.metodoPago === 'CREDITO') linea('A CREDITO - PENDIENTE DE COBRO');
   else {
     const pagos = Array.isArray(pedido.pagos) ? pedido.pagos : [];
@@ -60,8 +60,8 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
     const efectivo = pagos.length ? pagos.filter((p: any) => p.metodoPago === 'EFECTIVO').reduce((s: number, p: any) => s + Number(p.monto), 0) : pedido.metodoPago === 'EFECTIVO' ? Number(pedido.total) : 0;
     if (efectivo > 0) { monto('Efectivo recibido', efectivo + Number(pedido.cambio || 0)); monto('Cambio', pedido.cambio || 0); }
   }
-  if (pedido.observacion) { linea('--------------------------------'); envolver('Nota: ' + pedido.observacion).forEach(linea); }
-  linea('================================');
+  if (pedido.observacion) { linea('-'.repeat(ancho)); envolver('Nota: ' + pedido.observacion).forEach(linea); }
+  linea('='.repeat(ancho));
   negrita(true); centro('GRACIAS POR ELEGIRNOS'); negrita(false);
   centro('Te esperamos de nuevo');
   if (mensajeCristiano) { linea(''); centro(mensajeCristiano); }
