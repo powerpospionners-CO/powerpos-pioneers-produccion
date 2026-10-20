@@ -59,3 +59,15 @@ La compilación incluye el PNG mediante `nest-cli.json`. Cada mensaje contiene H
 Los nombres de empresas, sedes, clientes y detalles se escapan antes de insertarlos en HTML.
 El botón de acceso al sistema aparece únicamente en las notificaciones administrativas.
 Las vistas previas y la prueba MIME son locales; no sustituyen una comprobación de entrega en el buzón del destinatario.
+
+## Cumpleaños
+
+Revisión diaria a las 08:00 de America/Bogota en cada base de sede. Clientes activos
+con correo y fecha de nacimiento reciben el saludo de su empresa. Administradores
+y gerentes activos pueden guardar su fecha y activar/desactivar el saludo de PowerPOS
+en Configuración → Alertas de administradores. No se cambia su correo de acceso.
+La reserva auditada por persona y día evita duplicados entre cron y ejecución manual,
+incluso con varias instancias. Un envío no confirmado queda registrado y no se reintenta
+automáticamente para evitar duplicados tras una respuesta SMTP incierta. No se cuentan
+como enviados los intentos fallidos. El endpoint manual requiere administrador o gerente
+y se limita a su empresa y base de sede. No se envían avisos genéricos de cada venta.

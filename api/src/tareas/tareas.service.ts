@@ -1,72 +1,55 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class TareasService {
   private readonly logger = new Logger(TareasService.name);
+  constructor(private prisma: PrismaService, private notificaciones: NotificacionesService) {}
 
-  constructor(
-    private prisma: PrismaService,
-    private notificaciones: NotificacionesService,
-  ) {}
-
-  // Corre todos los días a las 8:00 a.m.
-  @Cron('0 8 * * *')
+  @Cron('0 8 * * *', { timeZone: 'America/Bogota', waitForCompletion: true })
   async revisarCumpleanos() {
-    this.logger.log('Revisando cumpleaños del día...');
-    if (this.prisma.enCadaSede) await this.prisma.enCadaSede(()=>this.notificarCumpleanosDeHoy());
+    if (this.prisma.enCadaSede) await this.prisma.enCadaSede(() => this.notificarCumpleanosDeHoy());
     else await this.notificarCumpleanosDeHoy();
   }
 
-  /**
-   * Lógica separada del decorador @Cron para poder probarla manualmente
-   * vía un endpoint sin esperar a las 8:00 a.m.
-   */
-  async notificarCumpleanosDeHoy() {
-    const hoy = new Date();
-    const mes = hoy.getUTCMonth() + 1;
-    const dia = hoy.getUTCDate();
-
+  async notificarCumpleanosDeHoy(empresaId?: number) {
+    const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const mesDia = fecha.slice(5);
     const empresas = await this.prisma.empresa.findMany({
-      where: { activo: true },
-      include: {
-        clientes: { where: { activo: true } },
-      },
+      where: { activo: true, ...(empresaId ? { id: empresaId } : {}) },
+      include: { clientes: { where: { activo: true, email: { not: null }, fechaNacimiento: { not: null } } } },
     });
-
-    let totalNotificados = 0;
-
+    let clientesNotificados = 0, administradoresNotificados = 0;
     for (const empresa of empresas) {
-      const cumpleaneros = empresa.clientes.filter((c) => {
-        if (!c.fechaNacimiento) return false;
-        const fecha = new Date(c.fechaNacimiento);
-        return fecha.getUTCMonth() + 1 === mes && fecha.getUTCDate() === dia;
-      });
-
-      if (cumpleaneros.length === 0) continue;
-
-      // Felicitar a cada cliente
-      for (const cliente of cumpleaneros) {
-        await this.notificaciones.enviarFelicitacionCumpleanos(
-          { nombre: cliente.nombre, telefono: cliente.telefono, email: cliente.email },
-          empresa.nombre,
-        );
-        totalNotificados++;
+      const { administradores, correoConfigurado } = await this.notificaciones.configuracion(empresa.id);
+      if (!correoConfigurado) continue;
+      for (const cliente of empresa.clientes) {
+        if (!cliente.email || !cliente.fechaNacimiento || cliente.fechaNacimiento.toISOString().slice(5, 10) !== mesDia) continue;
+        if (await this.felicitar(empresa.id, cliente.id, 'Cliente', fecha, cliente, empresa.nombre)) clientesNotificados++;
       }
-
-      // Avisar al admin con el resumen del día
-      const listaNombres = cumpleaneros.map((c) => c.nombre).join(', ');
-      await this.notificaciones.enviarAlerta({
-        tipo: 'CUMPLEAÑOS DE CLIENTES',
-        mensaje: `🎂 Hoy cumplen años: ${listaNombres}. Ya se les envió un mensaje de felicitación.`,
-        empresa: empresa.nombre,
-        sucursal: 'Todas',
-      });
+      for (const admin of administradores) {
+        if (!admin.email || !admin.cumpleanos || admin.fechaNacimiento.slice(5) !== mesDia) continue;
+        if (await this.felicitar(empresa.id, admin.id, 'Administrador', fecha, admin, 'PowerPOS')) administradoresNotificados++;
+      }
     }
+    return { clientesNotificados, administradoresNotificados };
+  }
 
-    this.logger.log(`Cumpleaños procesados: ${totalNotificados} cliente(s) notificado(s)`);
-    return { clientesNotificados: totalNotificados };
+  private async felicitar(empresaId: number, id: number, tipo: string, fecha: string,
+    persona: { nombre: string; email?: string | null }, remitente: string) {
+    // Reserva por persona/día en la base de la sede, incluso con varias instancias.
+    const entidad = `Cumpleanos${tipo}`;
+    const reserva = await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${empresaId}, 81727)`;
+      if (await tx.auditoria.findFirst({ where: { empresaId, entidad, entidadId: id, detalle: { path: ['fecha'], equals: fecha } } })) return null;
+      return tx.auditoria.create({ data: { empresaId, entidad, entidadId: id, accion: 'RESERVADO', detalle: { fecha } } });
+    });
+    if (!reserva) return false;
+    const resultado = await this.notificaciones.enviarFelicitacionCumpleanos(persona, remitente, tipo === 'Administrador');
+    await this.prisma.auditoria.update({ where: { id: reserva.id }, data: { accion: resultado.enviado ? 'ENVIADO' : 'NO_CONFIRMADO' } });
+    if (!resultado.enviado) this.logger.warn('Saludo de cumpleaños sin confirmación; registrado sin reintento automático para evitar duplicados');
+    return resultado.enviado;
   }
 }

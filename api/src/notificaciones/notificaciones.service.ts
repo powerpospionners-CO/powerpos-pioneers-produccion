@@ -115,13 +115,14 @@ export class NotificacionesService {
       email?: string | null;
     },
     nombreEmpresa: string,
+    administrador = false,
   ) {
     const primerNombre = cliente.nombre.split(' ')[0];
     if (!cliente.email || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
       return { enviado: false };
     }
     const asunto = `¡${nombreEmpresa} te desea un feliz cumpleaños!`;
-    const cuerpo = correoCumpleanos(primerNombre, nombreEmpresa);
+    const cuerpo = correoCumpleanos(primerNombre, nombreEmpresa, administrador);
 
     try {
       await this.enviarEmail(asunto, cuerpo, [cliente.email]);

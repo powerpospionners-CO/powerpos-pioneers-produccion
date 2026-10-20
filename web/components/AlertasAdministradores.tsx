@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 
-type Administrador = { id: number; nombre: string; rol: string; email: string; stock: boolean; caja: boolean; telefono: string; whatsapp: boolean };
+type Administrador = { id: number; nombre: string; rol: string; email: string; stock: boolean; caja: boolean; telefono: string; whatsapp: boolean; fechaNacimiento: string; cumpleanos: boolean };
 
 export default function AlertasAdministradores() {
   const [administradores, setAdministradores] = useState<Administrador[]>([]);
@@ -24,7 +24,7 @@ export default function AlertasAdministradores() {
   const guardar = async (a: Administrador) => {
     setOcupado(a.id); setMensaje('');
     try {
-      await api.patch(`/notificaciones/administradores/${a.id}`, { email: a.email, stock: a.stock, caja: a.caja, telefono: a.telefono, whatsapp: a.whatsapp });
+      await api.patch(`/notificaciones/administradores/${a.id}`, { email: a.email, stock: a.stock, caja: a.caja, telefono: a.telefono, whatsapp: a.whatsapp, fechaNacimiento: a.fechaNacimiento || '', cumpleanos: a.cumpleanos !== false });
       setModificados(actual => actual.filter(id => id !== a.id));
       setMensaje(`Datos y alertas de ${a.nombre} guardados.${configurado ? '' : ' El correo se activará cuando se configure el remitente de PowerPOS.'}`);
     } catch (error: any) { setMensaje(error.response?.data?.message || 'No se pudieron guardar las alertas'); }
@@ -50,6 +50,11 @@ export default function AlertasAdministradores() {
         <input type="email" maxLength={254} value={a.email} onChange={e => cambiar(a.id, { email: e.target.value })} placeholder="nombre@gmail.com" className="block mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white" />
       </label>
       <p className="text-xs text-gray-400">Deja el correo vacío para desactivar únicamente las alertas por correo.</p>
+      <label className="block text-sm text-gray-300">Fecha de nacimiento del administrador (opcional)
+        <input type="date" value={a.fechaNacimiento || ''} onChange={e => cambiar(a.id, { fechaNacimiento: e.target.value })} className="block mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+      </label>
+      <label className="flex gap-2 items-center text-sm text-gray-300"><input type="checkbox" checked={a.cumpleanos !== false} onChange={e => cambiar(a.id, { cumpleanos: e.target.checked })} />Recibir un saludo de PowerPOS en mi cumpleaños</label>
+      <p className="text-xs text-gray-400">Se envía al correo personal registrado, a las 8:00 a. m. de Colombia. Los clientes con correo y fecha de nacimiento reciben el saludo de su empresa.</p>
       <label className="block text-sm text-gray-300">WhatsApp personal con indicativo del país
         <input type="tel" maxLength={24} value={a.telefono || ''} onChange={e => cambiar(a.id, { telefono: e.target.value })} placeholder="+57 302 123 4567" className="block mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white" />
       </label>

@@ -161,13 +161,16 @@ export function correoPrueba(nombre: string): CorreoPowerpos {
 export function correoCumpleanos(
   nombre: string,
   empresa: string,
+  administrador = false,
 ): CorreoPowerpos {
   return plantilla({
     estilo: 'celebracion',
     titulo: `¡Feliz cumpleaños, ${nombre}!`,
     introduccion: `Hoy celebramos contigo. Un saludo especial de parte de ${empresa}.`,
     mensaje:
-      'Que este nuevo año de vida llegue con alegría, buenos momentos y muchas razones para sonreír.\nGracias por ser parte de nuestra comunidad. ¡Nos encantará volver a verte!',
+      administrador
+        ? 'Hoy queremos celebrar a la persona detrás de cada gran decisión. Gracias por confiar en PowerPOS y permitirnos acompañar tu negocio.\nTe deseamos un año lleno de alegría, salud y nuevos logros. ¡Tu confianza es muy importante para nosotros!'
+        : 'Que este nuevo año de vida llegue con alegría, buenos momentos y muchas razones para sonreír.\nGracias por ser parte de nuestra comunidad. ¡Nos encantará volver a verte!',
     contexto: [['Con cariño', `El equipo de ${empresa}`]],
     pie: `Este saludo fue enviado por ${empresa} a través de PowerPOS.`,
   });

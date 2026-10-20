@@ -7,6 +7,8 @@ export type PreferenciasAlertas = {
   caja: boolean;
   telefono: string;
   whatsapp: boolean;
+  fechaNacimiento: string;
+  cumpleanos: boolean;
 };
 export const SIN_ALERTAS: PreferenciasAlertas = {
   email: '',
@@ -14,6 +16,8 @@ export const SIN_ALERTAS: PreferenciasAlertas = {
   caja: true,
   telefono: '',
   whatsapp: false,
+  fechaNacimiento: '',
+  cumpleanos: true,
 };
 
 export function validarPreferencias(datos: unknown): PreferenciasAlertas {
@@ -41,12 +45,22 @@ export function validarPreferencias(datos: unknown): PreferenciasAlertas {
     throw new BadRequestException('La autorización de WhatsApp no es válida');
   if (valor.whatsapp && !telefono)
     throw new BadRequestException('Indica el WhatsApp con indicativo del país');
+  const fechaNacimiento = valor.fechaNacimiento ?? '';
+  const fecha = new Date(`${fechaNacimiento}T12:00:00Z`);
+  if (typeof fechaNacimiento !== 'string' || (fechaNacimiento &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento) || Number.isNaN(fecha.getTime()) ||
+      fecha.toISOString().slice(0, 10) !== fechaNacimiento || fecha > new Date())))
+    throw new BadRequestException('Indica una fecha de nacimiento válida, anterior a hoy');
+  if (valor.cumpleanos !== undefined && typeof valor.cumpleanos !== 'boolean')
+    throw new BadRequestException('La preferencia de cumpleaños no es válida');
   return {
     email,
     stock: valor.stock,
     caja: valor.caja,
     telefono,
     whatsapp: valor.whatsapp === true,
+    fechaNacimiento,
+    cumpleanos: valor.cumpleanos !== false,
   };
 }
 

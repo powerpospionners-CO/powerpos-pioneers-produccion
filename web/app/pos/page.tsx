@@ -697,10 +697,15 @@ function RestaurantePOS() {
     const informar = (texto: string) => { if (vigente() && ultimoImprimibleRef.current?.numero === pedido.numero) setEstadoImpresion(texto); };
     const verificarSesion = () => { if (!vigente()) throw new Error('La sesión cambió. Consulta esta venta desde su empresa para reimprimir.'); };
     const clave = pedido.numero + ':' + (estacion || 'TODAS');
+    // El cajón no espera la cola de documentos ni la consulta de estaciones.
+    // Solo se solicita después de guardar la venta y nunca al reimprimir.
+    const apertura = abrirCajon ? api.post('/impresion/abrir-cajon')
+      .then(({ data }) => data?.abierto ? '' : 'Cajón: ' + (data?.motivo || 'Sin confirmación del agente.'))
+      .catch(() => 'No se pudo confirmar la apertura del cajón.') : Promise.resolve('');
     trabajosImpresion.current++; setImprimiendo(true); informar('Venta guardada. Impresión pendiente por el agente…');
     return colaImpresion.current.encolar(async () => {
       const avisos: string[] = []; const errores: string[] = [];
-      let falloComandas = false, falloRecibo = false, cajonIncluido = false;
+      let falloComandas = false, falloRecibo = false;
       try {
         verificarSesion(); informar('Venta guardada. Enviando al agente…');
         if (comandas) {
@@ -709,17 +714,11 @@ function RestaurantePOS() {
             const grupos = prepararComandas(pedido, sesion.usuario?.empresaId, productos, configuracion.asignaciones).filter(g => !estacion || g.ladoNombre === estacion);
             if (!grupos.length) avisos.push('Esta venta no tiene productos asignados a comandas.');
             else {
-              cajonIncluido = abrirCajon;
-              const { data } = await api.post('/impresion/comandas', { comandas: grupos, abrirCajon });
+              const { data } = await api.post('/impresion/comandas', { comandas: grupos });
               if (!data?.impreso) throw new Error(data?.motivo || 'El agente no confirmó la impresión.');
               avisos.push('Comandas enviadas por el agente: ' + grupos.map(g => g.ladoNombre).join(' / ') + '.');
             }
           } catch (e: any) { falloComandas = true; errores.push('Comandas: ' + (e?.response?.data?.message || e.message || 'Sin confirmación del agente.')); }
-        }
-        if (abrirCajon && !cajonIncluido) {
-          verificarSesion();
-          try { const { data } = await api.post('/impresion/abrir-cajon'); if (!data?.abierto) errores.push('Cajón: ' + (data?.motivo || 'El agente no confirmó la apertura.')); }
-          catch { errores.push('No se pudo confirmar la apertura del cajón.'); }
         }
         if (recibo) {
           verificarSesion();
@@ -729,6 +728,8 @@ function RestaurantePOS() {
         if (!comandas && !recibo) avisos.push('Venta registrada sin imprimir documentos.');
       } catch (e: any) { errores.push(e.message || 'No fue posible completar la impresión.'); falloComandas = comandas; falloRecibo = recibo; }
       if (vigente()) {
+        const errorCajon = await apertura;
+        if (errorCajon) errores.push(errorCajon);
         const mensaje = [...avisos, ...errores].join(' ');
         informar(mensaje);
         setFallosImpresion(prev => [...prev.filter(f => f.clave !== clave), ...(falloComandas || falloRecibo ? [{ clave, pedido, mensaje, comandas: falloComandas, recibo: falloRecibo, estacion }] : [])]);
@@ -936,6 +937,9 @@ function RestaurantePOS() {
       if (!esTrailer) {
       const comandasPedido = prepararPedidoComanda(data);
       const hayComanda = comandasPedido.length > 0;
+      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) {
+        void api.post('/impresion/abrir-cajon').catch(() => undefined);
+      }
 
       if (modoPreparacion === 'COMANDAS' && hayComanda && imprimirComanda) {
         for (const comandaPedido of comandasPedido) {
@@ -946,9 +950,6 @@ function RestaurantePOS() {
             imprimirComandaFallback(comandaPedido);
           }
         }
-      }
-      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) {
-        api.post('/impresion/abrir-cajon').catch(() => undefined);
       }
 
       try {

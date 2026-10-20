@@ -92,6 +92,13 @@ describe('Alertas privadas por empresa', () => {
     );
     expect(db.auditoria.create).not.toHaveBeenCalled();
   });
+  it('valida la fecha de cumpleaños sin romper preferencias anteriores', () => {
+    const base = { email: 'admin@example.com', stock: true, caja: true };
+    expect(validarPreferencias(base)).toMatchObject({ fechaNacimiento: '', cumpleanos: true });
+    expect(validarPreferencias({ ...base, fechaNacimiento: '1990-02-28', cumpleanos: false })).toMatchObject({ fechaNacimiento: '1990-02-28', cumpleanos: false });
+    for (const fechaNacimiento of ['1990-02-30', '2099-01-01', 'texto', 12])
+      expect(() => validarPreferencias({ ...base, fechaNacimiento })).toThrow();
+  });
   it('no modifica el correo de inicio de sesión y guarda preferencias auditadas', async () => {
     const { db, service } = crear();
     await service.guardarPreferencias(
@@ -111,6 +118,8 @@ describe('Alertas privadas por empresa', () => {
           caja: true,
           telefono: '',
           whatsapp: false,
+          fechaNacimiento: '',
+          cumpleanos: true,
         },
       }),
     });

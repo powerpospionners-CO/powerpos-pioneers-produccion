@@ -59,6 +59,7 @@ export default function RetailPOS() {
   const [borradorCantidad, setBorradorCantidad] = useState<Record<string, string>>({});
   const [caja, setCaja] = useState<Caja | null>(null);
   const intentoVenta = useRef<{ firma: string; clave: string } | null>(null);
+  const ultimaVentaEnviada = useRef<string | null>(null);
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
@@ -381,15 +382,21 @@ export default function RetailPOS() {
     try {
       const { data } = await api.post('/pedidos', payload);
       intentoVenta.current = null;
+      ultimaVentaEnviada.current = data.numero;
+      const tokenVenta = useAuthStore.getState().token;
+      const sigueVigente = () => ultimaVentaEnviada.current === data.numero && useAuthStore.getState().token === tokenVenta;
+      // Abrir antes de refrescar el catálogo y de esperar al recibo.
+      if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) void api.post('/impresion/abrir-cajon').catch(() => undefined);
       setCarrito([]);
       setDescuentoInput('');
       setClienteCreditoId(null);
       setUltimoRecibo(data);
       setModalCobroAbierto(false);
       setFallaImpresion(false);
-      await cargar();
-      try {
+      void cargar().catch(() => setAviso('Venta guardada. No se pudo actualizar el catálogo; recarga antes de la siguiente venta.'));
+      void (async () => { try {
         const impresion = await api.post('/impresion/ticket', data);
+        if (!sigueVigente()) return;
         if (!impresion.data?.impreso) {
           // No se abre la ventana del navegador sola: si la impresora ya no
           // está instalada como USB en Windows (ej. ahora es de red), ese
@@ -400,11 +407,11 @@ export default function RetailPOS() {
         } else {
           setAviso(`Venta ${data.numero} registrada · ${moneda(Number(data.total))}`);
         }
-        if (pago.metodoPago === 'EFECTIVO' || pago.pagos.some((p) => p.metodoPago === 'EFECTIVO')) void api.post('/impresion/abrir-cajon').catch(() => undefined);
       } catch {
+        if (!sigueVigente()) return;
         setFallaImpresion(true);
         setAviso(`Venta ${data.numero} registrada, pero no se pudo conectar para imprimir.`);
-      }
+      } })();
       if (pago.cambio > 0) setCambioAMostrar(pago.cambio);
     } catch (e: any) {
       if (!e?.response && usuario?.empresaId && usuario?.sucursalId) {
