@@ -30,4 +30,9 @@ describe('Branch cutover barrier',()=>{
     await expect(firstValueFrom(new SedeInterceptor(db as unknown as PrismaService).intercept(contexto('/pedidos/eventos',true),handler))).resolves.toBe('ok');
     expect(db.conEscritura).not.toHaveBeenCalled();
   });
+  it('allows the signed WhatsApp controller to resolve callbacks without a logged-in tenant', async()=>{
+    const db = { ...prisma(), aislamientoActivo: true };
+    await expect(firstValueFrom(new SedeInterceptor(db as unknown as PrismaService).intercept(contexto('/webhooks/whatsapp'),handler))).resolves.toBe('ok');
+    await expect(firstValueFrom(new SedeInterceptor(db as unknown as PrismaService).intercept(contexto('/webhooks/otro'),handler))).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
 });

@@ -26,14 +26,12 @@ describe('Alertas privadas por empresa', () => {
         findFirst: jest.fn().mockResolvedValue({ id: 4 }),
       },
       auditoria: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([
-            {
-              entidadId: 4,
-              detalle: { email: 'admin@example.com', stock: true, caja: false },
-            },
-          ]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            entidadId: 4,
+            detalle: { email: 'admin@example.com', stock: true, caja: false },
+          },
+        ]),
         create: jest.fn(),
         createMany: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -107,7 +105,13 @@ describe('Alertas privadas por empresa', () => {
         empresaId: 1,
         usuarioId: 4,
         entidadId: 4,
-        detalle: { email: 'nuevo@example.com', stock: true, caja: true },
+        detalle: {
+          email: 'nuevo@example.com',
+          stock: true,
+          caja: true,
+          telefono: '',
+          whatsapp: false,
+        },
       }),
     });
   });

@@ -2,18 +2,19 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 
-type Administrador = { id: number; nombre: string; rol: string; email: string; stock: boolean; caja: boolean };
+type Administrador = { id: number; nombre: string; rol: string; email: string; stock: boolean; caja: boolean; telefono: string; whatsapp: boolean };
 
 export default function AlertasAdministradores() {
   const [administradores, setAdministradores] = useState<Administrador[]>([]);
   const [configurado, setConfigurado] = useState(false);
+  const [whatsapp, setWhatsapp] = useState({ configurado: false, limiteDiario: 0 });
   const [cargando, setCargando] = useState(true);
   const [ocupado, setOcupado] = useState<number | null>(null);
   const [mensaje, setMensaje] = useState('');
   const [modificados, setModificados] = useState<number[]>([]);
   useEffect(() => {
     api.get('/notificaciones/configuracion').then(({ data }) => {
-      setAdministradores(data.administradores); setConfigurado(data.correoConfigurado);
+      setAdministradores(data.administradores); setConfigurado(data.correoConfigurado); setWhatsapp(data.whatsapp || { configurado: false, limiteDiario: 0 });
     }).catch(() => setMensaje('No se pudo cargar la configuración de alertas. Recarga para intentarlo de nuevo.')).finally(() => setCargando(false));
   }, []);
   const cambiar = (id: number, datos: Partial<Administrador>) => {
@@ -23,9 +24,9 @@ export default function AlertasAdministradores() {
   const guardar = async (a: Administrador) => {
     setOcupado(a.id); setMensaje('');
     try {
-      await api.patch(`/notificaciones/administradores/${a.id}`, { email: a.email, stock: a.stock, caja: a.caja });
+      await api.patch(`/notificaciones/administradores/${a.id}`, { email: a.email, stock: a.stock, caja: a.caja, telefono: a.telefono, whatsapp: a.whatsapp });
       setModificados(actual => actual.filter(id => id !== a.id));
-      setMensaje(`Correo y alertas de ${a.nombre} guardados.${configurado ? '' : ' El envío se activará cuando se configure el correo de PowerPOS.'}`);
+      setMensaje(`Datos y alertas de ${a.nombre} guardados.${configurado ? '' : ' El correo se activará cuando se configure el remitente de PowerPOS.'}`);
     } catch (error: any) { setMensaje(error.response?.data?.message || 'No se pudieron guardar las alertas'); }
     finally { setOcupado(null); }
   };
@@ -36,7 +37,7 @@ export default function AlertasAdministradores() {
     finally { setOcupado(null); }
   };
   return <section className="p-4 border-b border-gray-800 space-y-4">
-    <div><h3 className="text-white font-semibold">Alertas por correo</h3>
+    <div><h3 className="text-white font-semibold">Alertas de administradores</h3>
       <p className="text-sm text-gray-400 mt-1">Correo personal de cada administrador o gerente. Es independiente del correo para iniciar sesión. Solo recibe información de esta empresa y sede.</p>
     </div>
     <p className={`text-sm rounded-lg p-3 ${configurado ? 'bg-green-500/10 text-green-300' : 'bg-amber-500/10 text-amber-300'}`}>
@@ -48,7 +49,12 @@ export default function AlertasAdministradores() {
       <label className="block text-sm text-gray-300">Correo personal para alertas
         <input type="email" maxLength={254} value={a.email} onChange={e => cambiar(a.id, { email: e.target.value })} placeholder="nombre@gmail.com" className="block mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white" />
       </label>
-      <p className="text-xs text-gray-400">Deja el correo vacío para desactivar los envíos a esta persona.</p>
+      <p className="text-xs text-gray-400">Deja el correo vacío para desactivar únicamente las alertas por correo.</p>
+      <label className="block text-sm text-gray-300">WhatsApp personal con indicativo del país
+        <input type="tel" maxLength={24} value={a.telefono || ''} onChange={e => cambiar(a.id, { telefono: e.target.value })} placeholder="+57 302 123 4567" className="block mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+      </label>
+      <label className="flex gap-2 items-start text-sm text-gray-300"><input type="checkbox" checked={a.whatsapp || false} onChange={e => cambiar(a.id, { whatsapp: e.target.checked })} />El titular autorizó recibir por WhatsApp las alertas seleccionadas de esta empresa. Desmarca para cancelar los envíos.</label>
+      <p className="text-xs text-gray-400">{whatsapp.configurado ? `Conexión de WhatsApp configurada. Límite: ${whatsapp.limiteDiario} mensajes diarios por empresa y sede, compartido entre sus administradores. La aceptación por Meta no garantiza entrega.` : 'WhatsApp pendiente de activación en Meta. Puedes guardar el número y la autorización; todavía no se enviarán mensajes.'}</p>
       <div className="flex flex-wrap gap-4 text-sm text-gray-300">
         <label className="flex gap-2 items-center"><input type="checkbox" checked={a.stock} onChange={e => cambiar(a.id, { stock: e.target.checked })} />Stock bajo o crítico</label>
         <label className="flex gap-2 items-center"><input type="checkbox" checked={a.caja} onChange={e => cambiar(a.id, { caja: e.target.checked })} />Aperturas, cierres y alertas de caja</label>

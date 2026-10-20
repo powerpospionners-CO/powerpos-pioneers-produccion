@@ -8,6 +8,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappService } from './whatsapp.service';
 import {
   escaparHtml,
   grupoAlerta,
@@ -23,7 +24,10 @@ export class NotificacionesService {
   private transporter: nodemailer.Transporter | null;
   private revisandoStock = false;
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private readonly whatsapp?: WhatsappService,
+  ) {
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
 
@@ -53,6 +57,12 @@ export class NotificacionesService {
     const { empresaId } = datos;
     if (!empresaId || !grupoAlerta(datos.tipo))
       return { enviado: false, canales: [] };
+    // La cola no depende del SMTP ni espera la conexión con Meta durante una venta.
+    try {
+      await this.whatsapp?.encolar({ ...datos, empresaId });
+    } catch {
+      this.logger.warn('No se pudo poner la alerta en la cola de WhatsApp');
+    }
     try {
       const destinatarios = await this.destinatarios(empresaId, datos.tipo);
       if (!destinatarios.length || !this.transporter)
@@ -190,6 +200,10 @@ export class NotificacionesService {
     ]);
     return {
       correoConfigurado: !!this.transporter,
+      whatsapp: this.whatsapp?.estado() || {
+        configurado: false,
+        limiteDiario: 0,
+      },
       administradores: usuarios.map((u) => ({
         ...u,
         ...(mapa.get(u.id) || SIN_ALERTAS),
@@ -291,7 +305,11 @@ export class NotificacionesService {
 
   @Cron('0 */5 * * * *')
   async revisarStock() {
-    if (!this.transporter || this.revisandoStock) return;
+    if (
+      (!this.transporter && !this.whatsapp?.estado().configurado) ||
+      this.revisandoStock
+    )
+      return;
     this.revisandoStock = true;
     try {
       await this.prisma.enCadaSede(() => this.revisarStockSede());
@@ -308,7 +326,15 @@ export class NotificacionesService {
       select: { id: true, nombre: true },
     });
     for (const empresa of empresas) {
-      if (!(await this.destinatarios(empresa.id, 'STOCK CRÍTICO')).length)
+      const config = await this.configuracion(empresa.id);
+      if (
+        !config.administradores.some(
+          (u) =>
+            u.stock &&
+            (u.email ||
+              (config.whatsapp.configurado && u.whatsapp && u.telefono)),
+        )
+      )
         continue;
       const [ingredientes, productos] = await Promise.all([
         this.prisma.ingrediente.findMany({

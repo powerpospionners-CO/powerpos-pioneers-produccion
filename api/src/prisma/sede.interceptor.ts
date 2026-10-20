@@ -28,6 +28,7 @@ export class SedeInterceptor implements NestInterceptor {
       if (
         req.user?.rol === 'SUPERADMIN' ||
         ruta.startsWith('/auth/') ||
+        ruta === '/webhooks/whatsapp' ||
         ruta.startsWith('/suscripciones/') ||
         ruta === '/sucursales' ||
         ruta.startsWith('/sucursales/')
