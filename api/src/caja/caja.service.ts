@@ -531,10 +531,21 @@ export class CajaService {
   // Lista de cajas ya cerradas, para que el admin elija cuál revisar en
   // detalle (ver obtenerResumenCaja). Más reciente primero.
   async listarCajasCerradas(empresaId: number, sucursalId?: number) {
+    const cambios = await this.prisma.auditoria.findMany({
+      where: { empresaId, entidad: 'CajaHistorial', accion: { in: ['ARCHIVAR', 'RESTAURAR'] } },
+      select: { entidadId: true, accion: true }, orderBy: { id: 'asc' },
+    });
+    const archivadas = new Set<number>();
+    for (const cambio of cambios) {
+      if (cambio.entidadId === null) continue;
+      if (cambio.accion === 'ARCHIVAR') archivadas.add(cambio.entidadId);
+      else archivadas.delete(cambio.entidadId);
+    }
     return this.prisma.caja.findMany({
       where: {
         sucursal: { empresaId, ...(sucursalId ? { id: sucursalId } : {}) },
         estado: 'CERRADA',
+        ...(archivadas.size ? { id: { notIn: [...archivadas] } } : {}),
       },
       include: {
         usuario: { select: { nombre: true } },
