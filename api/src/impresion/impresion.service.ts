@@ -3,6 +3,7 @@ import { Socket } from 'node:net';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
 import { reciboTrailer } from './recibo-trailer';
+import { codificarLogoEscPos } from './logo-escpos';
 
 const sharp: typeof import('sharp').default = require('sharp');
 
@@ -367,37 +368,16 @@ export class ImpresionService {
       }
       const { data, info } = await sharp(buffer)
         .resize({ width: 300, height: 120, fit: 'inside', withoutEnlargement: true })
+        .flatten({ background: { r: 255, g: 255, b: 255 } })
+        .removeAlpha()
         .grayscale()
         .normalize()
-        .flatten({ background: { r: 255, g: 255, b: 255 } })
         .threshold(180)
         .raw()
         .toBuffer({ resolveWithObject: true });
 
-      const ancho = info.width;
-      const alto = info.height;
-      const bytesPorLinea = Math.max(1, Math.ceil(ancho / 8));
-      const lineas: Buffer[] = [Buffer.from([0x1b, 0x61, 0x01])];
-
-      for (let y = 0; y < alto; y += 1) {
-        const fila = Buffer.alloc(bytesPorLinea, 0x00);
-
-        for (let x = 0; x < ancho; x += 1) {
-          const indice = y * ancho + x;
-          const valor = data[indice] ?? 255;
-          if (valor < 128) {
-            const byteIndex = Math.floor(x / 8);
-            const bitIndex = 7 - (x % 8);
-            fila[byteIndex] |= 1 << bitIndex;
-          }
-        }
-
-        lineas.push(Buffer.from([0x1b, 0x2a, 0x00, bytesPorLinea & 0xff, (bytesPorLinea >> 8) & 0xff]));
-        lineas.push(fila);
-      }
-
-      lineas.push(Buffer.from([0x1b, 0x61, 0x00]));
-      const resultado = Buffer.concat(lineas);
+      if (info.channels !== 1) throw new Error('El logo debe tener un solo canal de grises');
+      const resultado = codificarLogoEscPos(data, info.width, info.height);
       this.cacheLogos.set(logoUrl, resultado);
       return resultado;
     } catch (error) {
