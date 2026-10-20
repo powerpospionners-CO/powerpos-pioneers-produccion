@@ -5,6 +5,7 @@ import PDFDocument = require('pdfkit');
 const sharp: typeof import('sharp').default = require('sharp');
 import { PrismaService } from '../prisma/prisma.service';
 import { clasificarProducto } from './clasificacion';
+import { normalizarOrigen, ORIGENES_ENCHILA } from './origenes';
 
 const QUITAR_ACENTOS = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const NORMALIZAR_ENCABEZADO = (texto: string) => QUITAR_ACENTOS(String(texto || '').toLowerCase().trim());
@@ -102,10 +103,10 @@ function textoOpcional(valor: unknown, campo: string, max: number, requerido = f
 const ORIGENES_VALIDOS = new Set(["MEXICANO", "PERUANO"]);
 const USOS_VALIDOS = new Set(["RESTAURANTE", "TIENDA", "SUPERMERCADO", "MAYORISTA"]);
 
-function validarOrigenYUsos(origen: unknown, usos: unknown): { origen: string | null; usos: string[] } {
+function validarOrigenYUsos(origen: unknown, usos: unknown, validos = ORIGENES_VALIDOS): { origen: string | null; usos: string[] } {
   let origenLimpio: string | null = null;
   if (origen !== undefined && origen !== null && origen !== "") {
-    if (!ORIGENES_VALIDOS.has(String(origen))) throw new BadRequestException("El origen debe ser MEXICANO o PERUANO");
+    if (!validos.has(String(origen))) throw new BadRequestException('Selecciona un origen del catálogo o créalo primero');
     origenLimpio = String(origen);
   }
   const usosLimpios = Array.isArray(usos) ? usos.map(String) : [];
@@ -116,6 +117,46 @@ function validarOrigenYUsos(origen: unknown, usos: unknown): { origen: string | 
 @Injectable()
 export class CatalogoService {
   constructor(private prisma: PrismaService) {}
+
+  private async origenesConfigurados(empresaId: number, db: any = this.prisma) {
+    if (empresaId !== 2) return ORIGENES_ENCHILA.slice(0, 2);
+    const registros = await db.auditoria.findMany({
+      where: { empresaId, entidad: 'CatalogoOrigen', accion: 'CREAR' },
+      select: { detalle: true }, orderBy: { id: 'asc' },
+    });
+    const opciones = new Map(ORIGENES_ENCHILA.map(o => [o.codigo, o]));
+    for (const r of registros) {
+      const o = r.detalle as any;
+      if (o?.codigo && o?.nombre && !opciones.has(o.codigo)) opciones.set(o.codigo, { codigo: o.codigo, nombre: o.nombre });
+    }
+    return [...opciones.values()];
+  }
+
+  async listarOrigenes(empresaId: number) {
+    await this.verificarHabilitado(empresaId);
+    return this.origenesConfigurados(empresaId);
+  }
+
+  async crearOrigen(nombre: unknown, empresaId: number, usuarioId: number) {
+    await this.verificarHabilitado(empresaId);
+    if (empresaId !== 2) throw new ForbiddenException('Esta opción pertenece a Enchila Market');
+    const origen = normalizarOrigen(nombre);
+    return this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(74225, ${empresaId})`;
+      const existentes = await this.origenesConfigurados(empresaId, tx);
+      const actual = existentes.find(o => o.codigo === origen.codigo);
+      if (actual) return actual;
+      if (existentes.length >= 100) throw new BadRequestException('El catálogo admite hasta 100 orígenes');
+      await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: 'CatalogoOrigen', accion: 'CREAR', detalle: origen } });
+      return origen;
+    });
+  }
+
+  private async validarClasificacion(datos: any, empresaId: number, actual?: any) {
+    const opciones = empresaId === 2 ? new Set((await this.origenesConfigurados(empresaId)).map(o => o.codigo)) : ORIGENES_VALIDOS;
+    return validarOrigenYUsos(datos.origen === undefined ? actual?.origen : datos.origen,
+      datos.usos === undefined ? actual?.usos : datos.usos, opciones);
+  }
 
   private async verificarHabilitado(empresaId: number) {
     const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { catalogoHabilitado: true } });
@@ -138,7 +179,7 @@ export class CatalogoService {
     const descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     const precio = this.validarPrecio(datos.precio);
     return this.prisma.catalogoProducto.create({
-      data: { empresaId, nombre, categoria, presentacion, descripcion, precio, ...(datos.origen !== undefined || datos.usos !== undefined ? validarOrigenYUsos(datos.origen, datos.usos) : clasificarProducto(nombre, presentacion, categoria)) },
+      data: { empresaId, nombre, categoria, presentacion, descripcion, precio, ...(datos.origen !== undefined || datos.usos !== undefined ? await this.validarClasificacion(datos, empresaId) : clasificarProducto(nombre, presentacion, categoria)) },
     });
   }
 
@@ -157,7 +198,7 @@ export class CatalogoService {
 
   async actualizar(id: number, datos: any, empresaId: number) {
     await this.verificarHabilitado(empresaId);
-    await this.obtener(id, empresaId);
+    const actual = await this.obtener(id, empresaId);
     const data: any = {};
     if (datos.nombre !== undefined) data.nombre = textoOpcional(datos.nombre, 'El nombre', 150, true);
     if (datos.categoria !== undefined) data.categoria = textoOpcional(datos.categoria, 'La categoría', 80);
@@ -165,7 +206,7 @@ export class CatalogoService {
     if (datos.descripcion !== undefined) data.descripcion = textoOpcional(datos.descripcion, 'La descripción', 500);
     if (datos.precio !== undefined) data.precio = this.validarPrecio(datos.precio);
     if (datos.activo !== undefined) data.activo = !!datos.activo;
-    if (datos.origen !== undefined || datos.usos !== undefined) Object.assign(data, validarOrigenYUsos(datos.origen, datos.usos));
+    if (datos.origen !== undefined || datos.usos !== undefined) Object.assign(data, await this.validarClasificacion(datos, empresaId, actual));
     if (datos.orden !== undefined) data.orden = Number.isInteger(datos.orden) ? datos.orden : 0;
     return this.prisma.catalogoProducto.update({ where: { id }, data });
   }
@@ -567,6 +608,7 @@ export class CatalogoService {
       logo: empresa.logo,
       telefono: empresa.telefono,
       color,
+      ...(empresa.id === 2 ? { origenes: await this.origenesConfigurados(empresa.id) } : {}),
       productos: this.ocultarFotosSiAplica(empresa.catalogoFotosPublicas, items),
     };
   }

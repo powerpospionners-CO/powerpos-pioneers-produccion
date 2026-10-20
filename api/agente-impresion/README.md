@@ -76,9 +76,13 @@ reintenta conectarse solo cada 5 segundos, sin que tengas que hacer nada.
 
 ## Dejarlo encendido siempre (arranca con Windows)
 
-1. Presiona `Win + R`, escribe `shell:startup` y da Enter — se abre una carpeta.
-2. Copia un acceso directo de `iniciar.bat` dentro de esa carpeta.
-3. Desde ahora, cada vez que se encienda el computador, el agente arranca solo.
+1. En la carpeta actual del agente, haz clic derecho sobre `iniciar.bat` y crea un **acceso directo** (en Windows 11 puede aparecer en "Mostrar más opciones").
+2. Presiona `Win + R`, escribe `shell:startup` y da Enter.
+3. Mueve ese **acceso directo** a la carpeta que se abrió. Conserva `agente.js`, `config.json` e `iniciar.bat` juntos en su carpeta original.
+4. Opcional: en las propiedades del acceso directo, cambia "Ejecutar" a "Minimizada" para que no ocupe la pantalla de caja.
+5. Reinicia el computador e inicia sesión en Windows. Comprueba que el agente muestre "Conectado". Si aún no hay internet, reintenta la conexión automáticamente.
+
+El inicio automático corresponde al usuario de Windows con el que hiciste estos pasos. No crees dos accesos directos del agente en Inicio: podría conectarse dos veces y duplicar impresiones.
 
 ## Si algo no imprime
 

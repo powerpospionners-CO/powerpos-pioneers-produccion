@@ -21,6 +21,17 @@ export class CatalogoController {
     return this.catalogoService.listar(req.user.empresaId);
   }
 
+  @Get('origenes')
+  listarOrigenes(@Request() req: any) {
+    return this.catalogoService.listarOrigenes(req.user.empresaId);
+  }
+
+  @Post('origenes')
+  @Roles('ADMIN_EMPRESA')
+  crearOrigen(@Body() body: any, @Request() req: any) {
+    return this.catalogoService.crearOrigen(body.nombre, req.user.empresaId, req.user.id);
+  }
+
   @Post()
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   crear(@Body() body: any, @Request() req: any) {
