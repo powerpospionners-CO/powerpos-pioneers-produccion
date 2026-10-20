@@ -51,3 +51,11 @@ La alternativa oficial sin Twilio es WhatsApp Cloud API de Meta. Requiere
 configuración de cuenta/número, credenciales y plantillas aprobadas para
 avisos proactivos. Esta entrega no activa WhatsApp ni instala automatizaciones
 de WhatsApp Web. Ver https://developers.facebook.com/docs/whatsapp/cloud-api/overview
+# Presentación de los correos
+
+Las alertas, pruebas y felicitaciones usan la plantilla compartida `src/notificaciones/correo-powerpos.ts`.
+El logo oficial se adjunta como imagen CID: no se descarga desde una dirección externa para mostrarlo.
+La compilación incluye el PNG mediante `nest-cli.json`. Cada mensaje contiene HTML adaptable y una alternativa de texto.
+Los nombres de empresas, sedes, clientes y detalles se escapan antes de insertarlos en HTML.
+El botón de acceso al sistema aparece únicamente en las notificaciones administrativas.
+Las vistas previas y la prueba MIME son locales; no sustituyen una comprobación de entrega en el buzón del destinatario.
