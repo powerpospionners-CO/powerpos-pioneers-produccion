@@ -1,5 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {imprimirRed}=require('./agente');
+const {mensajeEstadoServidor}=require('./agente');
+
+test('los fallos temporales 502 y 503 no piden cambiar credenciales',()=>{
+  for(const estado of [500,502,503,504]){
+    const mensaje=mensajeEstadoServidor(estado);assert.match(mensaje,/temporalmente/);assert.match(mensaje,/automáticamente/);assert.doesNotMatch(mensaje,/Revisa el token/);
+  }
+  for(const estado of [401,403])assert.match(mensajeEstadoServidor(estado),/acceso rechazado.*Revisa el token/);
+});
 test('reintenta en la misma IP cuando la impresora vuelve a responder',async()=>{
   let envios=0,guardados=0;
   const resultado=await imprimirRed({impresoraHost:'127.0.0.10',impresoraPuerto:9100},Buffer.from('comanda').toString('base64'),false,{

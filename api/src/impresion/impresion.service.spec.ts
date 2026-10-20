@@ -8,6 +8,15 @@ describe('ImpresionService', () => {
     process.env = { ...originalEnv };
   });
 
+  it('permite que el agente termine la recuperación de red antes de declarar fallido un recibo', async () => {
+    process.env.ESC_POS_ENABLED = 'true'; process.env.IMPRESION_MODO = 'agente';
+    const eventos = { enviarYEsperar: jest.fn().mockResolvedValue({ ok: true }) };
+    const service = new ImpresionService(undefined, eventos as any);
+    expect(await service.imprimirRecibo({ numero: 'PRUEBA', total: 0, detalles: [] }, 1)).toEqual({ impreso: true, modo: 'agente' });
+    expect(eventos.enviarYEsperar.mock.calls[0][3]).toBe(15000);
+    expect(eventos.enviarYEsperar).toHaveBeenCalledTimes(1);
+  });
+
   it('should print a customer receipt via ESC/POS when enabled', async () => {
     const server = createServer((socket) => {
       socket.on('data', () => {

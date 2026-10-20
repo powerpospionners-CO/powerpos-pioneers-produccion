@@ -172,6 +172,7 @@ export class ImpresionService {
       Buffer.concat([INICIO, contenido, CORTE]),
       host,
       port,
+      15000,
     );
 
     if (error) {

@@ -266,6 +266,14 @@ async function manejarTrabajo(config, trabajo) {
   }
 }
 
+function mensajeEstadoServidor(estado) {
+  if (estado === 401 || estado === 403)
+    return `El servidor respondió ${estado}: acceso rechazado. Revisa el token en config.json.`;
+  if (estado >= 500 && estado <= 599)
+    return `El servidor respondió ${estado}: está temporalmente sin disponibilidad. Se reintentará automáticamente; no cambies el token por este error.`;
+  return `El servidor respondió ${estado}. Se reintentará automáticamente.`;
+}
+
 function conectar(config) {
   const url = new URL(`${config.apiUrl}/impresion/stream?token=${encodeURIComponent(config.token)}`);
   const cliente = clienteHttp(config.apiUrl);
@@ -274,7 +282,7 @@ function conectar(config) {
 
   const req = cliente.get(url, (res) => {
     if (res.statusCode !== 200) {
-      console.error(`El servidor respondió ${res.statusCode}. Revisa el token en config.json.`);
+      console.error(mensajeEstadoServidor(res.statusCode));
       res.resume();
       programarReconexion(config);
       return;
@@ -306,7 +314,8 @@ function conectar(config) {
       programarReconexion(config);
     });
     res.on('error', (error) => {
-      console.error('Error en la conexión:', error.message);
+      if (error.message === 'aborted') console.warn('Se interrumpió la conexión con el servidor. Reconectando automáticamente...');
+      else console.error('Error en la conexión:', error.message);
       programarReconexion(config);
     });
   });
@@ -329,8 +338,8 @@ function programarReconexion(config) {
 
 let colaTrabajos = Promise.resolve();
 if (require.main === module) {
-  console.log('=== Agente de impresión PowerPOS · 2026-10-19.2 ===');
+  console.log('=== Agente de impresión PowerPOS · 2026-10-19.3 ===');
   const config = cargarConfig();
   conectar(config);
 }
-module.exports = { imprimirRed };
+module.exports = { imprimirRed, mensajeEstadoServidor };
