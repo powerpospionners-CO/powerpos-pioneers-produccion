@@ -3,6 +3,18 @@ import { ImpresionService } from './impresion.service';
 
 describe('ImpresionService', () => {
   const originalEnv = { ...process.env };
+  it('aprovecha 48 columnas en Enchila y conserva 32 en las otras tiendas', async () => {
+    const service = new ImpresionService({ empresa: { findUnique: jest.fn().mockResolvedValue({ nombre: 'Enchila Market Pereira', tipoNegocio: 'TIENDA', direccion: 'Carrera 16 # 20A - 11, Local 5 Portal de la Pradera, Dosquebradas, Risaralda' }) } } as any);
+    const pedido = { numero: 'PRUEBA', total: 58000, detalles: [{ cantidad: 1, producto: { nombre: 'CHAMOY TAJIN 475 ml' }, subtotal: 28000 }, { cantidad: 2, producto: { nombre: 'CHAMOY CHILERITO 355 ml' }, subtotal: 30000 }] };
+    const ticket = (await (service as any).formatearRecibo(pedido, 2)).toString('ascii');
+    expect(ticket).toContain('='.repeat(48) + '\n');
+    expect(ticket).toContain('$28.000'.padStart(48) + '\n');
+    expect(ticket).toContain('TOTAL' + ' '.repeat(36) + '$58.000');
+    expect(ticket).toContain('CHAMOY CHILERITO 355 ml');
+    const otro = (await (service as any).formatearRecibo(pedido, 7)).toString('ascii');
+    expect(otro).toContain('='.repeat(32) + '\n');
+    expect(otro).not.toContain('='.repeat(48));
+  });
 
   it.each([1, 2])('elige un mensaje cristiano aleatorio al pie para empresa %s', async empresaId => {
     const azar = jest.spyOn(Math, 'random');

@@ -457,6 +457,9 @@ export class ImpresionService {
   private async formatearRecibo(pedido: any, empresaId: number) {
     const empresa = await this.obtenerEmpresa(empresaId);
     if (empresaId === 1) return reciboTrailer(pedido, empresa, await this.generarLogoEscPos(empresa), MENSAJES_FE[Math.floor(Math.random() * MENSAJES_FE.length)]);
+    // Enchila usa 80 mm; las demás empresas conservan su formato.
+    const ancho = empresaId === 2 ? 48 : 32;
+    const separador = (caracter: string) => caracter.repeat(ancho) + '\n';
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
     const esRestaurante = empresa?.tipoNegocio === 'RESTAURANTE';
     const logo = await this.generarLogoEscPos(empresa);
@@ -472,18 +475,18 @@ export class ImpresionService {
     // realmente tiene cargados — una tirilla con "NIT: N/A" en cada venta
     // se ve descuidada, mejor omitir la línea directamente.
     lineas.push(
-      ...this.negrita(`${this.centrarTexto(nombre, 32)}\n`),
-      `${this.centrarTexto(esRestaurante ? 'PEDIDO' : 'VENTA', 32)}\n`,
-      `${this.centrarTexto(pedido.numero, 32)}\n`,
+      ...this.negrita(`${this.centrarTexto(nombre, ancho)}\n`),
+      `${this.centrarTexto(esRestaurante ? 'PEDIDO' : 'VENTA', ancho)}\n`,
+      `${this.centrarTexto(pedido.numero, ancho)}\n`,
     );
-    if (empresa?.nit) lineas.push(`${this.centrarTexto(`NIT ${empresa.nit}`, 32)}\n`);
-    if (empresa?.direccion) lineas.push(...this.envolverDireccion(empresa.direccion));
-    if (empresa?.telefono) lineas.push(`${this.centrarTexto(`Tel ${empresa.telefono}`, 32)}\n`);
-    lineas.push('================================\n');
+    if (empresa?.nit) lineas.push(`${this.centrarTexto(`NIT ${empresa.nit}`, ancho)}\n`);
+    if (empresa?.direccion) lineas.push(...this.envolverDireccion(empresa.direccion, ancho));
+    if (empresa?.telefono) lineas.push(`${this.centrarTexto(`Tel ${empresa.telefono}`, ancho)}\n`);
+    lineas.push(separador('='));
     lineas.push(`Fecha: ${this.fechaBogota(new Date())}\n`);
-    if (pedido.usuario?.nombre) lineas.push(`Cajero: ${this.recortarTexto(pedido.usuario.nombre, 25)}\n`);
-    if (pedido.cliente?.nombre) lineas.push(`Cliente: ${this.recortarTexto(pedido.cliente.nombre, 24)}\n`);
-    lineas.push('--------------------------------\n');
+    if (pedido.usuario?.nombre) lineas.push(`Cajero: ${this.recortarTexto(pedido.usuario.nombre, ancho - 8)}\n`);
+    if (pedido.cliente?.nombre) lineas.push(`Cliente: ${this.recortarTexto(pedido.cliente.nombre, ancho - 9)}\n`);
+    lineas.push(separador('-'));
 
     // Cada producto en dos líneas (nombre, luego el precio alineado a la
     // derecha) para que el precio quede siempre en la misma columna, sin
@@ -496,8 +499,8 @@ export class ImpresionService {
       const nombreBase = detalle.producto?.nombre || 'Producto';
       const nombreConSabor = detalle.varianteSabor ? `${nombreBase} — ${detalle.varianteSabor}` : nombreBase;
       const nombreItem = detalle.presentacionNombre ? `${nombreConSabor} (${detalle.presentacionNombre})` : nombreConSabor;
-      lineas.push(`${detalle.cantidad}x ${this.recortarTexto(nombreItem, 29)}\n`);
-      lineas.push(`${this.moneda(subtotalItem).padStart(32, ' ')}\n`);
+      lineas.push(`${detalle.cantidad}x ${this.recortarTexto(nombreItem, ancho - 3)}\n`);
+      lineas.push(`${this.moneda(subtotalItem).padStart(ancho, ' ')}\n`);
       if (detalle.exclusiones?.length) {
         lineas.push(`   Sin: ${detalle.exclusiones.join(', ')}\n`);
       }
@@ -514,19 +517,19 @@ export class ImpresionService {
       }
     }
 
-    lineas.push('--------------------------------\n');
+    lineas.push(separador('-'));
     if (pedido.observacion) {
-      lineas.push(`Nota: ${pedido.observacion}\n`, '--------------------------------\n');
+      lineas.push(`Nota: ${pedido.observacion}\n`, separador('-'));
     }
     if (descuento > 0) {
-      lineas.push(`${this.lineaMonto('Subtotal', subtotal)}\n`);
-      lineas.push(`${this.lineaMonto('Descuento', -descuento)}\n`);
+      lineas.push(`${this.lineaMonto('Subtotal', subtotal, ancho)}\n`);
+      lineas.push(`${this.lineaMonto('Descuento', -descuento, ancho)}\n`);
     }
-    lineas.push(...this.negrita(`${this.lineaMonto('TOTAL', total)}\n`));
-    lineas.push('--------------------------------\n');
+    lineas.push(...this.negrita(`${this.lineaMonto('TOTAL', total, ancho)}\n`));
+    lineas.push(separador('-'));
     if (Array.isArray(pedido.pagos) && pedido.pagos.length > 1) {
       for (const pago of pedido.pagos) {
-        lineas.push(`${this.lineaMonto(pago.metodoPago, Number(pago.monto))}\n`);
+        lineas.push(`${this.lineaMonto(pago.metodoPago, Number(pago.monto), ancho)}\n`);
       }
     } else if (pedido.metodoPago) {
       lineas.push(pedido.metodoPago === 'CREDITO' ? 'A CREDITO - PENDIENTE DE COBRO\n' : `Pago: ${pedido.metodoPago}\n`);
@@ -539,19 +542,19 @@ export class ImpresionService {
       const efectivoAtribuido = Number(
         (Array.isArray(pedido.pagos) ? pedido.pagos.find((p: any) => p.metodoPago === 'EFECTIVO')?.monto : undefined) ?? total,
       );
-      lineas.push('--------------------------------\n');
-      lineas.push(`${this.lineaMonto('Recibido', efectivoAtribuido + cambio)}\n`);
-      lineas.push(`${this.lineaMonto('Cambio', cambio)}\n`);
+      lineas.push(separador('-'));
+      lineas.push(`${this.lineaMonto('Recibido', efectivoAtribuido + cambio, ancho)}\n`);
+      lineas.push(`${this.lineaMonto('Cambio', cambio, ancho)}\n`);
     }
 
-    lineas.push('================================\n');
-    lineas.push(...this.negrita(`${this.centrarTexto('GRACIAS POR SU COMPRA', 32)}\n`));
-    lineas.push(`${this.centrarTexto('Vuelva pronto', 32)}\n`);
+    lineas.push(separador('='));
+    lineas.push(...this.negrita(`${this.centrarTexto('GRACIAS POR SU COMPRA', ancho)}\n`));
+    lineas.push(`${this.centrarTexto('Vuelva pronto', ancho)}\n`);
 
     if (empresaId === 2) {
       const mensaje = MENSAJES_FE[Math.floor(Math.random() * MENSAJES_FE.length)];
       lineas.push('\n');
-      lineas.push(`${this.centrarTexto(mensaje, 32)}\n`);
+      lineas.push(`${this.centrarTexto(mensaje, ancho)}\n`);
     }
     lineas.push('\n');
 
