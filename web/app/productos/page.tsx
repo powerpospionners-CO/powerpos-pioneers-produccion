@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
@@ -430,6 +430,8 @@ export default function ProductosPage() {
   const esRestaurante = !tipoNegocio || tipoNegocio === 'RESTAURANTE';
   const esEnchilaMarket = useAuthStore((state) => state.usuario?.empresaId) === 2;
   const usuario = useAuthStore(state => state.usuario);
+  const esTrailer = usuario?.empresaId === 1;
+  const puedeGestionarAdicionales = !esTrailer || usuario?.rol === 'ADMIN_EMPRESA';
   const puedeConfigurarComandas = usuario?.empresaId === 1 && ['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol);
   const [mostrarComandas, setMostrarComandas] = useState(false);
   const [descargandoExcel, setDescargandoExcel] = useState(false);
@@ -590,14 +592,29 @@ export default function ProductosPage() {
     setAdicionalIdsTemp((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  const abrirCatalogoAdicionales = async () => {
+    if (!puedeGestionarAdicionales) return;
+    setErrorAdicional('');
+    setFormAdicional({ id: null, nombre: '', precio: '', ingredienteId: '', cantidad: '' });
+    setModalAdicionales(true);
+    if (!esTrailer) return;
+    setLoading(true);
+    try {
+      await api.post('/adicionales/sincronizar-ingredientes');
+      const { data } = await api.get('/adicionales');
+      setAdicionalesCatalogo(data);
+    } catch { setErrorAdicional('No se pudieron preparar los adicionales de ingredientes. Cierra y vuelve a abrir el catálogo para reintentar.'); }
+    finally { setLoading(false); }
+  };
+
   const guardarAdicional = async () => {
     setErrorAdicional('');
     if (!formAdicional.nombre.trim() || formAdicional.precio.trim() === '' || !Number.isFinite(Number(formAdicional.precio)) || Number(formAdicional.precio) < 0) {
       setErrorAdicional('Escribe el nombre y un precio válido. Puedes usar 0 si está incluido.');
       return;
     }
-    if (formAdicional.empaqueParaLlevar && (!formAdicional.ingredienteId || !Number.isFinite(Number(formAdicional.cantidad)) || Number(formAdicional.cantidad) <= 0)) {
-      setErrorAdicional('Para el empaque automático, selecciona el ingrediente del inventario e indica cuánto descontar por producto. Ejemplo: 1 porta hamburguesa.');
+    if ((formAdicional.empaqueParaLlevar || (esTrailer && formAdicional.ingredienteId)) && (!formAdicional.ingredienteId || !Number.isFinite(Number(formAdicional.cantidad)) || Number(formAdicional.cantidad) <= 0)) {
+      setErrorAdicional('Indica cuánto descontar del ingrediente por cada adicional: por ejemplo, 30 gramos de queso o 1 unidad de empaque.');
       return;
     }
     setLoading(true);
@@ -865,7 +882,7 @@ export default function ProductosPage() {
               Nueva categoría
             </button>
             {esRestaurante && <button
-              onClick={() => { setFormAdicional({ id: null, nombre: '', precio: '', ingredienteId: '', cantidad: '' }); setModalAdicionales(true); }}
+              onClick={() => void abrirCatalogoAdicionales()} disabled={!puedeGestionarAdicionales || loading}
               className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg px-4 py-2 transition-colors"
             >
               <Plus size={16} />
@@ -1313,7 +1330,7 @@ export default function ProductosPage() {
                 <label htmlFor="disponible" className="text-gray-400 text-sm">Disponible para venta</label>
               </div>
 
-              {esRestaurante && <div className="flex items-center gap-3">
+              {esRestaurante && !esTrailer && <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
                   id="aceptaAdicionales"
@@ -1420,7 +1437,7 @@ export default function ProductosPage() {
                   <label className="block text-sm text-gray-400">Adicionales disponibles en el POS</label>
                   <button
                     type="button"
-                    onClick={() => { setFormAdicional({ id: null, nombre: '', precio: '', ingredienteId: '', cantidad: '' }); setModalAdicionales(true); }}
+                    onClick={() => void abrirCatalogoAdicionales()} disabled={!puedeGestionarAdicionales || loading}
                     className="text-orange-500 text-xs font-medium hover:text-orange-400 transition-colors flex items-center gap-1"
                   >
                     <Plus size={14} /> Gestionar catálogo
@@ -1428,8 +1445,8 @@ export default function ProductosPage() {
                 </div>
 
                 <p className="text-gray-600 text-xs mb-2">
-                  Si no marcas ninguno y el producto &quot;Acepta adicionales&quot;, en el POS se ofrecen todos los
-                  adicionales de la empresa. Si marcas algunos, solo se ofrecen esos.
+                  {esTrailer ? 'Los adicionales de comida son globales y no se asignan aquí. Solo marca los empaques automáticos que usa este producto. Las bebidas no ofrecen adicionales.' : <>Si no marcas ninguno y el producto &quot;Acepta adicionales&quot;, en el POS se ofrecen todos los
+                  adicionales de la empresa. Si marcas algunos, solo se ofrecen esos.</>}
                 </p>
 
                 {adicionalesCatalogo.length === 0 ? (
@@ -1438,7 +1455,7 @@ export default function ProductosPage() {
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
-                    {adicionalesCatalogo.map((ad) => (
+                    {adicionalesCatalogo.filter(ad => !esTrailer || ad.empaqueParaLlevar).map((ad) => (
                       <button
                         type="button"
                         key={ad.id}
@@ -1675,6 +1692,8 @@ export default function ProductosPage() {
               </button>
             </div>
 
+            {esTrailer && <p className="mb-4 rounded-lg border border-orange-800 bg-orange-950/30 p-3 text-sm text-orange-100">Cada ingrediente tiene su adicional. Completa el precio y la cantidad en la unidad del inventario; al guardar queda disponible en todos los productos de comida. Las bebidas no muestran adicionales. Los empaques automáticos se asignan aparte a los productos que los usan.</p>}
+
             {/* Formulario alta / edición */}
             <div className="bg-gray-800 rounded-lg p-3 space-y-3 mb-4">
               <div className="grid grid-cols-2 gap-2">
@@ -1763,6 +1782,7 @@ export default function ProductosPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-white text-sm font-medium">
                         {ad.nombre} <span className="text-orange-500">${Number(ad.precio).toLocaleString()}</span>
+                        {esTrailer && !ad.disponible && <span className="ml-2 text-amber-400">Pendiente de configurar</span>}
                       </div>
                       <div className="text-gray-500 text-xs">
                         {ad.ingrediente
@@ -1770,7 +1790,7 @@ export default function ProductosPage() {
                           : 'Sin descuento de inventario'}
                       </div>
                     </div>
-                    <button onClick={() => editarAdicional(ad)} className="text-gray-500 hover:text-white transition-colors">
+                    <button aria-label={`Editar adicional ${ad.nombre}`} onClick={() => editarAdicional(ad)} className="text-gray-500 hover:text-white transition-colors">
                       <Edit size={15} />
                     </button>
                     <button onClick={() => eliminarAdicional(ad.id)} className="text-gray-500 hover:text-red-400 transition-colors">

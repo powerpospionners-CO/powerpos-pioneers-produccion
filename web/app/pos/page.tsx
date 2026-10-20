@@ -16,6 +16,7 @@ import RetailPOS from './RetailPOS';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 import { prepararComandas } from '@/lib/comandas';
 import { crearColaImpresion } from '@/lib/colaImpresion';
+import { adicionalesParaTrailer } from '@/lib/adicionalesTrailer';
 import OpcionesImpresionTrailer from '@/components/OpcionesImpresionTrailer';
 
 interface AdicionalProducto {
@@ -130,6 +131,7 @@ function RestaurantePOS() {
   //  - si no acepta adicionales (ej. bebidas), no se muestra nada.
   const adicionalesDelModal: AdicionalProducto[] = !modalProducto
     ? []
+    : esTrailer ? adicionalesParaTrailer(modalProducto, adicionalesCatalogo, categorias)
     : modalProducto.adicionales && modalProducto.adicionales.length > 0
       ? modalProducto.adicionales.map((a) => a.adicional).filter(a => a.activo !== false)
       : modalProducto.aceptaAdicionales === false
