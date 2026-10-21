@@ -4,6 +4,41 @@ Estado al 21 de octubre de 2026: Hostinger contratado y acceso confirmado. Produ
 
 ## Comprobación del destino
 
+### Actualización: configuración recuperada sin Railway
+
+La API completa arrancó en el dominio temporal y devuelve HTTP 200. Su compilación
+MySQL finalizó en Hostinger con las herramientas de desarrollo incluidas. Al desplegar,
+Hostinger sincroniza `public_html` y eliminó la copia de imágenes puesta allí. Se restauró
+el ZIP privado, sin sobrescritura, en `powerpos-data/uploads` fuera de `public_html`, y se
+actualizó UPLOADS_PATH a esa ubicación. Falta comprobar persistencia después de otra
+actualización y hashes completos en disco; el respaldo original está conservado.
+
+El frontend falló en Hostinger por un error interno de Turbopack al crear un proceso para
+CSS. Se seleccionó la opción oficial `next build --webpack`; compila localmente con sus
+31 páginas y TypeScript. Falta confirmar ese nuevo despliegue en Hostinger.
+
+Se obtuvo una nueva copia cifrada y verificada de solo lectura sin detener producción:
+`.tools/respaldos/migracion-2026-10-21T16-59-20-536Z`, control 3207, Trailer 758, Enchila
+3869 filas. La copia importada anterior tiene 3854 filas en Enchila y NO debe activarse.
+
+Google aceptó la nueva contraseña de aplicación guardada por el usuario; se verificó
+autenticación SMTP por TLS 465 sin enviar mensajes. Las 15 variables privadas se importaron
+en Hostinger, incluyendo almacenamiento persistente, cifrado de sedes y una nueva firma
+JWT. El cambio de firma solo se usará al cortar la API y requerirá iniciar sesión otra vez.
+`BACKGROUND_JOBS_ENABLED=false` desactiva los cron de la copia para evitar envíos duplicados.
+
+Se creó el segundo sitio Node, `gold-seal-721324.hostingersite.com`, con raíz `web`, Next.js,
+Node 22 y la API productiva vigente. El frontend pasó compilación local, acceso a login/POS,
+entrega de JavaScript y versión estable. Su despliegue en Hostinger está en curso; todavía
+no se cambiaron dominios. La API de prueba necesita incluir las dependencias de compilación
+(`NPM_CONFIG_INCLUDE=dev`): NODE_ENV=production las omitió y produjo `nest: command not found`.
+El comando estándar de compilación selecciona ahora el cliente MySQL por DATABASE_ENGINE.
+La compilación local de esa ruta pasa. No se declara finalizada la migración.
+
+Enchila puede haber registrado operaciones posteriores al respaldo importado. El destino
+sigue suspendido y sus rutas siguen VERIFICADA. Falta sincronización final con escrituras
+detenidas, comprobaciones de la API completa y corte de dominios. No activar la copia vieja.
+
 ### Avance posterior: copia real y ensayo
 
 Se autorizó acceso temporal únicamente desde la IP pública del computador del usuario,
