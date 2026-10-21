@@ -37,7 +37,8 @@ import { SedeInterceptor } from './prisma/sede.interceptor';
   imports: [
     AdministracionModule,
     TiendaModule,
-    ScheduleModule.forRoot(),
+    // La copia de migración no debe enviar alertas ni ejecutar cierres en paralelo.
+    ScheduleModule.forRoot({ cronJobs: process.env.BACKGROUND_JOBS_ENABLED !== 'false' }),
     PrismaModule,
     AuthModule,
     NotificacionesModule,
