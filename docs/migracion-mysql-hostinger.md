@@ -1,6 +1,6 @@
 # Preparación de MySQL en Hostinger
 
-Estado: borrador compatible de esquema, sin migración de datos ni cambio de producción. El usuario todavía no ha comprado el plan. Producción sigue utilizando PostgreSQL en Neon. No se debe cambiar `DATABASE_URL` ni ejecutar el historial PostgreSQL contra MySQL.
+Estado al 20 de octubre de 2026: migración solicitada; compra de Hostinger en proceso, sin acceso al destino confirmado. Esquema validado, sin migración de datos ni cambio de producción. Producción sigue utilizando PostgreSQL en Neon, cuyo proyecto muestra agotada la transferencia mensual. El usuario no autoriza contratar una ampliación en Neon. No cambiar `DATABASE_URL` ni ejecutar el historial PostgreSQL contra MySQL.
 
 ## Preparado
 
@@ -16,6 +16,29 @@ El borrador no significa que la aplicación ya pueda funcionar contra MySQL. Ant
 - Migrar IDs, referencias, fechas, decimales, JSON, listas, imágenes/rutas y secuencias de autoincremento. Verificar relaciones y totales; conservar las contraseñas cifradas existentes sin pedirlas ni recrear usuarios.
 - Definir bases y credenciales operativas independientes por sede y una gestión central coherente de identidad, permisos y suscripciones. La copia de datos y el cambio de motor no sustituyen el aislamiento por sede.
 - Probar ventas, caja, inventario, compras, crédito, devoluciones, puntos, reportes, eventos, impresión y tareas programadas contra el destino real antes de activar la migración.
+
+## Exportación preparada
+
+`node api/scripts/export-migracion-mysql.cjs --plan` muestra la cobertura sin conectarse.
+El exportador incluye las 59 tablas del modelo actual, incluidos el registro de bases y
+las tablas de control. Cada base independiente debe exportarse por separado.
+Para exportar una base accesible, configurar `MIGRACION_ORIGEN_URL` de forma privada y
+ejecutar el script con `control` o `sede-EMPRESA-SUCURSAL` como argumento. Si no se indica
+esa variable, usa la conexión de `api/.env`. No poner conexiones en argumentos ni en Git.
+
+La exportación lee una transacción PostgreSQL RepeatableRead de solo lectura,
+conserva decimales y timestamps como texto, cifra con AES-256-GCM, escribe archivos nuevos
+en `.tools/respaldos/` y comprueba que la copia se descifre sin cambios. Guardar la clave
+`.private` en un lugar privado separado del respaldo cifrado. No es una importación MySQL,
+no congela ventas y no sustituye el corte final. No imprimir contenido de los respaldos.
+El código de carga debe adaptar las conexiones cifradas del registro central al destino;
+copiarlas literalmente mantendría referencias a Neon.
+
+Las dos pruebas del exportador pasan con datos simulados. No hay un respaldo completo
+reciente encontrado en `.tools/respaldos`; las copias puntuales de cierres y una venta
+no son suficientes para migrar. Una conexión local de prueba falló. Es imprescindible
+obtener una exportación actual de Neon o un respaldo completo comprobado; comprar otro
+hosting no desbloquea el origen ni permite recuperar por inferencia ventas ausentes.
 
 ## Corte y recuperación
 
