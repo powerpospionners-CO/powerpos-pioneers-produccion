@@ -1,4 +1,56 @@
 -- CreateTable
+CREATE TABLE `bases_sede` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `empresaId` INTEGER NOT NULL,
+    `sucursalId` INTEGER NOT NULL,
+    `estado` LONGTEXT NOT NULL DEFAULT 'PREPARANDO',
+    `conexionCifrada` LONGTEXT NOT NULL,
+    `identidadBase` VARCHAR(191) NOT NULL,
+    `slug` VARCHAR(191) NULL,
+    `agenteHash` VARCHAR(191) NULL,
+    `verificacion` JSON NULL,
+    `verificadoEn` DATETIME(3) NULL,
+    `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `actualizadoEn` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `bases_sede_sucursalId_key`(`sucursalId`),
+    UNIQUE INDEX `bases_sede_identidadBase_key`(`identidadBase`),
+    UNIQUE INDEX `bases_sede_slug_key`(`slug`),
+    UNIQUE INDEX `bases_sede_agenteHash_key`(`agenteHash`),
+    UNIQUE INDEX `bases_sede_empresaId_sucursalId_key`(`empresaId`, `sucursalId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `control_aislamiento` (
+    `id` INTEGER NOT NULL DEFAULT 1,
+    `activo` BOOLEAN NOT NULL DEFAULT false,
+    `escriturasSuspendidas` BOOLEAN NOT NULL DEFAULT false,
+    `actualizadoEn` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `escrituras_en_curso` (
+    `id` VARCHAR(191) NOT NULL,
+    `origen` LONGTEXT NOT NULL,
+    `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `sello_base_sede` (
+    `id` INTEGER NOT NULL DEFAULT 1,
+    `empresaId` INTEGER NOT NULL,
+    `sucursalId` INTEGER NOT NULL,
+    `verificadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `empresas` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `nombre` LONGTEXT NOT NULL,
@@ -361,6 +413,7 @@ CREATE TABLE `adicionales` (
     `ingredienteId` INTEGER NULL,
     `cantidad` DECIMAL(10, 3) NULL,
     `disponible` BOOLEAN NOT NULL DEFAULT true,
+    `empaqueParaLlevar` BOOLEAN NOT NULL DEFAULT false,
     `activo` BOOLEAN NOT NULL DEFAULT true,
     `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `actualizadoEn` DATETIME(3) NOT NULL,
@@ -949,6 +1002,14 @@ CREATE TABLE `pedidos_web` (
     INDEX `pedidos_web_empresaId_estado_creadoEn_idx`(`empresaId`, `estado`, `creadoEn`),
     UNIQUE INDEX `pedidos_web_empresaId_clave_key`(`empresaId`, `clave`),
     PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `_powerpos_transaction_locks` (
+    `namespace` VARCHAR(32) NOT NULL,
+    `scope` VARCHAR(32) NOT NULL,
+
+    PRIMARY KEY (`namespace`, `scope`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey

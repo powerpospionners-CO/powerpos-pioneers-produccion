@@ -9,6 +9,9 @@ import { contextoSede, ContextoSede } from './sede-context';
 import { descifrarConexion } from './conexion-cifrada';
 import { identidadBase } from './sede-databases';
 import { createHash } from 'node:crypto';
+import { adaptarMysql, claseCliente, motorBase } from './mysql-adapter';
+
+const ClienteRuntime = claseCliente();
 
 const MODELOS = new Set(
   Prisma.dmmf.datamodel.models.map(
@@ -24,7 +27,7 @@ const OPERACIONES = new Set([
 ]);
 @Injectable()
 export class PrismaService
-  extends PrismaClient
+  extends ClienteRuntime
   implements OnModuleInit, OnModuleDestroy
 {
   readonly control: PrismaClient;
@@ -34,8 +37,8 @@ export class PrismaService
     { firma: string; cliente: PrismaClient; verificacion: Promise<void> }
   >();
   constructor() {
-    super();
-    this.control = this;
+    super(motorBase() === 'mysql' ? { datasources: { db: { url: process.env.DATABASE_URL } } } : undefined);
+    this.control = motorBase() === 'mysql' ? adaptarMysql(this) : this;
     return new Proxy(this, {
       get: (target, key) => {
         if (typeof key === 'string' && OPERACIONES.has(key)) {
@@ -138,9 +141,10 @@ export class PrismaService
       url.searchParams.set('connection_limit', '3');
       url.searchParams.set('pool_timeout', '5');
       url.searchParams.set('connect_timeout', '5');
-      const cliente = new PrismaClient({
+      const clienteBase = new ClienteRuntime({
         datasources: { db: { url: url.toString() } },
       });
+      const cliente = motorBase() === 'mysql' ? adaptarMysql(clienteBase) : clienteBase;
       const verificacion = (async () => {
         const sello = await cliente.selloBaseSede.findUnique({
           where: { id: 1 },

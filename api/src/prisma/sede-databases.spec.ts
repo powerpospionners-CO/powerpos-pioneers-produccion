@@ -3,6 +3,12 @@ const control='postgresql://control:secret@central.example/control';
 const destinos=[{empresaId:1,sucursalId:1,variable:'SEDE_UNO'},{empresaId:1,sucursalId:2,variable:'SEDE_DOS'}];
 const variables={SEDE_UNO:'postgresql://uno:secret@host.example/sede1',SEDE_DOS:'postgresql://dos:secret@host.example/sede2'};
 describe('Registro de bases físicas por sede',()=>{
+  it('mantiene bases MySQL distintas y detecta alias del mismo puerto',()=>{
+    const vars={SEDE_UNO:'mysql://uno:secret@mysql.example/trailer',SEDE_DOS:'mysql://dos:secret@mysql.example/enchila'};
+    const r=new RegistroBasesSede(destinos,vars,'mysql://control:secret@mysql.example/control');
+    expect(r.resolver({empresaId:1,sucursalId:2})).toBe(vars.SEDE_DOS);
+    expect(()=>new RegistroBasesSede(destinos,{...vars,SEDE_DOS:'mysql://otro:clave@mysql.example:3306/trailer'},'mysql://control:secret@mysql.example/control')).toThrow('compartir');
+  });
   it('asigna bases distintas a dos sedes de la misma empresa',()=>{
     const r=new RegistroBasesSede(destinos,variables,control);
     expect(r.resolver({empresaId:1,sucursalId:1})).toBe(variables.SEDE_UNO);

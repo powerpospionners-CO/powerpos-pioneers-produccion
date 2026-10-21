@@ -21,6 +21,7 @@ schema = schema.replace(/model\s+\w+\s*\{[\s\S]*?\n\}/g, block => {
     return `${space}${field}${gap}String${optional} @db.LongText${attrs}`;
   });
 });
+schema += '\n// Bloqueos InnoDB ligados a la transacción; reemplazan advisory locks PostgreSQL.\nmodel BloqueoTransaccionMysql {\n  namespace String @db.VarChar(32)\n  scope String @db.VarChar(32)\n  @@id([namespace, scope])\n  @@map("_powerpos_transaction_locks")\n}\n';
 const folder = path.join(root,'prisma/mysql');
 const target = path.join(folder,'schema.prisma');
 const header = '// Generated compatibility draft; production still uses PostgreSQL.\n// Regenerate with node scripts/prepare-mysql-schema.cjs.\n';

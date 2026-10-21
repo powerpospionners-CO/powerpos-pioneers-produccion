@@ -1384,3 +1384,11 @@ model PedidoWeb {
   @@index([empresaId, estado, creadoEn])
   @@map("pedidos_web")
 }
+
+// Bloqueos InnoDB ligados a la transacción; reemplazan advisory locks PostgreSQL.
+model BloqueoTransaccionMysql {
+  namespace String @db.VarChar(32)
+  scope String @db.VarChar(32)
+  @@id([namespace, scope])
+  @@map("_powerpos_transaction_locks")
+}

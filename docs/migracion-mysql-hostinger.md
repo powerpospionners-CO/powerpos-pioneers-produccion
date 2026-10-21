@@ -1,6 +1,52 @@
 # Preparación de MySQL en Hostinger
 
-Estado al 20 de octubre de 2026: migración solicitada; compra de Hostinger en proceso, sin acceso al destino confirmado. Esquema validado, sin migración de datos ni cambio de producción. Producción sigue utilizando PostgreSQL en Neon, cuyo proyecto muestra agotada la transferencia mensual. El usuario no autoriza contratar una ampliación en Neon. No cambiar `DATABASE_URL` ni ejecutar el historial PostgreSQL contra MySQL.
+Estado al 21 de octubre de 2026: Hostinger contratado y acceso confirmado. Producción sigue utilizando PostgreSQL en Neon; no se ha cambiado DNS ni el destino productivo. El usuario no autoriza contratar una ampliación en Neon. No ejecutar el historial PostgreSQL contra MySQL.
+
+## Comprobación del destino
+
+### Avance posterior: copia real y ensayo
+
+Se autorizó acceso temporal únicamente desde la IP pública del computador del usuario,
+sin habilitar «Cualquier host». Las tres conexiones remotas verificaron TLS con validación
+estricta. Una copia nueva quedó en `.tools/respaldos/migracion-2026-10-21T08-30-09-134Z`.
+Sus tres bases se importaron en Hostinger y pasaron comparación completa de filas y claves
+foráneas: control 3207, Trailer 758 y Enchila 3854 registros, 59 tablas de datos por base.
+Los informes privados por tabla están junto al respaldo. Las 60 tablas y las 112 relaciones
+se comprobaron por conexión directa en cada destino.
+
+Después de la comparación, el control nuevo se suspendió y sus dos rutas quedaron
+VERIFICADA, sin activación. Sus conexiones se volvieron a cifrar para el servidor interno
+127.0.0.1 de Hostinger usando la clave privada preservada. Estas modificaciones del
+registro central son intencionales y posteriores a la comparación con el origen.
+
+Se verificaron el sello de cada sede, su única empresa y sucursal y los autoincrementos.
+El cliente pudo leer los 60 modelos. La API adaptada comprobó modo estricto, UTC y rollback
+en una transacción real. En cada sede pasó un ensayo real de venta, crédito, descuento de
+existencias e idempotencia, revertido íntegramente; no se enviaron correos ni impresiones.
+Los IDs autoincrementales pueden tener huecos por esas transacciones revertidas.
+Se copiaron 477 imágenes públicas referenciadas, con manifiesto SHA-256; falta colocarlas
+en el almacenamiento de la aplicación nueva y verificar su persistencia.
+
+El usuario confirmó que ambas empresas estaban cerradas. Aun así, el origen no se ha
+suspendido: no se hará hasta tener lista y comprobada la aplicación destino para reducir
+la indisponibilidad. Antes del corte hay que verificar que el origen siga coincidiendo,
+copiar la configuración privada vigente, probar el servicio completo y resolver cualquier
+cambio posterior al respaldo. La consola de Railway permite ver el proyecto en el listado,
+pero al abrirlo devuelve 404; se requiere recuperar el acceso o copiar sus variables al
+archivo local privado `.tools/railway-produccion.private.env`.
+
+Las pruebas de regresión actuales de prisma, caja, pedidos, notificaciones y tareas pasan:
+21 suites, 140 pruebas. La compilación MySQL pasa. Ni el DNS ni producción han cambiado.
+
+### Preparación inicial (histórico)
+
+El usuario creó `u748056473_ppcontrol`, `u748056473_pptrailer` y `u748056473_ppenchila`, cada una con un usuario independiente. Las contraseñas no se registran en este documento.
+
+Hostinger utiliza MariaDB 11.8.9 e InnoDB. Tras comprobar que los destinos estaban vacíos, se creó la estructura inicial en las tres bases. Control y Enchila tienen 60 tablas InnoDB con `utf8mb4_unicode_ci` y 112 claves foráneas, verificadas en information_schema. La ejecución DDL del Trailer terminó sin error; falta comprobar sus conteos con una nueva sesión propia. Se cambió el valor predeterminado de caracteres de las bases nuevas a utf8mb4. No se importaron filas de producción.
+
+La configuración inicial del servidor no incluía modo estricto y usaba utf8mb3 por defecto. La sesión de creación activó STRICT_TRANS_TABLES; esto no configura las conexiones futuras de la API. Antes de importar o habilitar el servicio hay que garantizar modo estricto y validar las conexiones reales del cliente.
+
+La aplicación temporal de Hostinger ejecuta únicamente `hostinger-preparacion`, sin acceso a bases ni operaciones productivas. `/health` informa que la migración no está completada.
 
 ## Preparado
 
@@ -34,14 +80,26 @@ no congela ventas y no sustituye el corte final. No imprimir contenido de los re
 El código de carga debe adaptar las conexiones cifradas del registro central al destino;
 copiarlas literalmente mantendría referencias a Neon.
 
-Las dos pruebas del exportador pasan con datos simulados. No hay un respaldo completo
-reciente encontrado en `.tools/respaldos`; las copias puntuales de cierres y una venta
-no son suficientes para migrar. Una conexión local de prueba falló. Es imprescindible
-obtener una exportación actual de Neon o un respaldo completo comprobado; comprar otro
-hosting no desbloquea el origen ni permite recuperar por inferencia ventas ausentes.
+Las dos pruebas del exportador pasan con datos simulados. Se completaron y verificaron
+dos conjuntos de copias cifradas de las tres bases. El más reciente está en
+`.tools/respaldos/migracion-2026-10-21T06-39-37-983Z`: control 3207 filas, Trailer 758
+y Enchila 3854, con 59 tablas por base. Las claves permanecen privadas y excluidas de Git.
+Estos respaldos no incluyen los archivos binarios de imágenes; deben copiarse por separado.
+`api/scripts/import-migracion-mysql.cjs` valida los tres respaldos actuales sin conexión:
+esquema, columnas, IDs, tipos, precisión temporal y referencias. Sus seis pruebas más las
+dos del exportador pasan. El modo de aplicación requiere `MYSQL_DATABASE_URL` privada y
+`--apply`; rechaza destinos con filas, tablas ajenas, motores sin transacciones o comparación
+incompatible. Carga y compara todas las filas en una transacción, revisa huérfanos y restaura
+las comprobaciones de claves foráneas incluso ante error. No habilita la API. No se ha
+ejecutado ese modo contra MariaDB; aún requiere prueba real, permisos de conexión, preparar
+el registro central de sedes y verificar el autoincremento. El archivo local de credenciales
+`.tools/migracion-hostinger.private.json` está excluido de Git y pendiente de completar por el
+usuario. No habilitar acceso desde cualquier host.
+
+Hace falta otra copia final con las escrituras detenidas antes del corte.
 
 ## Corte y recuperación
 
 Crear bases nuevas vacías para ensayo; conservar Neon y su respaldo. Comparar conteos y huellas de datos por tabla, saldos y totales por empresa/sede. Preparar un corte controlado de escrituras o sincronización del último cambio antes de cambiar el destino. Mantener el origen preservado. Si hay escrituras en el nuevo destino, una reversión exige recuperar también esas operaciones; no basta con volver a la URL anterior.
 
-No se compra ningún servicio, se importan datos ni se cambia DNS como parte de esta preparación.
+Hasta aquí solo se creó estructura vacía en las tres bases nuevas; no se importaron datos de producción ni se cambió DNS.
