@@ -1,8 +1,54 @@
 # Preparación de MySQL en Hostinger
 
-Estado al 21 de octubre de 2026: Hostinger contratado y acceso confirmado. Producción sigue utilizando PostgreSQL en Neon; no se ha cambiado DNS ni el destino productivo. El usuario no autoriza contratar una ampliación en Neon. No ejecutar el historial PostgreSQL contra MySQL.
+Estado al 21 de octubre de 2026: el acceso general `app.powerpospioneers.com` ya utiliza el frontend de Hostinger, comprobado por HTTPS y versión. La API y las bases productivas siguen en Railway/Neon; las direcciones de las dos empresas siguen usando Vercel. El usuario confirmó que están atendiendo y ordenó mantener las ventas activas: no pausar ni cambiar la API mientras continúe esa condición. No ejecutar el historial PostgreSQL contra MySQL.
 
 ## Comprobación del destino
+
+### Acceso general y preparación del corte
+
+Se cambió únicamente `app` de su CNAME Vercel a A `92.112.189.51`, DNS only. Tras la
+emisión del certificado, HTTPS devuelve la versión `build-1792602395880`; login, POS y los
+11 archivos JavaScript/CSS responden 200. El acceso general puede utilizar las mismas
+credenciales porque sigue llamando a la API productiva original. El dominio raíz, wildcard,
+API, correo y verificaciones DNS se conservaron. El CNAME anterior de app, para referencia,
+era `529eb2635efa9b41.vercel-dns-017.com`, DNS only / Auto.
+
+El sitio frontend ahora se identifica en hPanel como `app.powerpospioneers.com`; su vista
+previa es `skyblue-raccoon-209406.hostingersite.com`. Se agregaron como aliases Enchila y
+Trailer, pero NO se apuntaron sus DNS: sus certificados en Hostinger siguen instalándose.
+No cambiar las direcciones de las empresas durante la atención sin resolver la ventana de
+interrupción necesaria para emitir y comprobar sus certificados.
+
+Una comparación completa de solo lectura comprobó que los destinos siguen coincidiendo
+con la importación anterior, salvo la suspensión y las rutas de migración documentadas.
+Se guardó una copia cifrada de cada destino y sus huellas por tabla en
+`.tools/respaldos/hostinger-ensayo-2026-10-21T21-22-49-816Z` (3207/758/3854 filas).
+El procedimiento privado de sincronización rechaza fuentes no pausadas, copias finales
+antiguas, cambios independientes en destino y sellos de otra empresa. Pasó el ensayo real
+de reemplazo para Trailer (758 filas), Enchila (3869) y control (3207), con rollback y
+comparación de todas las huellas. El primer intento del control devolvió P2010; la
+transacción se revirtió y el ensayo aislado del control pasó posteriormente. El corte
+debe detenerse ante errores, sin habilitar un destino parcialmente sincronizado.
+No se ha actualizado aún el contenido de las bases MySQL ni se ha activado producción allí.
+
+Railway volvió a permitir leer las variables originales. Se guardaron y validaron sus
+19 valores en el archivo privado ignorado. Se recuperó la firma JWT original y se comprobó
+que la clave de cifrado de sedes coincide con la preservada. En Hostinger se restauraron
+JWT_SECRET, APP_URL y el permiso administrativo original, más los secretos existentes de
+verificación de WhatsApp (sin activar envíos). Se conserva la nueva contraseña SMTP de
+Hostinger que Google ya aceptó. La firma nueva generada durante la caída quedó sin uso;
+el corte podrá mantener las sesiones al conservar la firma original.
+
+Los 477 archivos originales pasaron comparación SHA-256 local. La verificación opcional
+de arranque `VERIFICAR_RESPALDO_UPLOADS=true` solo se permite con tareas automáticas
+desactivadas y compara el almacenamiento real con ese manifiesto. Falta confirmar el
+resultado en los registros de Hostinger. Antes del corte final habrá que volver a detectar
+y copiar imágenes agregadas después de ese respaldo, además de los datos nuevos.
+
+La API original mantiene conexiones SSE de los agentes. En el corte no basta cambiar DNS:
+hay que asegurarse de que se reconecten al servidor nuevo (retirar las rutas antiguas y
+reiniciar controladamente el proceso antiguo, o reiniciar los agentes después de propagar
+DNS). No borrar datos ni bases del origen. Ninguna de estas acciones se ha ejecutado.
 
 ### Actualización: configuración recuperada sin Railway
 

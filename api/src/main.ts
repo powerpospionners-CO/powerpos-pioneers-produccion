@@ -5,6 +5,8 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import * as fs from 'fs';
 import { directorioUploads } from './storage/uploads';
+import { verificarUploads } from './storage/verificar-uploads';
+import { archivosRespaldo } from './storage/hostinger-uploads-manifest';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
@@ -22,6 +24,10 @@ async function bootstrap() {
   fs.mkdirSync(path.join(uploadsPath, 'anuncios'), { recursive: true });
   fs.mkdirSync(path.join(uploadsPath, 'productos'), { recursive: true });
   fs.mkdirSync(path.join(uploadsPath, 'catalogo'), { recursive: true });
+  if (process.env.VERIFICAR_RESPALDO_UPLOADS === 'true') {
+    if (process.env.BACKGROUND_JOBS_ENABLED !== 'false') throw new Error('La verificación del respaldo requiere modo de ensayo');
+    console.log('Respaldo de imágenes:', await verificarUploads(uploadsPath, archivosRespaldo));
+  }
   console.log('Sirviendo archivos estáticos desde:', uploadsPath);
 
   app.useStaticAssets(uploadsPath, {
