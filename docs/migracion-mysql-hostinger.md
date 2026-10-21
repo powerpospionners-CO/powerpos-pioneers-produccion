@@ -65,6 +65,16 @@ Si Enchila vuelve a operar, el respaldo importado queda como ensayo: hay que inc
 sus operaciones nuevas con un corte verificado posteriormente. Nunca activar esta copia
 como si incluyera ventas posteriores al respaldo.
 
+Actualización de archivos: la subida de `uploads-hostinger.zip` terminó. Se extrajo sin
+sobrescritura en la carpeta privada `imagenes-migracion` y se movió su carpeta `uploads`
+a `public_html/uploads`; se confirmó su presencia en el administrador de archivos.
+El ZIP original permanece fuera de `public_html`. Tres imágenes de muestra responden HTTP
+200 con tipo JPEG a través del dominio temporal. Sus bytes difieren del respaldo y el
+servidor indica `hcdn`: puede intervenir la optimización de imágenes, pero todavía no se
+ha confirmado la igualdad de hashes en disco. Una comprobación directa TLS contra la IP
+del servidor MySQL falló EPROTO; no se desactivó la validación TLS ni se asumió que esa IP
+fuera el origen web. Falta configurar UPLOADS_PATH y verificar el almacenamiento completo.
+
 ### Preparación inicial (histórico)
 
 El usuario creó `u748056473_ppcontrol`, `u748056473_pptrailer` y `u748056473_ppenchila`, cada una con un usuario independiente. Las contraseñas no se registran en este documento.
