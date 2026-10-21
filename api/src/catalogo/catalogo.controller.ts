@@ -10,6 +10,7 @@ import { CatalogoService } from './catalogo.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { directorioUploads } from '../storage/uploads';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('catalogo')
@@ -61,7 +62,7 @@ export class CatalogoController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   @UseInterceptors(FilesInterceptor('imagenes', 200, {
     storage: diskStorage({
-      destination: './uploads/catalogo',
+      destination: directorioUploads('catalogo'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         cb(null, `catalogo-${uniqueSuffix}${extname(file.originalname)}`);
@@ -123,7 +124,7 @@ export class CatalogoController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   @UseInterceptors(FileInterceptor('imagen', {
     storage: diskStorage({
-      destination: './uploads/catalogo',
+      destination: directorioUploads('catalogo'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         cb(null, `catalogo-${uniqueSuffix}${extname(file.originalname)}`);

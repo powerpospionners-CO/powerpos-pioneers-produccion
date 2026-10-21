@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import * as fs from 'fs';
+import { directorioUploads } from './storage/uploads';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
@@ -14,7 +15,7 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  const uploadsPath = path.join(process.cwd(), 'uploads');
+  const uploadsPath = directorioUploads();
   // multer no crea el directorio de destino por sí solo: en un servidor nuevo
   // (sin subidas previas) la primera carga de logo fallaría sin esto.
   fs.mkdirSync(path.join(uploadsPath, 'logos'), { recursive: true });

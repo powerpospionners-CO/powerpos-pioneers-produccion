@@ -8,6 +8,7 @@ import { EmpresaService } from './empresa.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { directorioUploads } from '../storage/uploads';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('empresa')
@@ -29,7 +30,7 @@ export class EmpresaController {
   @Roles('ADMIN_EMPRESA')
   @UseInterceptors(FileInterceptor('logo', {
     storage: diskStorage({
-      destination: './uploads/logos',
+      destination: directorioUploads('logos'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         cb(null, `logo-${uniqueSuffix}${extname(file.originalname)}`);
@@ -73,7 +74,7 @@ export class EmpresaController {
   @Roles('ADMIN_EMPRESA')
   @UseInterceptors(FileInterceptor('imagen', {
     storage: diskStorage({
-      destination: './uploads/anuncios',
+      destination: directorioUploads('anuncios'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         cb(null, `anuncio-${uniqueSuffix}${extname(file.originalname)}`);

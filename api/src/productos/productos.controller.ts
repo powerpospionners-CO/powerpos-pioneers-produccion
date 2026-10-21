@@ -7,6 +7,7 @@ import { ProductosService } from './productos.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { directorioUploads } from '../storage/uploads';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('productos')
@@ -47,7 +48,7 @@ export class ProductosController {
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   @UseInterceptors(FileInterceptor('imagen', {
     storage: diskStorage({
-      destination: './uploads/productos',
+      destination: directorioUploads('productos'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         cb(null, `producto-${uniqueSuffix}${extname(file.originalname)}`);

@@ -38,6 +38,33 @@ archivo local privado `.tools/railway-produccion.private.env`.
 Las pruebas de regresión actuales de prisma, caja, pedidos, notificaciones y tareas pasan:
 21 suites, 140 pruebas. La compilación MySQL pasa. Ni el DNS ni producción han cambiado.
 
+### Apertura de Enchila y archivos persistentes
+
+Ante la apertura próxima se comprobó de nuevo producción: raíz de API HTTP 200, POS de
+Enchila HTTP 200, control PostgreSQL accesible con aislamiento activo y escrituras NO
+suspendidas. Las dos sedes productivas respondieron con sellos correctos (Enchila 509
+productos, Trailer 51). `/health` devuelve 404 en la API vigente: esa ruta no está
+implementada y no equivale a caída del servicio. No se realizó corte ni pausa del origen.
+
+El usuario tampoco puede entrar al proyecto de Railway: aparece 404. Sigue pendiente
+recuperar su configuración privada. No se debe sustituir por claves inventadas ni omitir
+el correo para declarar terminada la migración.
+
+Las 477 imágenes originales ocupan aproximadamente 1 GB. Se inició la subida del archivo
+`uploads-hostinger.zip` en la raíz NO pública del administrador de archivos del sitio.
+La carga aún no ha finalizado; conservar su pestaña. Después hay que extraer únicamente
+`uploads/` en `public_html/`, verificar las huellas y configurar `UPLOADS_PATH` como
+`/home/u748056473/domains/mediumslateblue-pheasant-593602.hostingersite.com/public_html/uploads`.
+La aplicación Node corre en `hbuilds/current/nodejs`, una ubicación de despliegue mutable,
+según su `.htaccess`; las imágenes deben permanecer fuera de ella. El servidor estático y
+los cuatro destinos de subida utilizan ahora la misma raíz configurable, con el valor
+anterior como predeterminado. Pasan 7 suites / 30 pruebas de almacenamiento, empresa,
+productos y catálogo, además de la compilación MySQL.
+
+Si Enchila vuelve a operar, el respaldo importado queda como ensayo: hay que incorporar
+sus operaciones nuevas con un corte verificado posteriormente. Nunca activar esta copia
+como si incluyera ventas posteriores al respaldo.
+
 ### Preparación inicial (histórico)
 
 El usuario creó `u748056473_ppcontrol`, `u748056473_pptrailer` y `u748056473_ppenchila`, cada una con un usuario independiente. Las contraseñas no se registran en este documento.
