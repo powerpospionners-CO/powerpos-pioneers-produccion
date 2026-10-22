@@ -391,6 +391,7 @@ export class ImpresionService {
 
   private async formatearComanda(pedido: any, empresaId: number, datosEmpresa?: any) {
     const empresa = datosEmpresa === undefined ? await this.obtenerEmpresa(empresaId) : datosEmpresa;
+    if (empresaId === 1) return this.formatearComandaGrandeTrailer(pedido, empresa);
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
     const nit = empresa?.nit ? `NIT: ${empresa.nit}` : 'NIT: N/A';
     const direccion = empresa?.direccion ? `DIR: ${empresa.direccion}` : 'DIR: N/A';
@@ -453,6 +454,52 @@ export class ImpresionService {
     lineas.push('--------------------------------\n');
     lineas.push('\n');
 
+    return this.aBufferAscii(lineas);
+  }
+
+  private formatearComandaGrandeTrailer(pedido: any, empresa: any) {
+    // Papel de 80 mm: fuente A de 48 columnas, doble ancho y doble alto = 24.
+    // Se envuelve el texto completo para no perder cambios ni nombres largos.
+    const ancho = 24;
+    const lineas: Array<string | Buffer> = [
+      Buffer.from([0x1b, 0x4d, 0x00, 0x1d, 0x21, 0x11]), NEGRITA_ON,
+    ];
+    const texto = (valor: unknown) => {
+      const parrafos = String(valor ?? '').replace(/\r/g, '').split('\n');
+      for (let restante of parrafos) {
+        restante = restante.replace(/\s+/g, ' ').trim();
+        while (restante.length > ancho) {
+          const espacio = restante.lastIndexOf(' ', ancho);
+          const corte = espacio > 0 ? espacio : ancho;
+          lineas.push(restante.slice(0, corte) + '\n');
+          restante = restante.slice(corte).trimStart();
+        }
+        lineas.push(restante + '\n');
+      }
+    };
+    const separador = () => lineas.push('-'.repeat(ancho) + '\n');
+    texto((empresa?.nombre || 'MI EMPRESA').toUpperCase());
+    texto('COMANDA');
+    if (pedido.ladoNombre) texto(pedido.ladoNombre);
+    texto(`PEDIDO ${pedido.numero}`);
+    separador();
+    texto(empresa?.nit ? `NIT: ${empresa.nit}` : 'NIT: N/A');
+    texto(empresa?.direccion ? `DIR: ${empresa.direccion}` : 'DIR: N/A');
+    texto(empresa?.telefono ? `TEL: ${empresa.telefono}` : 'TEL: N/A');
+    texto(`CLIENTE: ${pedido?.cliente?.nombre || 'GENERAL'}`);
+    texto(pedido?.cliente?.telefono ? `TEL: ${pedido.cliente.telefono}` : 'TEL: NO REGISTRADO');
+    texto(this.fechaBogota(new Date()));
+    separador();
+    for (const detalle of pedido.detalles || []) {
+      texto(`${detalle.cantidad}x ${detalle.producto?.nombre || 'Producto'}`);
+      if (detalle.exclusiones?.length) texto(`SIN: ${detalle.exclusiones.join(', ')}`);
+      if (detalle.adicionales?.length) texto(`ADIC: ${detalle.adicionales.map((a: any) => a.cantidad > 1 ? `${a.nombre} x${a.cantidad}` : a.nombre).join(', ')}`);
+      if (detalle.observacion) texto(`NOTA: ${detalle.observacion}`);
+      lineas.push('\n');
+    }
+    if (pedido.observacion) { separador(); texto(`NOTA: ${pedido.observacion}`); }
+    separador();
+    lineas.push(NEGRITA_OFF, Buffer.from([0x1d, 0x21, 0x00]), '\n');
     return this.aBufferAscii(lineas);
   }
 

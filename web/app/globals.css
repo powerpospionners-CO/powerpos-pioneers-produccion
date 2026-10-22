@@ -151,3 +151,34 @@ textarea {
 .fade-in-up {
   animation: fadeInUp 0.6s ease both;
 }
+
+/* Solo la caja del Trailer: misma operación, lectura y blancos táctiles mayores. */
+.pos-trailer-grande {
+  font-size: 20px;
+  line-height: 1.5;
+}
+.pos-trailer-grande :is(.text-xs, .text-sm, .text-base) {
+  font-size: 18px;
+  line-height: 1.5;
+}
+.pos-trailer-grande .text-lg { font-size: 22px; }
+.pos-trailer-grande .text-xl { font-size: 26px; }
+.pos-trailer-grande .text-2xl { font-size: 30px; }
+.pos-trailer-grande .text-3xl { font-size: 36px; }
+.pos-trailer-grande :is(button, input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 52px;
+  font-size: max(20px, 1em);
+  line-height: 1.4;
+}
+.pos-trailer-grande button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.pos-trailer-grande :is(input[type="checkbox"], input[type="radio"]) {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.pos-trailer-grande textarea { min-height: 96px; }
+.pos-trailer-grande :is(button, label) > svg { flex-shrink: 0; }
+.pos-trailer-grande .rounded-full.w-5.h-5 { width: 30px; height: 30px; }

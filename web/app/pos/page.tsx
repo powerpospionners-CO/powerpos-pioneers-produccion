@@ -988,7 +988,7 @@ function RestaurantePOS() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gray-950 flex flex-col">
+      <div className={`min-h-screen bg-gray-950 flex flex-col${esTrailer ? ' pos-trailer-grande' : ''}`}>
         <Navbar />
 
         {usuario?.rol === 'CAJERO' && (
@@ -1128,7 +1128,7 @@ function RestaurantePOS() {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 content-start">
+            <div className={`flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start ${esTrailer ? 'xl:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'}`}>
               {productosFiltrados.length === 0 && (
                 <div className="col-span-full text-center text-gray-600 text-sm py-16">
                   {productos.length === 0 ? 'Aún no hay productos registrados.' : 'No hay productos en esta categoría.'}
@@ -1148,7 +1148,7 @@ function RestaurantePOS() {
             </div>
           </div>
 
-          <div className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col">
+          <div className={`${esTrailer ? 'w-96 max-w-[45vw] shrink-0' : 'w-80'} bg-gray-900 border-l border-gray-800 flex flex-col`}>
             <div className="p-4 border-b border-gray-800 flex items-center gap-2">
               <ShoppingCart size={18} className="text-orange-500" />
               <span className="text-white font-semibold">Pedido actual</span>

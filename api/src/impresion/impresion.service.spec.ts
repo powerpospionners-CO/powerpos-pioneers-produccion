@@ -3,6 +3,22 @@ import { ImpresionService } from './impresion.service';
 
 describe('ImpresionService', () => {
   const originalEnv = { ...process.env };
+  it('amplía toda la comanda solo en Trailer y conserva las notas completas', async () => {
+    const service = new ImpresionService();
+    const pedido = { numero: 'PED-1-20261022-0028', ladoNombre: 'PLANCHA', detalles: [{ cantidad: 2, producto: { nombre: 'HAMBURGUESA DOBLE CARNE ESPECIAL' }, exclusiones: ['CEBOLLA'], adicionales: [{ nombre: 'TOCINETA', cantidad: 2 }], observacion: 'UNA SIN SAL Y LA OTRA CON SAL' }] };
+    const empresa = { nombre: 'TRAILER DEL SABOR' };
+    const grande: Buffer = await (service as any).formatearComanda(pedido, 1, empresa);
+    expect(grande.includes(Buffer.from([0x1d, 0x21, 0x11]))).toBe(true);
+    expect(grande.includes(Buffer.from([0x1d, 0x21, 0x00]))).toBe(true);
+    const texto = grande.toString('ascii').replace(/[\x00-\x1f]/g, ' ').replace(/\s+/g, ' ');
+    expect(texto).toContain('HAMBURGUESA DOBLE CARNE ESPECIAL');
+    expect(texto).toContain('SIN: CEBOLLA');
+    expect(texto).toContain('ADIC: TOCINETA x2');
+    expect(texto).toContain('NOTA: UNA SIN SAL Y LA OTRA CON SAL');
+    jest.spyOn(service as any, 'generarLogoEscPos').mockResolvedValue(Buffer.alloc(0));
+    const normal: Buffer = await (service as any).formatearComanda(pedido, 7, empresa);
+    expect(normal.includes(Buffer.from([0x1d, 0x21, 0x11]))).toBe(false);
+  });
   it('aprovecha 48 columnas en Enchila y conserva 32 en las otras tiendas', async () => {
     const service = new ImpresionService({ empresa: { findUnique: jest.fn().mockResolvedValue({ nombre: 'Enchila Market Pereira', tipoNegocio: 'TIENDA', direccion: 'Carrera 16 # 20A - 11, Local 5 Portal de la Pradera, Dosquebradas, Risaralda' }) } } as any);
     const pedido = { numero: 'PRUEBA', total: 58000, detalles: [{ cantidad: 1, producto: { nombre: 'CHAMOY TAJIN 475 ml' }, subtotal: 28000 }, { cantidad: 2, producto: { nombre: 'CHAMOY CHILERITO 355 ml' }, subtotal: 30000 }] };
@@ -113,7 +129,7 @@ describe('ImpresionService', () => {
     const service = new ImpresionService();
     const datos = { numero: '42', ladoNombre: 'PERROS Y FRITURAS', detalles: [{ cantidad: 2, producto: { nombre: 'Perro' }, exclusiones: ['cebolla'], adicionales: [{ nombre: 'Queso', cantidad: 2 }], observacion: '[Para llevar] Sin sal' }] };
     const contenido = (await (service as any).formatearComanda(datos, 1)).toString('ascii');
-    for (const texto of ['PERROS Y FRITURAS', '2x Perro', 'SIN: cebolla', 'Queso x2', '[Para llevar] Sin sal']) expect(contenido).toContain(texto);
+    for (const texto of ['PERROS Y FRITURAS', '2x Perro', 'SIN: cebolla', 'Queso x2', '[Para llevar] Sin sal']) expect(contenido.replace(/\s+/g, ' ')).toContain(texto);
     const otraEmpresa = (await (service as any).formatearComanda(datos, 2)).toString('ascii');
     expect(otraEmpresa).not.toContain('PERROS Y FRITURAS');
   });
