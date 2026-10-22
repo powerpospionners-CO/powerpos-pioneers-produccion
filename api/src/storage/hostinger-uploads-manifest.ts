@@ -2384,5 +2384,15 @@ export const archivosRespaldo = [
     "ruta": "/uploads/catalogo/catalogo-1792434322274-231106255.png",
     "bytes": 2740575,
     "sha256": "9834850de2cef9d7ac216a2b6801885c259d447c12a4848ecb4ce675ab40af28"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792599981371-278722799.png",
+    "bytes": 2733818,
+    "sha256": "12b6d6ef3348000003f4c9694ea71b5a417416ee19a1aa61c962178839eaf2da"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792600638678-484059736.png",
+    "bytes": 2577469,
+    "sha256": "41183be2ac3c146f29cca9e300a188c21134da5a64aefe94be31df1f9aa1a2f9"
   }
 ] as const;
