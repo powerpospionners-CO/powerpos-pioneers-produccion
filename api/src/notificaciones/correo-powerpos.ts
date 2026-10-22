@@ -158,6 +158,27 @@ export function correoPrueba(nombre: string): CorreoPowerpos {
   });
 }
 
+export function correoSuscripcion(datos: {
+  empresa: string; etapa: 'VENCIMIENTO' | 'FIN_PLAZO'; dias: number;
+  vence: Date; finPlazo: Date;
+}): CorreoPowerpos {
+  const fecha = (valor: Date) => valor.toLocaleString('es-CO', {
+    timeZone: 'America/Bogota', dateStyle: 'long', timeStyle: 'short',
+  });
+  const plazo = datos.etapa === 'FIN_PLAZO';
+  return plantilla({
+    estilo: plazo ? 'critico' : 'atencion',
+    titulo: plazo ? 'Tu plazo de pago está por terminar' : 'Tu suscripción está por vencer',
+    introduccion: `Hola, equipo de ${datos.empresa}. Te recordamos el pago de tu suscripción de PowerPOS.`,
+    mensaje: plazo
+      ? `Tu suscripción ya venció. Faltan ${datos.dias} día(s) para que termine el plazo adicional de cinco días.\nRealiza la renovación para evitar la suspensión del acceso al sistema.`
+      : `Tu suscripción vence en ${datos.dias} día(s).\nRenueva a tiempo para seguir trabajando con tranquilidad. Después del vencimiento cuentas con cinco días adicionales de plazo.`,
+    contexto: [['Empresa', datos.empresa], ['Vencimiento', fecha(datos.vence)], ['Fin del plazo', fecha(datos.finPlazo)], ['Zona horaria', 'Colombia']],
+    accion: true,
+    pie: 'Este recordatorio corresponde a la suscripción de tu empresa en PowerPOS. Si ya renovaste, consulta el estado actualizado en el sistema o contacta a soporte.',
+  });
+}
+
 export function correoCumpleanos(
   nombre: string,
   empresa: string,

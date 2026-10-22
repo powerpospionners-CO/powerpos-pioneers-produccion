@@ -14,6 +14,13 @@ describe('PlanAccessInterceptor optional features', () => {
   const interceptor = new PlanAccessInterceptor();
   const handler = { handle: () => of('ok') };
 
+  it('bloquea sesiones ya abiertas después del plazo y permite de nuevo tras renovar', async () => {
+    const usuario = { empresaId: 12, rol: 'CAJERO', empresaPlan: 'PREMIUM', pagoExonerado: false, suscripcionVenceEn: new Date(Date.now() - 6 * 86400000) };
+    await expect(firstValueFrom(interceptor.intercept(contextFor('/pedidos', usuario), handler))).rejects.toBeInstanceOf(ForbiddenException);
+    usuario.suscripcionVenceEn = new Date(Date.now() + 86400000);
+    await expect(firstValueFrom(interceptor.intercept(contextFor('/pedidos', usuario), handler))).resolves.toBe('ok');
+  });
+
   it('allows inventory preparations even when the kitchen screen is disabled', async () => {
     await expect(firstValueFrom(interceptor.intercept(
       contextFor('/preparaciones', {

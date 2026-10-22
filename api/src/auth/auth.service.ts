@@ -4,11 +4,12 @@ import {
   ConflictException,
   ServiceUnavailableException,
   Optional,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { sumarMeses } from '../suscripciones/fechas';
+import { sumarMeses, suscripcionSuspendida } from '../suscripciones/fechas';
 import { SedesProvisionService } from '../prisma/sedes-provision.service';
 
 @Injectable()
@@ -63,6 +64,13 @@ export class AuthService {
     const passwordValido = await bcrypt.compare(password, usuario.password);
     if (!passwordValido) {
       throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    if (usuario.rol !== 'SUPERADMIN' && suscripcionSuspendida(usuario.empresa)) {
+      throw new ForbiddenException({
+        error: 'SUBSCRIPTION_EXPIRED',
+        message: 'La suscripción venció y finalizaron los cinco días de plazo. Renueva el pago o contacta a PowerPOS para restablecer el acceso.',
+      });
     }
 
     const payload = {

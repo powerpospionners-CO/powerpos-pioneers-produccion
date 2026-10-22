@@ -6,6 +6,7 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
+import { suscripcionSuspendida } from './fechas';
 
 const MODULOS_POR_PLAN: Record<string, string[]> = {
   BASICO: ['pos', 'productos'],
@@ -65,15 +66,7 @@ export class PlanAccessInterceptor implements NestInterceptor {
       }));
     }
 
-    const vencimiento = usuario.suscripcionVenceEn
-      ? new Date(usuario.suscripcionVenceEn).getTime()
-      : null;
-    const diasGracia = 5 * 24 * 60 * 60 * 1000;
-    if (
-      !usuario.pagoExonerado &&
-      vencimiento !== null &&
-      Date.now() > vencimiento + diasGracia
-    ) {
+    if (suscripcionSuspendida(usuario)) {
       return throwError(() => new ForbiddenException({
         error: 'SUBSCRIPTION_EXPIRED',
         message: 'La suscripción venció. Paga o contacta al administrador para restablecer el acceso.',

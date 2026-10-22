@@ -49,6 +49,7 @@ api.interceptors.response.use(
       error.response?.status === 403 &&
       error.response?.data?.error === 'SUBSCRIPTION_EXPIRED' &&
       typeof window !== 'undefined' &&
+      useAuthStore.getState().token &&
       window.location.pathname !== '/suscripcion'
     ) {
       window.location.href = '/suscripcion';

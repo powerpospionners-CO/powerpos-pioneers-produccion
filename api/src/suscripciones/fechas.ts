@@ -7,3 +7,12 @@ export function sumarMeses(fecha: Date, meses: number) {
   resultado.setDate(Math.min(dia, ultimoDia));
   return resultado;
 }
+
+export function suscripcionSuspendida(empresa: {
+  pagoExonerado?: boolean | null;
+  suscripcionVenceEn?: Date | string | null;
+} | null | undefined, ahora = Date.now()) {
+  if (empresa?.pagoExonerado || !empresa?.suscripcionVenceEn) return false;
+  const vence = new Date(empresa.suscripcionVenceEn).getTime();
+  return Number.isFinite(vence) && ahora > vence + 5 * 86400000;
+}

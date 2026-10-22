@@ -71,6 +71,7 @@ export default function LoginPage() {
       router.push(destino);
     } catch (e: any) {
       if (e?.response?.data?.error==='SEDE_REQUERIDA') { setSedes(e.response.data.sedes); setError('Selecciona la sede con la que vas a trabajar.'); }
+      else if (e?.response?.data?.error==='SUBSCRIPTION_EXPIRED') setError('La suscripción venció y terminaron los cinco días de plazo. Renueva el pago o contacta a PowerPOS para recuperar el acceso.');
       else setError(e?.response?.status===503 ? 'No se pudo consultar la sede. Intenta nuevamente.' : 'Credenciales inválidas. Verifica tu email y contraseña.');
     } finally {
       setLoading(false);

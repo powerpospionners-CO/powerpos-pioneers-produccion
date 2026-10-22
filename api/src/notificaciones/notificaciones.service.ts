@@ -6,6 +6,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { createHash } from 'node:crypto';
+import { avisoSuscripcion } from './aviso-suscripcion';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from './whatsapp.service';
@@ -14,6 +16,7 @@ import {
   correoAlerta,
   correoPrueba,
   correoCumpleanos,
+  correoSuscripcion,
   logoCorreo,
 } from './correo-powerpos';
 import {
@@ -29,6 +32,7 @@ export class NotificacionesService {
   private readonly logger = new Logger(NotificacionesService.name);
   private transporter: nodemailer.Transporter | null;
   private revisandoStock = false;
+  private revisandoSuscripciones = false;
 
   constructor(
     private prisma: PrismaService,
@@ -378,6 +382,59 @@ export class NotificacionesService {
             detalle: { stock: i.stock, minimo: i.minimo },
           })),
         });
+    }
+  }
+
+  @Cron('0 0 8-18 * * *', { timeZone: 'America/Bogota' })
+  async revisarSuscripciones() {
+    if (!this.transporter || this.revisandoSuscripciones) return;
+    this.revisandoSuscripciones = true;
+    try {
+      await this.prisma.enCadaSede(() => this.revisarSuscripcionesSede());
+    } catch {
+      this.logger.warn('No se completó la revisión de suscripciones');
+    } finally {
+      this.revisandoSuscripciones = false;
+    }
+  }
+
+  async revisarSuscripcionesSede(ahora = new Date()) {
+    const empresas = await this.prisma.empresa.findMany({
+      where: { activo: true }, select: { id: true },
+    });
+    // La suscripción central es la fuente vigente aunque una sede lleve tiempo sin entrar.
+    const control = this.prisma.control || this.prisma;
+    for (const { id } of empresas) {
+      const empresa = await control.empresa.findUnique({
+        where: { id }, select: { id: true, nombre: true, activo: true, pagoExonerado: true, suscripcionVenceEn: true },
+      });
+      if (!empresa?.activo || empresa.pagoExonerado) continue;
+      const aviso = avisoSuscripcion(empresa.suscripcionVenceEn, ahora);
+      if (!aviso) continue;
+      const config = await this.configuracion(id);
+      const correos = [...new Set(config.administradores.map(u => u.email).filter(Boolean))];
+      for (const email of correos) {
+        // Registro central por empresa, destinatario, vencimiento y etapa: tampoco
+        // repite el aviso si el mismo administrador aparece en varias sedes.
+        const clave = createHash('sha256').update(`${email}:${aviso.vence.toISOString()}:${aviso.etapa}`).digest('hex');
+        const enviado = await control.auditoria.findFirst({
+          where: { empresaId: id, entidad: 'AvisoSuscripcion', accion: clave },
+          select: { id: true },
+        });
+        if (enviado) continue;
+        try {
+          await this.enviarEmail(
+            `PowerPOS · ${aviso.etapa === 'FIN_PLAZO' ? 'Fin del plazo de pago' : 'Renovación de suscripción'} · ${empresa.nombre}`,
+            correoSuscripcion({ ...aviso, empresa: empresa.nombre }), [email],
+          );
+          await control.auditoria.create({ data: {
+            empresaId: id, entidad: 'AvisoSuscripcion', accion: clave,
+            detalle: { etapa: aviso.etapa, vencimiento: aviso.vence.toISOString() },
+          } });
+        } catch {
+          this.logger.warn('No se pudo entregar un recordatorio de suscripción; se reintentará en la siguiente revisión');
+        }
+      }
     }
   }
 
