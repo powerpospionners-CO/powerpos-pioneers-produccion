@@ -3,6 +3,7 @@ import { CajaService } from './caja.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { ejecutarImpresionEscritorio } from '../impresion/transporte-escritorio';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
@@ -17,7 +18,7 @@ export class CajaController {
 
   @Post(':id/cerrar')
   cerrar(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.cajaService.cerrarCaja(+id, body, req.user.id, false, req.user.empresaId);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.cajaService.cerrarCaja(+id, body, req.user.id, false, req.user.empresaId));
   }
 
   @Get('abierta')
@@ -40,6 +41,11 @@ export class CajaController {
     return this.cajaService.registrarAperturaIrregular(body.cajaId, req.user.id, body.descripcion, req.user.empresaId);
   }
 
+  @Post('apertura-con-llave')
+  aperturaConLlave(@Body() body: any, @Request() req: any) {
+    return this.cajaService.registrarAperturaConLlave(body?.cajaId, body?.motivo, req.user.id, req.user.empresaId, req.user.sucursalId, req.user.rol);
+  }
+
   @Get('historial')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   historial(@Request() req: any, @Query('sucursalId') sucursalId?: string) {
@@ -55,14 +61,14 @@ export class CajaController {
   @Post(':id/reimprimir-cierre')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   reimprimirCierre(@Param('id') id: string, @Request() req: any) {
-    return this.cajaService.reimprimirCierre(+id, req.user.empresaId);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.cajaService.reimprimirCierre(+id, req.user.empresaId));
   }
 
   // Sin @Roles propio: cualquiera de la clase (incluye CAJERO) puede
   // reimprimir su propio último cierre, sin necesitar al admin.
   @Post('reimprimir-mi-cierre')
   reimprimirMiCierre(@Request() req: any) {
-    return this.cajaService.reimprimirMiUltimoCierre(req.user.id, req.user.empresaId);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.cajaService.reimprimirMiUltimoCierre(req.user.id, req.user.empresaId));
   }
 
   @Get('recaudo/configuracion')

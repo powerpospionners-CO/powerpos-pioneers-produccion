@@ -1,52 +1,48 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { irALoginGenerico } from '@/lib/navegacion';
-
-const MINUTOS_INACTIVIDAD = 20;
-const EVENTOS_ACTIVIDAD = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'wheel', 'scroll'] as const;
-
-// Si nadie toca el sistema (mouse, teclado, pantalla táctil) durante
-// MINUTOS_INACTIVIDAD, cierra la sesión sola — pensado para el kiosco/POS
-// que puede quedar desatendido en el mostrador.
+import { CLAVE_ACTIVIDAD, registrarActividad, sesionInactiva, ultimaActividad } from './sesion-inactiva';
+const EVENTOS_ACTIVIDAD = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
 export function useInactividadLogout() {
   const router = useRouter();
-  const logout = useAuthStore((s) => s.logout);
-  // Referencias para que el efecto de abajo se arme una sola vez al montar
-  // y nunca se reinicie por un re-render de este hook (solo por actividad
-  // real de la persona, que es lo único que debe reiniciar el conteo).
-  const routerRef = useRef(router);
-  const logoutRef = useRef(logout);
-  routerRef.current = router;
-  logoutRef.current = logout;
-
+  const { token, inicioSesion, hydrated, logout } = useAuthStore();
   useEffect(() => {
-    let temporizador: ReturnType<typeof setTimeout>;
-    // Sin internet, nunca cerrar por inactividad: un corte de luz/wifi deja
-    // al cajero quieto frente a la pantalla (esperando, averiguando qué
-    // pasó) sin que eso signifique que abandonó el mostrador, y una vez
-    // cerrada la sesión no hay cómo volver a entrar sin conexión. Se
-    // reintenta el chequeo más adelante en vez de cerrar la sesión a ciegas.
-    const cerrarPorInactividad = () => {
-      if (!navigator.onLine) {
-        reiniciarTemporizador();
-        return;
+    if (!hydrated || !token || !inicioSesion) return;
+    let cerrado = false;
+    const comprobar = () => {
+      if (cerrado) return false;
+      if (localStorage.getItem('token') !== token || sesionInactiva(localStorage, inicioSesion)) {
+        cerrado = true;
+        logout();
+        irALoginGenerico(router);
+        return false;
       }
-      logoutRef.current();
-      irALoginGenerico(routerRef.current);
+      return true;
     };
-    const reiniciarTemporizador = () => {
-      clearTimeout(temporizador);
-      temporizador = setTimeout(cerrarPorInactividad, MINUTOS_INACTIVIDAD * 60 * 1000);
+    const actividad = (evento: Event) => {
+      // Un toque al volver de suspensión nunca revive una sesión vencida.
+      if (!evento.isTrusted || document.visibilityState !== 'visible' || !comprobar()) return;
+      if (Date.now() - ultimaActividad(localStorage, inicioSesion) > 1000) registrarActividad(localStorage, inicioSesion);
     };
-
-    EVENTOS_ACTIVIDAD.forEach((evento) => window.addEventListener(evento, reiniciarTemporizador, { passive: true }));
-    reiniciarTemporizador();
-
+    const cambioAlmacen = (evento: StorageEvent) => {
+      if (evento.key === CLAVE_ACTIVIDAD || evento.key === 'token' || evento.key === 'auth-storage') comprobar();
+    };
+    comprobar();
+    const revision = window.setInterval(comprobar, 1000);
+    EVENTOS_ACTIVIDAD.forEach(evento => window.addEventListener(evento, actividad, { passive: true, capture: true }));
+    window.addEventListener('focus', comprobar);
+    window.addEventListener('pageshow', comprobar);
+    document.addEventListener('visibilitychange', comprobar);
+    window.addEventListener('storage', cambioAlmacen);
     return () => {
-      EVENTOS_ACTIVIDAD.forEach((evento) => window.removeEventListener(evento, reiniciarTemporizador));
-      clearTimeout(temporizador);
+      clearInterval(revision);
+      EVENTOS_ACTIVIDAD.forEach(evento => window.removeEventListener(evento, actividad, { capture: true }));
+      window.removeEventListener('focus', comprobar);
+      window.removeEventListener('pageshow', comprobar);
+      document.removeEventListener('visibilitychange', comprobar);
+      window.removeEventListener('storage', cambioAlmacen);
     };
-  }, []);
+  }, [hydrated, token, inicioSesion, logout, router]);
 }

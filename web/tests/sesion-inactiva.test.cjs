@@ -1,0 +1,6 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {sesionInactiva,registrarActividad,INACTIVIDAD_MS,CLAVE_ACTIVIDAD}=require('../lib/sesion-inactiva.ts');
+function almacen(){const datos=new Map();return{getItem:k=>datos.get(k)??null,setItem:(k,v)=>datos.set(k,v),removeItem:k=>datos.delete(k)};}
+test('recargar o volver de suspensión conserva el vencimiento',()=>{const a=almacen(),ahora=Date.now(),inicio=new Date(ahora).toISOString();registrarActividad(a,inicio,ahora);assert.equal(sesionInactiva(a,inicio,ahora+INACTIVIDAD_MS-1),false);assert.equal(sesionInactiva(a,inicio,ahora+INACTIVIDAD_MS),true);});
+test('otra pestaña comparte actividad solo de la misma sesión',()=>{const a=almacen(),ahora=Date.now(),inicio=new Date(ahora-INACTIVIDAD_MS).toISOString();registrarActividad(a,inicio,ahora);assert.equal(sesionInactiva(a,inicio,ahora),false);assert.equal(sesionInactiva(a,new Date(ahora-INACTIVIDAD_MS-1).toISOString(),ahora),true);});
+test('marcas corruptas o futuras no renuevan una sesión vieja',()=>{const a=almacen(),ahora=Date.now(),inicio=new Date(ahora-INACTIVIDAD_MS).toISOString();a.setItem(CLAVE_ACTIVIDAD,'malformado');assert.equal(sesionInactiva(a,inicio,ahora),true);registrarActividad(a,inicio,ahora+120000);assert.equal(sesionInactiva(a,inicio,ahora),true);});

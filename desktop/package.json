@@ -1,0 +1,49 @@
+{
+  "name": "powerpos-desktop",
+  "version": "1.0.0",
+  "description": "PowerPOS para Windows con impresión local integrada",
+  "author": "PowerPOS Pioneers",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "build": "electron-builder --win nsis --x64",
+    "smoke": "electron . --smoke-test"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.powerpospioneers.desktop",
+    "productName": "PowerPOS",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "seguridad.cjs",
+      "impresora.cjs",
+      "setup.html",
+      "setup.js",
+      "logo.png"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "logo.png",
+      "artifactName": "PowerPOS-Instalar-${version}.exe",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false
+    }
+  }
+}

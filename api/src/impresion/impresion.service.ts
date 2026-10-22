@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
 import { reciboTrailer } from './recibo-trailer';
 import { codificarLogoEscPos } from './logo-escpos';
+import { prepararEnEscritorio } from './transporte-escritorio';
 
 const sharp: typeof import('sharp').default = require('sharp');
 
@@ -65,6 +66,7 @@ export class ImpresionService {
     port?: number,
     timeoutAgenteMs?: number,
   ): Promise<string | null> {
+    if (prepararEnEscritorio(tipo, datos)) return null;
     if (this.modoAgente()) {
       if (!this.eventos) return 'Agente de impresión no disponible en este servidor';
       const resultado = await this.eventos.enviarYEsperar(empresaId, tipo, datos, timeoutAgenteMs);

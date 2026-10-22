@@ -54,6 +54,20 @@ function escenario() {
 }
 
 describe('Conciliación de caja', () => {
+  it('registra la apertura con llave con usuario autenticado y alerta explícitamente manual', async () => {
+    const {service,db,notificaciones}=escenario();
+    await service.registrarAperturaConLlave(1,'Retirar comprobante atascado',3,4,2,'CAJERO');
+    expect(db.caja.findFirst).toHaveBeenCalledWith(expect.objectContaining({where:{id:1,sucursalId:2,estado:'ABIERTA',sucursal:{empresaId:4}}}));
+    expect(db.eventoCaja.create).toHaveBeenCalledWith({data:expect.objectContaining({usuarioId:3,esAlerta:true,descripcion:expect.stringContaining('(reporte manual)')})});
+    expect(notificaciones.enviarAlerta).toHaveBeenCalledWith(expect.objectContaining({empresaId:4,usuarioId:3,mensaje:expect.stringContaining('no proviene de un sensor')}));
+  });
+  it('rechaza motivos vacíos y cajas ajenas sin registrar alertas', async () => {
+    const {service,db,notificaciones}=escenario();
+    await expect(service.registrarAperturaConLlave(1,' ',3,4,2,'CAJERO')).rejects.toThrow('motivo');
+    db.caja.findFirst.mockResolvedValue(null);
+    await expect(service.registrarAperturaConLlave(1,'Retiro comprobante',3,4,2,'CAJERO')).rejects.toThrow('caja abierta');
+    expect(db.eventoCaja.create).not.toHaveBeenCalled();expect(notificaciones.enviarAlerta).not.toHaveBeenCalled();
+  });
   it('incluye abonos y reembolsos en el turno sin sumar ventas a crédito como efectivo', async () => {
     const { service, db, caja } = escenario();
     caja.pedidos = [{ estado: 'ENTREGADO', metodoPago: 'CREDITO', total: 500 }];

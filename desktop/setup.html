@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Configurar PowerPOS</title>
+    <style>
+      body {
+        margin: 0;
+        background: #070d19;
+        color: #edf2fc;
+        font: 16px system-ui;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+      main {
+        max-width: 560px;
+        width: 85%;
+        padding: 36px;
+        background: #111c2f;
+        border: 1px solid #26344d;
+        border-radius: 24px;
+      }
+      img {
+        height: 68px;
+        object-fit: contain;
+        max-width: 240px;
+      }
+      h1 {
+        font-size: 28px;
+      }
+      p {
+        color: #acbbd1;
+        line-height: 1.6;
+      }
+      label {
+        display: block;
+        margin-top: 22px;
+        font-weight: 600;
+      }
+      select,
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 9px;
+        padding: 14px;
+        border-radius: 10px;
+        border: 1px solid #3b4c68;
+        background: #1a2940;
+        color: white;
+        font: inherit;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 14px 20px;
+        font: inherit;
+        cursor: pointer;
+        background: #ff7400;
+        color: white;
+        font-weight: 700;
+        margin-top: 18px;
+        width: 100%;
+      }
+      button.secondary {
+        background: #243550;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      #estado {
+        white-space: pre-line;
+        color: #f6c477;
+      }
+      small {
+        display: block;
+        margin-top: 24px;
+        color: #8192ac;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="logo.png" alt="PowerPOS" />
+      <h1>Tu caja, lista para trabajar</h1>
+      <p>
+        Selecciona la empresa y la impresora de esta sede. Los recibos y el
+        cajón se controlan desde esta aplicación, sin abrir una ventana de
+        impresión.
+      </p>
+      <form id="configurar">
+        <label
+          >Empresa<select id="sitio">
+            <option value="trailer">Trailer del Sabor</option>
+            <option value="enchila">Enchila Market Pereira</option>
+            <option value="general">Acceso general PowerPOS</option>
+          </select></label
+        ><label
+          >IP de la impresora de red<input
+            id="impresora"
+            placeholder="Ejemplo: 192.168.18.228"
+            required
+            autocomplete="off"
+            list="impresoras" /></label
+        ><datalist id="impresoras"></datalist
+        ><button id="buscar" type="button" class="secondary">
+          Buscar impresoras automáticamente</button
+        ><button id="guardar" type="submit">Guardar y abrir PowerPOS</button>
+      </form>
+      <p id="estado" role="status"></p>
+      <small
+        >Necesitas internet para guardar las ventas en Hostinger. La impresora
+        debe estar en la misma red local. El cierre por inactividad también
+        funciona sin internet. Puedes cambiar esta configuración en
+        Archivo.</small
+      >
+    </main>
+    <script src="setup.js"></script>
+  </body>
+</html>

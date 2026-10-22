@@ -12,6 +12,7 @@ import { NotificacionesService } from '../notificaciones/notificaciones.service'
 import { ImpresionService } from '../impresion/impresion.service';
 import { bloquearCajaSucursal } from './caja-lock';
 import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
+import { impresionEnEscritorio } from '../impresion/transporte-escritorio';
 
 const ZONA_BOGOTA = 'America/Bogota';
 
@@ -443,7 +444,7 @@ export class CajaService {
 
     // Tirilla de cierre: efecto secundario, no debe bloquear ni hacer
     // fallar el cierre si no hay agente/impresora disponible en este momento.
-    void this.impresion
+    const colilla = this.impresion
       .imprimirCierreCaja(
         {
           cajeroNombre: caja.usuario.nombre,
@@ -465,6 +466,7 @@ export class CajaService {
         empresaId!,
       )
       .catch(() => this.logger.warn('No se pudo imprimir el cierre de caja'));
+    if (impresionEnEscritorio()) await colilla;
 
     return {
       ...cajaActualizada,
@@ -956,6 +958,16 @@ export class CajaService {
       }
       throw error;
     }
+  }
+
+  async registrarAperturaConLlave(cajaId: number, motivo: string, usuarioId: number, empresaId: number, sucursalId: number, rol: string) {
+    if (!Number.isSafeInteger(cajaId) || cajaId < 1 || typeof motivo !== 'string' || motivo.trim().length < 5 || motivo.trim().length > 300)
+      throw new BadRequestException('Selecciona la caja y escribe un motivo de 5 a 300 caracteres.');
+    const caja = await this.prisma.caja.findFirst({ where: { id: cajaId, sucursalId, estado: 'ABIERTA', sucursal: { empresaId } }, include: { sucursal: { select: { nombre: true } } } });
+    if (!caja || (rol === 'CAJERO' && caja.usuarioId !== usuarioId)) throw new NotFoundException('No hay una caja abierta asignada a este usuario en la sede.');
+    const evento = await this.registrarEvento({ cajaId, usuarioId, tipo: 'APERTURA_IRREGULAR', esAlerta: true, descripcion: `APERTURA CON LLAVE (reporte manual). Motivo: ${motivo.trim()}` });
+    void this.notificaciones.enviarAlerta({ tipo: 'APERTURA IRREGULAR DE CAJA', mensaje: `Se reportó manualmente una apertura con llave de la caja ${cajaId}. Motivo: ${motivo.trim()}. El responsable queda registrado en el historial. Este aviso no proviene de un sensor.`, empresa: 'PowerPOS', sucursal: caja.sucursal.nombre, empresaId, usuarioId }).catch(() => this.logger.warn('No se pudo notificar la apertura con llave'));
+    return { registrado: true, eventoId: evento.id };
   }
 
   async registrarAperturaIrregular(

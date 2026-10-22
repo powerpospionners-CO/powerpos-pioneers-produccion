@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { useAuthStore } from '@/store/authStore';
+import { sesionInactiva } from './sesion-inactiva';
+import { rutaImpresionEscritorio } from './escritorio';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000',
@@ -10,8 +13,24 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = window.localStorage.getItem('token');
+    const sesion = useAuthStore.getState();
+    if (token && sesion.hydrated && sesion.inicioSesion && (sesion.token !== token || sesionInactiva(window.localStorage, sesion.inicioSesion))) {
+      sesion.logout();
+      window.location.replace('/login');
+      throw new axios.CanceledError('Sesión cerrada por inactividad');
+    }
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      const escritorio = window.powerposDesktop;
+      if (escritorio && config.method?.toLowerCase() === 'post' && rutaImpresionEscritorio(config.url || '')) {
+        config.adapter = async (peticion) => {
+          const datos = typeof peticion.data === 'string' ? JSON.parse(peticion.data) : (peticion.data || {});
+          const r = await escritorio.imprimir({ ruta: peticion.url!, token, datos });
+          const respuesta = { data: r.data, status: r.status, statusText: String(r.status), headers: {}, config: peticion };
+          if (r.status >= 400) throw new axios.AxiosError(r.data?.message || 'No se pudo completar la solicitud', undefined, peticion, undefined, respuesta);
+          return respuesta;
+        };
+      }
     }
   }
   return config;
@@ -35,8 +54,7 @@ api.interceptors.response.use(
       window.location.href = '/suscripcion';
     }
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      window.localStorage.removeItem('token');
-      window.localStorage.removeItem('usuario');
+      useAuthStore.getState().logout();
       window.location.href = '/login';
     }
     return Promise.reject(error);

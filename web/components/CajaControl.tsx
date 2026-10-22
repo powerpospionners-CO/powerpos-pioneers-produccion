@@ -6,6 +6,8 @@ import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
 import CalculadoraBilletes from './CalculadoraBilletes';
 import { useNotificar } from './Notificaciones';
+import RegistroAperturaLlave from './RegistroAperturaLlave';
+import EscritorioEstado from './EscritorioEstado';
 
 type Caja = {
   id: number;
@@ -129,6 +131,8 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
         <button type="button" onClick={() => { setMontoFinal(0); setMontoRetirado(String(caja.totalEfectivo || 0)); setConfirmoCero(false); setError(''); setModalCierre(true); }} className="pos-caja-cerrar ml-3 rounded-lg border border-green-500/30 px-3 py-1 text-xs font-semibold text-green-200 hover:bg-green-500/10">
           Cerrar caja
         </button>
+        <RegistroAperturaLlave cajaId={caja.id} />
+        <EscritorioEstado />
       </div>
 
       {modalCierre && (

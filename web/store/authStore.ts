@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { CLAVE_ACTIVIDAD, registrarActividad } from '@/lib/sesion-inactiva';
 
 interface Usuario {
   id: number;
@@ -41,15 +42,19 @@ export const useAuthStore = create<AuthStore>()(
       inicioSesion: null,
       hydrated: false,
       setAuth: (token, usuario) => {
+        const inicioSesion = new Date().toISOString();
         if (typeof window !== 'undefined') {
           window.localStorage.setItem('token', token);
+          registrarActividad(window.localStorage, inicioSesion);
         }
-        set({ token, usuario, inicioSesion: new Date().toISOString() });
+        set({ token, usuario, inicioSesion });
       },
       setTipoNegocio: (tipoNegocio) => set((state) => ({ usuario: state.usuario ? { ...state.usuario, tipoNegocio } : null })),
       logout: () => {
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem('token');
+          window.localStorage.removeItem(CLAVE_ACTIVIDAD);
+          window.localStorage.removeItem('usuario');
         }
         set({ token: null, usuario: null, inicioSesion: null });
       },

@@ -1,11 +1,15 @@
-import { Body, Controller, Post, Request, Sse, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, Sse, UseGuards } from '@nestjs/common';
 import { Observable, interval, map, merge } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ImpresionService } from './impresion.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
 import { AgenteImpresionGuard } from './agente-impresion.guard';
+import { ejecutarImpresionEscritorio } from './transporte-escritorio';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
 @Controller('impresion')
 export class ImpresionController {
   constructor(
@@ -13,24 +17,27 @@ export class ImpresionController {
     private readonly eventos: ImpresionEventosService,
   ) {}
 
+  @Get('capacidades')
+  capacidades() { return { escritorio: true, protocolo: 1, transporte: 'ESC_POS_LOCAL' }; }
+
   @Post('comanda')
   imprimirComanda(@Body() pedido: any, @Request() req: any) {
-    return this.impresionService.imprimirComanda(pedido, req.user.empresaId);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.impresionService.imprimirComanda(pedido, req.user.empresaId));
   }
 
   @Post('ticket')
   imprimirTicket(@Body() pedido: any, @Request() req: any) {
-    return this.impresionService.imprimirRecibo(pedido, req.user.empresaId);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.impresionService.imprimirRecibo(pedido, req.user.empresaId));
   }
 
   @Post('comandas')
   imprimirComandas(@Body() datos: { comandas: any[]; abrirCajon?: boolean }, @Request() req: any) {
-    return this.impresionService.imprimirComandas(datos?.comandas, req.user.empresaId, datos?.abrirCajon === true);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.impresionService.imprimirComandas(datos?.comandas, req.user.empresaId, datos?.abrirCajon === true));
   }
 
   @Post('abrir-cajon')
   abrirCajon(@Request() req: any) {
-    return this.impresionService.abrirCajon(req.user.empresaId);
+    return ejecutarImpresionEscritorio(req.headers['x-powerpos-desktop'] === '1', () => this.impresionService.abrirCajon(req.user.empresaId));
   }
 }
 

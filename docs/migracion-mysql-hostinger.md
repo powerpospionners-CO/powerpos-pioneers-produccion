@@ -1,6 +1,26 @@
 # Preparación de MySQL en Hostinger
 
-Estado al 21 de octubre de 2026: el acceso general `app.powerpospioneers.com` ya utiliza el frontend de Hostinger, comprobado por HTTPS y versión. La API y las bases productivas siguen en Railway/Neon; las direcciones de las dos empresas siguen usando Vercel. El usuario confirmó que están atendiendo y ordenó mantener las ventas activas: no pausar ni cambiar la API mientras continúe esa condición. No ejecutar el historial PostgreSQL contra MySQL.
+## Corte del 21 de octubre por la noche — estado vigente
+
+El usuario confirmó el cierre de ambas empresas y autorizó continuar el corte. Se suspendieron las escrituras del origen. Se archivó el único registro huérfano de operación, fechado el 19 de octubre, después de guardar una copia cifrada y comprobar que no había transacciones antiguas activas en las sedes. El origen quedó con cero operaciones en curso.
+
+La copia final es `.tools/respaldos/migracion-2026-10-22T00-49-03-627Z`, con 59 tablas por base: control 3206 registros, Trailer 758 y Enchila 3923. Se importaron las tres bases en Hostinger y se volvió a comparar cada tabla contra esa copia. La comprobación del destino y sus copias cifradas están en `.tools/respaldos/hostinger-final-verificado-2026-10-22T01-02-01-249Z`. Las rutas de las dos sedes están ACTIVA y sus escrituras se habilitaron después de validar la API por HTTPS.
+
+Se conservan 508 imágenes públicas. Hostinger confirmó en sus registros `archivosVerificados:508, integridadSha256:true`. Se recuperaron las 29 imágenes del día directamente del origen, únicamente si faltaban y si sus bytes coincidían con el manifiesto; no se sobrescribieron originales. La ruta persistente definitiva es `/home/u748056473/domains/api.powerpospioneers.com/powerpos-data/uploads`, fuera de las carpetas de despliegue. Los indicadores de comprobación y recuperación temporal se desactivaron después de verificar los archivos.
+
+`app`, `api`, `enchilamarketpereira` y `trailerdelsabor` apuntan mediante A a `92.112.189.51`, DNS only. La API y los dos portales empresariales responden 200 por HTTPS con certificados verificados. Se habilitaron las escrituras únicamente en Hostinger y se retiraron las rutas activas del origen, que permanece pausado. Las ocho consultas autenticadas (empresa, productos, inventario y resumen de ambas empresas) pasaron después del despliegue final. Se verificaron también los canales SSE y sus latidos para los dos agentes sin imprimir ni abrir cajones. Se solicitó el reinicio controlado del proceso de Railway para cerrar conexiones antiguas. Los cron ya están habilitados únicamente en Hostinger. El dominio raíz, wildcard y registros de correo permanecen intactos.
+
+Se conserva la firma JWT original, el cifrado de las conexiones de sedes y las claves de agentes, para mantener sesiones e impresión. Los secretos SMTP válidos están en configuración privada y excluidos de Git. No ejecutar el historial PostgreSQL contra MariaDB.
+
+Los tres permisos de conexión remota temporales de la IP del equipo se retiraron al finalizar la verificación. No se habilitó acceso desde cualquier host. La API conserva sus conexiones locales a las bases.
+
+La actualización posterior añade cierre de sesión a los 20 minutos sin actividad también sin internet, persistencia del vencimiento entre recargas y controles para no mezclar sesiones entre pestañas. Se restringen orígenes web de la API y roles de impresión, y se añaden cabeceras contra incrustación y detección incorrecta de contenido. El nuevo reporte de apertura con llave registra el usuario autenticado, motivo, caja y sede usando los eventos existentes; no requiere cambiar el esquema ni afirma detectar un sensor físico.
+
+`desktop/` contiene la aplicación Windows con contexto aislado, sandbox, IPC limitado y cola local ESC/POS. Solicita los bytes a controladores autenticados de la API y los envía a la impresora privada del puesto, sin pasar por la cola del agente externo. Las pruebas cubren separación de empresa, rechazo de destinos públicos, exclusión de peticiones concurrentes y prevención de reintentos cuando el contenido pudo haberse enviado. Queda necesaria la instalación y prueba física en cada negocio. El instalador no tiene firma comercial de Windows.
+
+Las secciones siguientes son un historial de preparación y no describen el estado vigente del corte.
+
+## Historial de preparación
 
 ## Comprobación del destino
 

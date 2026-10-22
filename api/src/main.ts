@@ -7,14 +7,15 @@ import * as fs from 'fs';
 import { directorioUploads } from './storage/uploads';
 import { verificarUploads } from './storage/verificar-uploads';
 import { archivosRespaldo } from './storage/hostinger-uploads-manifest';
+import { origenPermitido } from './seguridad/origenes';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.enableCors({
-    origin: '*',
+    origin: (origen, callback) => callback(null, origenPermitido(origen, process.env.NODE_ENV !== 'production')),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-PowerPOS-Desktop'],
   });
 
   const uploadsPath = directorioUploads();
