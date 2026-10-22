@@ -260,11 +260,13 @@ else
           await new Promise((r) => setTimeout(r, 50));
         if (!puenteComprobado) throw Error("El puente seguro no respondió");
         await fs.mkdir(salidaSmoke, { recursive: true });
+        if (process.env.POWERPOS_SMOKE_CAPTURE !== "0") {
         const imagen = await ventana.webContents.capturePage();
         await fs.writeFile(
           path.join(salidaSmoke, "comprobacion-escritorio.png"),
           imagen.toPNG(),
         );
+        }
         await fs.writeFile(
           path.join(salidaSmoke, "comprobacion-escritorio.json"),
           JSON.stringify({
