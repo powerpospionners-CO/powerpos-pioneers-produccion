@@ -25,4 +25,20 @@ describe('Integridad del respaldo de imágenes', () => {
   it('impide leer fuera de la carpeta del respaldo', async () => {
     await expect(verificarUploads(raiz, [{ ...archivo, ruta: '/uploads/../otro.jpg' }])).rejects.toThrow('Ruta de respaldo');
   });
+  it('recupera únicamente imágenes faltantes cuyos bytes coinciden con el respaldo', async () => {
+    const descarga = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(original, { headers: { 'content-type': 'image/jpeg' } }));
+    try {
+      await expect(verificarUploads(raiz, [archivo], true)).resolves.toEqual({ archivosVerificados: 1, integridadSha256: true });
+      descarga.mockClear();
+      await verificarUploads(raiz, [archivo], true);
+      expect(descarga).not.toHaveBeenCalled();
+    } finally { descarga.mockRestore(); }
+  });
+  it('rechaza una descarga alterada sin guardarla', async () => {
+    const descarga = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('alterada', { headers: { 'content-type': 'image/jpeg' } }));
+    try {
+      await expect(verificarUploads(raiz, [archivo], true)).rejects.toThrow('no coincide');
+      await expect(verificarUploads(raiz, [archivo])).rejects.toThrow('Faltan archivos');
+    } finally { descarga.mockRestore(); }
+  });
 });

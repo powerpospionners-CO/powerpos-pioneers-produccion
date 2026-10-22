@@ -2394,5 +2394,150 @@ export const archivosRespaldo = [
     "ruta": "/uploads/catalogo/catalogo-1792600638678-484059736.png",
     "bytes": 2577469,
     "sha256": "41183be2ac3c146f29cca9e300a188c21134da5a64aefe94be31df1f9aa1a2f9"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792602743378-607795912.png",
+    "bytes": 2830097,
+    "sha256": "c165910266cd637111832c3e7345a9f3a8493a31dcb5d84568c525de87117ead"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792603109518-591099914.png",
+    "bytes": 2855409,
+    "sha256": "b8ac6d0044c8cba1ae9c94c36dbe6a7516799dc220867f7d8ed1bc4159213e6d"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792606704231-227550301.png",
+    "bytes": 2808729,
+    "sha256": "8e919e2f078a6f7d203fac88d2bdbad1872bd9bfc7936c7f55522073e9f3898a"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792607451751-126476376.png",
+    "bytes": 2824754,
+    "sha256": "848110b08bb6f357615d6896e0f3ddaa842aa6dd84a350c2db4119331a5acde9"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792608065891-526878239.png",
+    "bytes": 3043728,
+    "sha256": "880080a5fbbaeef0411091b109ea4755292f97276ebe4065edcfaee8164b0394"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792608870449-583603525.png",
+    "bytes": 2469393,
+    "sha256": "813603ca328b5bd3823f0dcd2946c29c4a4c97cfd216e3add00416c152959f37"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792609973438-311500235.png",
+    "bytes": 2648410,
+    "sha256": "ab08cb14b66e693b5dce97afd6613eed6c992b6483ea408d1b02563338f27ad2"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792612192872-93755455.png",
+    "bytes": 2724407,
+    "sha256": "f37a19e82f1f821bff727c6963a0e3fb333a9388fd024649977f04993e94f209"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792612543830-541209801.png",
+    "bytes": 3000175,
+    "sha256": "ec0f8d4cb93a85bd7693cc302390f95393dc4eb68fc00a1d79cbefd9300e42a3"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792612812389-490007393.png",
+    "bytes": 2677909,
+    "sha256": "03f30ad5e6ed57415faefc2360e278c34864d052c8eeffeda99af9283b370749"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792613900729-951722405.png",
+    "bytes": 2680334,
+    "sha256": "d597ff7d4a78319acf72a0e9ad82819318d34833f4e0e1e3afb3f2778a7f20aa"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792614297710-640361649.png",
+    "bytes": 2669733,
+    "sha256": "374476052fac35a517384f1487090ac0502aa18e91e87a06e2fa6a095e167695"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792613415972-627824347.png",
+    "bytes": 2648155,
+    "sha256": "6d6b3a34b62fda68b03ba028ec9c824d8070af8cfc90068b9d39a659f8a8a802"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792614595786-543473933.png",
+    "bytes": 2755095,
+    "sha256": "aa09aeb0b210e21152aac8e3cb0a08e2ea23b95c0b8e738983cc87c35b3938cc"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792616291517-474595433.png",
+    "bytes": 2523086,
+    "sha256": "6bd3667c47ee3629ec49b7b2dacbe156679c6cf3cd4fbcdea38c80f696753135"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792616955299-981481914.png",
+    "bytes": 2596775,
+    "sha256": "efc1dc24853918ae3ac54f673c05d4dfe6c99b514e8a613c4f6fc0ac1a5346a4"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792618106559-162157496.png",
+    "bytes": 2750810,
+    "sha256": "93544898cd4c885172fdde57da7c5a341ff7df5d7b9ba64156672002bfbfe360"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792618640388-177093744.png",
+    "bytes": 2689385,
+    "sha256": "bf3232c37061817c8339ea529d19bccd1d61a0294757e55d9581cd0494e34d4e"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792621985052-221154299.png",
+    "bytes": 2628490,
+    "sha256": "938339930c17284340d65a6f93bf08743d09aa8a01b421f3c6d0868ce1b363b1"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792623353373-303171517.png",
+    "bytes": 2607077,
+    "sha256": "19ffb40353438a0fbcb26725ad014f873c2b5f49dd3efaddec3793b3adb8c8d9"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792623867221-29168456.png",
+    "bytes": 2633482,
+    "sha256": "277a0724a7d725ebae275cc2c8c46c715ace70d22c061d4be186bf23cb3c5ae5"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792622861264-442100102.png",
+    "bytes": 2651821,
+    "sha256": "448a4993f20bb0cfb033a852f5393f1f87b76e07fb66e16f61fcbe06ebc92127"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792624198962-902644882.png",
+    "bytes": 2514896,
+    "sha256": "76a8046840256fb5c4cf4a3be947df9d35b9be031093f225f9687472d5d9113b"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792625027015-386994289.png",
+    "bytes": 2847557,
+    "sha256": "e480bcee1e49ababb34d7998fdb0d372e7331c7d4183e18619b77ea3a7102f79"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792625472185-225067465.png",
+    "bytes": 2914339,
+    "sha256": "6dbcd513f03fb098f87d3bf0dfe88da7b79159499b4e738af88e4beab7750233"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792624598960-904747371.png",
+    "bytes": 2840346,
+    "sha256": "1d2e3d771743233253873a42e0d80c56226f0f091cadeb7ef372e0f665e3e4af"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792628776387-712423077.png",
+    "bytes": 2893670,
+    "sha256": "8402b40358ab3b584b49bb314cc0a9fb7deb3653259f098d9e419cea747a82ac"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792629022507-146308653.png",
+    "bytes": 2775487,
+    "sha256": "076a75187f2a5ccf3bbebdd37a099b666ef57dd08fccca503634b7ba1195e2d3"
+  },
+  {
+    "ruta": "/uploads/catalogo/catalogo-1792627925004-389810589.png",
+    "bytes": 2772858,
+    "sha256": "054da4aa19a56b10037dbeba8eafd95b992ad2e3cb6b78e68455e8255770b903"
   }
 ] as const;

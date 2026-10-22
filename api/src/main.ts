@@ -26,7 +26,7 @@ async function bootstrap() {
   fs.mkdirSync(path.join(uploadsPath, 'catalogo'), { recursive: true });
   if (process.env.VERIFICAR_RESPALDO_UPLOADS === 'true') {
     if (process.env.BACKGROUND_JOBS_ENABLED !== 'false') throw new Error('La verificación del respaldo requiere modo de ensayo');
-    console.log('Respaldo de imágenes:', await verificarUploads(uploadsPath, archivosRespaldo));
+    console.log('Respaldo de imágenes:', await verificarUploads(uploadsPath, archivosRespaldo, process.env.RESTAURAR_IMAGENES_MIGRACION === 'true'));
   }
   console.log('Sirviendo archivos estáticos desde:', uploadsPath);
 
