@@ -75,7 +75,7 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     subscriptions.push(emisor.paraEmpresa(empresa.id).subscribe({ next: consumir, error: e => errores.push(e) }));
     subscriptions.push(agente.paraEmpresa(empresa.id).subscribe({ next: consumir, error: e => errores.push(e) }));
     const resultado = await emisor.enviarYEsperar(empresa.id, 'TICKET', Buffer.from('prueba sin impresora física'), 5000);
-    assert.equal(resultado.ok, true); assert.equal(trabajos, 1); assert.deepEqual(errores, []);
+    assert.equal(resultado.ok, true, JSON.stringify({ resultado, trabajos, errores: errores.map(e => String(e.message || e).slice(0, 2000)) })); assert.equal(trabajos, 1); assert.deepEqual(errores, []);
     console.log('PASS eventos y confirmación entre dos instancias; dos agentes reclaman un solo trabajo');
   } finally {
     subscriptions.forEach(s => s.unsubscribe());

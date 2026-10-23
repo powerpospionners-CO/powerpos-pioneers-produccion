@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { resolve } from 'node:path';
+import { normalizarNulosMysql } from './nulos-mysql';
 
 export function motorBase() {
   const motor = process.env.DATABASE_ENGINE || 'postgresql';
@@ -58,7 +59,7 @@ export function adaptarMysql<T>(cliente: T, enTransaccion = false): T {
     await tx.$executeRawUnsafe("SET SESSION sql_mode='STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
     await tx.$executeRawUnsafe("SET SESSION time_zone='+00:00'");
   };
-  if (!enTransaccion) db.$use(async (params, next) => next({ ...params, args: normalizarArgumentos(params.args) }));
+  if (!enTransaccion) db.$use(async (params, next) => next({ ...params, args: normalizarNulosMysql(normalizarArgumentos(params.args)) }));
   return new Proxy(db, {
     get(target, nombre) {
       if (nombre === '$transaction') return (trabajo: any, opciones?: any) => {
