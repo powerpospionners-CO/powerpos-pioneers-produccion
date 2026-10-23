@@ -62,8 +62,8 @@ export class ImpresionAgenteController {
 
   @Post('confirmar')
   @UseGuards(AgenteImpresionGuard)
-  confirmar(@Body() body: { id: string; ok: boolean; motivo?: string }, @Request() req: any) {
-    this.eventos.confirmar(body.id, body.ok, body.motivo, req.empresaId);
+  async confirmar(@Body() body: { id: string; ok: boolean; motivo?: string }, @Request() req: any) {
+    await this.eventos.confirmar(body.id, body.ok, body.motivo, req.empresaId);
     return { recibido: true };
   }
 }

@@ -145,7 +145,7 @@ export class OperacionesVentaService {
       await this.auditar(tx,actor,op.id,{pedidoId:id,cajaId:caja.id,valorTotal,reembolso,deudaReducida:deuda});
       return op;
     },{timeout:15000});
-    this.eventos?.emitir(actor.empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: 'DEVOLUCION' });
+    await this.eventos?.emitir(actor.empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: 'DEVOLUCION' });
     return resultado;
   }
   private auditar(tx: Prisma.TransactionClient,actor:ActorVenta,id:number,detalle:Prisma.InputJsonValue) { return tx.auditoria.create({data:{empresaId:actor.empresaId,usuarioId:actor.id,entidad:'OPERACION_VENTA_CAJA',entidadId:id,accion:'CREAR',detalle}}); }

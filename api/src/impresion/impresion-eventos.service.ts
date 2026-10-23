@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { EventosService } from '../eventos/eventos.service';
 import { randomUUID } from 'crypto';
 import { Subject, filter, map, firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { contextoSede } from '../prisma/sede-context';
@@ -17,11 +18,13 @@ interface Confirmacion {
 
 @Injectable()
 export class ImpresionEventosService {
+  constructor(@Optional() private readonly compartidos?: EventosService) {}
   private readonly trabajos = new Subject<{ empresaId: number; sucursalId?: number; trabajo: TrabajoImpresion }>();
   private readonly confirmaciones = new Subject<Confirmacion>();
   private readonly pendientes = new Map<string,{empresaId:number;sucursalId?:number}>();
 
   paraEmpresa(empresaId: number) {
+    if (this.compartidos?.activo) return this.compartidos.escuchar<TrabajoImpresion>(empresaId, 'IMPRESION', true);
     const scope = contextoSede.getStore();
     const sucursalId = scope && scope!=='CONTROL' ? scope.sucursalId : undefined;
     return this.trabajos.asObservable().pipe(
@@ -40,6 +43,10 @@ export class ImpresionEventosService {
     timeoutMs = 6000,
   ): Promise<{ ok: boolean; motivo?: string }> {
     const id = randomUUID();
+    if (this.compartidos?.activo) {
+      await this.compartidos.publicar(empresaId, 'IMPRESION', { id, tipo, datosBase64: datos.toString('base64') }, timeoutMs, id);
+      return this.compartidos.esperar(empresaId, id, timeoutMs);
+    }
     const scope = contextoSede.getStore();
     const sucursalId = scope && scope!=='CONTROL' ? scope.sucursalId : undefined;
     this.pendientes.set(id,{empresaId,sucursalId});
@@ -69,7 +76,12 @@ export class ImpresionEventosService {
     return { ok: resultado.ok, motivo: resultado.motivo };
   }
 
-  confirmar(id: string, ok: boolean, motivo?: string, empresaId?: number) {
+  async confirmar(id: string, ok: boolean, motivo?: string, empresaId?: number) {
+    if (typeof id !== 'string' || typeof ok !== 'boolean' || (motivo !== undefined && (typeof motivo !== 'string' || motivo.length > 500))) return;
+    if (this.compartidos?.activo) {
+      if (empresaId !== undefined) await this.compartidos.confirmar(empresaId, id, { ok, ...(motivo ? { motivo } : {}) });
+      return;
+    }
     const pendiente = this.pendientes.get(id), scope = contextoSede.getStore();
     if (!pendiente || (empresaId !== undefined && empresaId !== pendiente.empresaId)) return;
     if (pendiente.sucursalId !== undefined && (!scope || scope==='CONTROL' || scope.sucursalId!==pendiente.sucursalId || scope.empresaId!==pendiente.empresaId)) return;

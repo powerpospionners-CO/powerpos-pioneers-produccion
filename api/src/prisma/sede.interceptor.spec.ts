@@ -5,6 +5,12 @@ import { PrismaService } from './prisma.service';
 import { SedeInterceptor } from './sede.interceptor';
 
 describe('Branch cutover barrier',()=>{
+  it('mantiene liveness disponible sin consultar una base caída', async () => {
+    const db = prisma();
+    db.estadoAislamiento.mockRejectedValue(new Error('base caída'));
+    await expect(firstValueFrom(new SedeInterceptor(db as unknown as PrismaService).intercept(contexto('/health'), handler))).resolves.toBe('ok');
+    expect(db.estadoAislamiento).not.toHaveBeenCalled();
+  });
   const handler={handle:()=>of('ok')};
   function contexto(url:string,sse=false){
     const method=()=>undefined;

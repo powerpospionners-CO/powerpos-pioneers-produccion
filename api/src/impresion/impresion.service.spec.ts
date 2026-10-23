@@ -77,6 +77,7 @@ describe('ImpresionService', () => {
     process.env.ESC_POS_PORT = String(address.port);
 
     const service = new ImpresionService();
+    try {
     const resultado = await service.imprimirRecibo(
       {
         numero: '1001',
@@ -95,10 +96,11 @@ describe('ImpresionService', () => {
     );
 
     expect(resultado).toEqual({ impreso: true, modo: 'tcp' });
-
+    } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
+    }
   });
 
   it('prints the full company address across receipt lines', async () => {

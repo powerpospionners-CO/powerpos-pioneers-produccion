@@ -13,6 +13,7 @@ interface Usuario {
   plan?: string;
   tipoNegocio?: 'RESTAURANTE' | 'SUPERMERCADO' | 'TIENDA' | 'COMERCIO';
   permisos?: Record<string, boolean>;
+  permisosUsuario?: Record<string, boolean | { ver: boolean; editar: boolean }>;
   modoPreparacion?: 'KDS' | 'COMANDAS';
   facturacionElectronicaHabilitada?: boolean;
   consumoEmpleadosHabilitado?: boolean;

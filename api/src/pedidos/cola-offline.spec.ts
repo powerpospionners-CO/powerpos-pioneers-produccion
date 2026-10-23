@@ -41,6 +41,15 @@ function cola() {
 }
 
 describe('Respaldo offline del POS', () => {
+  it.each(['{incompleto', '{}', '[{"clave":"a"}]'])('conserva una cola dañada y bloquea su sobrescritura: %s', contenido => {
+    const { api, localStorage, post } = cola();
+    const clave = 'pos-cola-offline:1:2';
+    localStorage.setItem(clave, contenido);
+    expect(() => api.listarVentasPendientes(1, 2)).toThrow('recuperar la cola');
+    expect(() => api.encolarVentaPendiente(1, 2, 'nueva', {})).toThrow();
+    expect(localStorage.getItem(clave)).toBe(contenido);
+    expect(post).not.toHaveBeenCalled();
+  });
   it('conserva ventas agregadas mientras otra venta se sincroniza', async () => {
     const { api, post } = cola();
     api.encolarVentaPendiente(1, 2, 'a', { total: 10 });

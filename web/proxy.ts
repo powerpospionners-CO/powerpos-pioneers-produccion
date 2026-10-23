@@ -20,7 +20,7 @@ const RUTAS_PANEL = [
   '/registro', '/catalogo', '/caja', '/distribuidores', '/distribuidor', '/suscripcion', '/compras', '/administracion', '/estadisticas',
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const url = request.nextUrl;
   const host = (request.headers.get('host') || '').toLowerCase().split(':')[0];
 

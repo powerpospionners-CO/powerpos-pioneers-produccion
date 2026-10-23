@@ -95,6 +95,7 @@ export class AuthService {
         plan: usuario.empresa?.plan,
         tipoNegocio: usuario.empresa?.tipoNegocio,
         permisos: usuario.empresa?.permisos,
+        permisosUsuario: usuario.permisos,
         modoPreparacion: usuario.empresa?.modoPreparacion,
         facturacionElectronicaHabilitada:
           usuario.empresa?.facturacionElectronicaHabilitada,

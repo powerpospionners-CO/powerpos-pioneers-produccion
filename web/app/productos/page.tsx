@@ -237,7 +237,7 @@ function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onC
     <div className="space-y-3 rounded-xl border border-gray-800 p-3">
       <div>
         <p className="text-sm font-semibold text-gray-300">Presentaciones (opcional)</p>
-        <p className="text-xs text-gray-500">Para vender este producto de varias formas que comparten las mismas existencias — ej. "Tarro" (50 unidades) y "Unidad" (1 unidad). Al vender una, se descuenta sola del mismo inventario.</p>
+        <p className="text-xs text-gray-500">Para vender este producto de varias formas que comparten las mismas existencias — ej. &quot;Tarro&quot; (50 unidades) y &quot;Unidad&quot; (1 unidad). Al vender una, se descuenta sola del mismo inventario.</p>
       </div>
       {presentaciones.length > 0 && (
         <div className="space-y-2">
@@ -314,7 +314,7 @@ function SeccionComboComponentes({ producto, productosDisponibles, onCambio }: {
     <div className="space-y-3 rounded-xl border border-gray-800 p-3">
       <div>
         <p className="text-sm font-semibold text-gray-300">Componentes de la canasta/combo</p>
-        <p className="text-xs text-gray-500">Productos que la componen (ej. "Canasta básica" = 2 lb tomate + 1 lb cebolla). Al vender la canasta se descuenta el inventario de cada uno por separado.</p>
+        <p className="text-xs text-gray-500">Productos que la componen (ej. &quot;Canasta básica&quot; = 2 lb tomate + 1 lb cebolla). Al vender la canasta se descuenta el inventario de cada uno por separado.</p>
       </div>
       {componentes.length > 0 && (
         <div className="space-y-2">

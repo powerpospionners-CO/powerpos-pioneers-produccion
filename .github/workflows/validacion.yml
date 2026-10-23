@@ -1,0 +1,82 @@
+name: Validación PowerPOS
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pruebas
+          POSTGRES_PASSWORD: solo_ci
+          POSTGRES_DB: powerpos_pos_test
+        ports: ['55439:5432']
+        options: --health-cmd "pg_isready -U pruebas -d powerpos_pos_test" --health-interval 5s --health-timeout 5s --health-retries 10
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: solo_ci
+          MARIADB_DATABASE: powerpos_pos_test
+        ports: ['55440:3306']
+        options: --health-cmd "healthcheck.sh --connect --innodb_initialized" --health-interval 5s --health-timeout 5s --health-retries 15
+    defaults:
+      run:
+        working-directory: api
+    env:
+      DATABASE_URL: postgresql://pruebas:solo_ci@127.0.0.1:55439/powerpos_pos_test
+      MYSQL_DATABASE_URL: mysql://root:solo_ci@127.0.0.1:55440/powerpos_pos_test
+      JWT_SECRET: solo-ci-no-usar-en-produccion-powerpos
+      BACKGROUND_JOBS_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npm test -- --runInBand
+      - run: npm run test:operacion
+      - run: npm run test:e2e -- --runInBand
+      - run: npm run build
+      - run: npx prisma db push --skip-generate
+      - run: node test/pos-integracion.cjs
+        env:
+          POS_TEST_DATABASE_URL: postgresql://pruebas:solo_ci@127.0.0.1:55439/powerpos_pos_test
+      - run: npm run build:mysql
+      - run: npx prisma db push --schema prisma/mysql/schema.prisma --skip-generate
+      - run: node test/pos-integracion.cjs
+        env:
+          POS_TEST_DATABASE_URL: mysql://root:solo_ci@127.0.0.1:55440/powerpos_pos_test
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+  escritorio:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run smoke

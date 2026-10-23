@@ -25,7 +25,7 @@ const FILA_SIMBOLOS = [
 export default function TouchKeyboard({ value, onChange, onClose, titulo }: TouchKeyboardProps) {
   const automatico = useTecladoTactilEmpresa();
   const cerrar = useRef(onClose);
-  cerrar.current = onClose;
+  useEffect(() => { cerrar.current = onClose; }, [onClose]);
   useEffect(() => {
     if (!automatico) return;
     const cerrarManual = () => cerrar.current();

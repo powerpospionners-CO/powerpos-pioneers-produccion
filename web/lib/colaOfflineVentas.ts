@@ -16,9 +16,15 @@ const claveFallidas = (empresaId: number, sucursalId: number) => `pos-cola-falli
 function leer<T>(clave: string): T[] {
   try {
     const crudo = window.localStorage.getItem(clave);
-    return crudo ? JSON.parse(crudo) : [];
+    if (!crudo) return [];
+    const datos: unknown = JSON.parse(crudo);
+    if (!Array.isArray(datos) || datos.some(venta => !venta || typeof venta !== 'object' || typeof venta.clave !== 'string' || !venta.payload || typeof venta.payload !== 'object' || Array.isArray(venta.payload))) {
+      throw new Error('Formato de cola inválido');
+    }
+    return datos as T[];
   } catch {
-    return [];
+    // Conservar el original: nunca reemplazar ventas ilegibles por una cola vacía.
+    throw new Error('No se puede leer el respaldo de ventas de este equipo. Conserva los datos del navegador y solicita recuperar la cola antes de continuar.');
   }
 }
 

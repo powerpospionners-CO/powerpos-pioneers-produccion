@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { jwtSecret } from './jwt-secret';
+import { AuthRateGuard } from './auth-rate.guard';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { jwtSecret } from './jwt-secret';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, AuthRateGuard],
   controllers: [AuthController],
   exports: [AuthService],
 })

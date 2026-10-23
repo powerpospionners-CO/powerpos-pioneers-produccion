@@ -20,6 +20,9 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:pos": "node test/pos-integracion.cjs",
+    "test:operacion": "node --test scripts/verificar-operacion.test.cjs",
+    "verificar:operacion": "node scripts/verificar-operacion.cjs",
     "seed": "ts-node prisma/seed.ts",
     "crear-superadmin": "ts-node prisma/create-superadmin.ts"
   },

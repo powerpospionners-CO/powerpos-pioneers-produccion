@@ -59,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       distribuidorId: usuario.distribuidorId,
       empresaPlan: usuario.empresa?.plan,
       permisos: usuario.empresa?.permisos,
+      permisosUsuario: usuario.permisos,
       suscripcionVenceEn: usuario.empresa?.suscripcionVenceEn,
       pagoExonerado: usuario.empresa?.pagoExonerado,
       distribuidoresHabilitado: usuario.empresa?.distribuidoresHabilitado,

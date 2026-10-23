@@ -8,9 +8,12 @@ import { directorioUploads } from './storage/uploads';
 import { verificarUploads } from './storage/verificar-uploads';
 import { archivosRespaldo } from './storage/hostinger-uploads-manifest';
 import { origenPermitido } from './seguridad/origenes';
+import { validarDespliegue } from './seguridad/despliegue';
 
 async function bootstrap() {
+  const proxies = validarDespliegue(process.env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  if (proxies.length) app.set('trust proxy', proxies);
 
   app.enableCors({
     origin: (origen, callback) => callback(null, origenPermitido(origen, process.env.NODE_ENV !== 'production')),

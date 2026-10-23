@@ -1,3 +1,4 @@
+import { normalizarPagos, calcularCostoVenta } from './calculos-venta';
 import { Prisma } from '@prisma/client';
 import { calcularPuntos, puntosConfig, monto } from '../tienda/reglas';
 import {
@@ -15,7 +16,6 @@ import { adicionalesConEmpaque } from './empaque';
 import { estadisticasCalendario } from './estadisticas-calendario';
 import { esBebida, adicionalListo } from '../adicionales/reglas-trailer';
 
-const METODOS_PAGO_VALIDOS = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'];
 
 @Injectable()
 export class PedidosService {
@@ -25,53 +25,9 @@ export class PedidosService {
     private readonly notificaciones: NotificacionesService,
   ) {}
 
-  // Valida y normaliza el desglose de pago de una venta. Acepta el campo
-  // clásico `metodoPago` (pago único) o `pagos: [{metodoPago, monto}]` para
-  // pagos mixtos (ej. parte en efectivo, parte por transferencia).
-  private normalizarPagos(datos: any, total: number): { metodoPago: string; pagos: { metodoPago: string; monto: number }[] } {
-    if (Array.isArray(datos.pagos) && datos.pagos.length > 0) {
-      if (datos.pagos.length > 5) throw new BadRequestException('Un pago admite máximo 5 medios distintos');
-      const pagos = datos.pagos.map((p: any) => {
-        if (!METODOS_PAGO_VALIDOS.includes(p.metodoPago)) throw new BadRequestException('Medio de pago no válido');
-        const monto = Number(p.monto);
-        if (!Number.isFinite(monto) || monto <= 0) throw new BadRequestException('El monto de cada pago debe ser mayor a cero');
-        return { metodoPago: p.metodoPago, monto: Math.round(monto * 100) / 100 };
-      });
-      const suma = pagos.reduce((acc: number, p: any) => acc + p.monto, 0);
-      if (Math.round(suma * 100) !== Math.round(total * 100)) {
-        throw new BadRequestException(`La suma de los pagos ($${suma.toLocaleString('es-CO')}) no coincide con el total de la venta ($${total.toLocaleString('es-CO')})`);
-      }
-      const metodoPago = pagos.length > 1 ? 'MIXTO' : pagos[0].metodoPago;
-      return { metodoPago, pagos };
-    }
-    const metodoPago = datos.metodoPago || 'EFECTIVO';
-    if (!METODOS_PAGO_VALIDOS.includes(metodoPago)) throw new BadRequestException('Medio de pago no válido');
-    return { metodoPago, pagos: [{ metodoPago, monto: total }] };
-  }
-
-  private calcularCostoVenta(itemsValidados: { producto: any; cantidad: number; factorUnidades?: number }[]): number {
-    return itemsValidados.reduce((total, item) => {
-      const { producto, cantidad } = item;
-      const factorUnidades = item.factorUnidades ?? 1;
-      let costoUnitario = 0;
-      if (producto.ingredientes && producto.ingredientes.length > 0) {
-        costoUnitario = producto.ingredientes.reduce((acc: number, pi: any) => {
-          const costoIngrediente = pi.ingrediente?.costoUnitario ? Number(pi.ingrediente.costoUnitario) : 0;
-          return acc + costoIngrediente * Number(pi.cantidad);
-        }, 0);
-      } else if (producto.costo !== null && producto.costo !== undefined) {
-        // El costo del producto es por unidad base; una presentación de
-        // varias unidades (ej. un tarro) cuesta ese costo multiplicado por
-        // cuántas unidades base contiene.
-        costoUnitario = Number(producto.costo) * factorUnidades;
-      }
-      return total + costoUnitario * cantidad;
-    }, 0);
-  }
-
   async crearPedido(datos: any, usuarioId: number, empresaId: number) {
     const pedido = await this.prisma.$transaction(tx => this.crearEnTransaccion(datos, usuarioId, empresaId, tx), { timeout: 15000 });
-    this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
+    await this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
     // La venta ya fue confirmada: una falla de un canal externo no debe inducir a repetirla.
     void this.notificaciones.enviarAlerta({ tipo: 'VENTA REGISTRADA', mensaje: `Venta ${pedido.numero}. Total: $${Number(pedido.total).toLocaleString('es-CO')}`, empresa: 'PowerPOS', sucursal: String(pedido.sucursalId), empresaId }).catch(() => undefined);
     return pedido;
@@ -332,7 +288,7 @@ export class PedidosService {
     if (puntosCalculados > 2147483647) throw new BadRequestException('Revise la regla de acumulación: genera demasiados puntos');
     const cambio = monto(datos.cambio ?? 0, 'Cambio', 0, 99999999.99);
     if (credito && (total <= 0 || cambio !== 0 || (Array.isArray(datos.pagos) && datos.pagos.length))) throw new BadRequestException('La venta a crédito debe quedar pendiente sin pagos ni cambio');
-    const { metodoPago, pagos } = credito ? { metodoPago: 'CREDITO', pagos: [] } : this.normalizarPagos(datos, Math.round(total * 100) / 100);
+    const { metodoPago, pagos } = credito ? { metodoPago: 'CREDITO', pagos: [] } : normalizarPagos(datos, Math.round(total * 100) / 100);
 
     const consumoInventario: { tipo: 'PRODUCTO' | 'INGREDIENTE'; id: number; cantidad: number }[] = [];
     for (const item of itemsValidados) {
@@ -480,7 +436,7 @@ export class PedidosService {
     // reste lo invertido y no muestre el ingreso completo como si fuera
     // ganancia. En comercio/tienda usa el costo del producto; en
     // restaurante, el costo de la receta (igual que en Reportes).
-    const costoVenta = costoHistorico === null ? this.calcularCostoVenta(itemsValidados) : Number(costoHistorico);
+    const costoVenta = costoHistorico === null ? calcularCostoVenta(itemsValidados) : Number(costoHistorico);
     if (costoVenta > 0) {
       await db.movimientoFinanciero.create({
         data: {
@@ -643,7 +599,7 @@ export class PedidosService {
         const caja = await db.caja.findUnique({ where: { id: pedido.cajaId } });
         if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja de esta venta ya está cerrada. Requiere conciliación para modificar el pago.');
       }
-      const { metodoPago, pagos } = this.normalizarPagos(datos, Number(pedido.total));
+      const { metodoPago, pagos } = normalizarPagos(datos, Number(pedido.total));
       await db.pagoPedido.deleteMany({ where: { pedidoId: id } });
       if (pedido.cajaId) await db.eventoCaja.create({
         data: { cajaId: pedido.cajaId, tipo: 'EDICION_PAGO',
@@ -659,7 +615,7 @@ export class PedidosService {
       });
     });
 
-    this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: actualizado.estado });
+    await this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: actualizado.estado });
     return actualizado;
   }
 
@@ -767,7 +723,7 @@ export class PedidosService {
         data: { estado: estado as any },
       });
     });
-    this.eventos.emitir(empresaId, {
+    await this.eventos.emitir(empresaId, {
       tipo: 'ACTUALIZADO',
       pedidoId: id,
       estado: actualizado.estado,

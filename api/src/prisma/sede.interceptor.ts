@@ -17,7 +17,10 @@ export class SedeInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest();
     const ruta = String(req.originalUrl || req.url).split('?')[0];
-    const salud = ruta === '/' || ruta === '/health';
+    const salud = ruta === '/' || ruta === '/health' || ruta === '/health/ready';
+    // Liveness no depende de la base. Readiness comprueba sus dependencias
+    // dentro del controlador y convierte los fallos en HTTP 503.
+    if (salud) return next.handle();
     const write =
       !salud && !Reflect.getMetadata(SSE_METADATA,context.getHandler()) &&
       (!this.prisma.aislamientoActivo || !['GET','HEAD','OPTIONS'].includes(req.method));
@@ -47,7 +50,7 @@ export class SedeInterceptor implements NestInterceptor {
           throw new NotFoundException('No se encontró la sede');
         }
       }
-      if (ruta === '/' || ruta === '/health') return 'CONTROL';
+      if (salud) return 'CONTROL';
       throw new ServiceUnavailableException(
         'La solicitud no tiene una sede verificada',
       );

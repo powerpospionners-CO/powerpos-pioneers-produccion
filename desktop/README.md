@@ -1,6 +1,6 @@
 # PowerPOS para Windows
 
-La aplicación utiliza el sistema y las bases de Hostinger. Las ventas necesitan internet; el cierre por inactividad funciona también cuando se pierde la conexión. No se instala ni se inicia un agente de impresión aparte.
+La aplicación utiliza el sistema y las bases de Hostinger. La operación completa necesita internet; el POS comercial conserva una cola local para cortes breves, que debe sincronizarse después. El cierre por inactividad funciona también cuando se pierde la conexión. No se instala ni se inicia un agente de impresión aparte.
 
 ## Instalar en la caja
 

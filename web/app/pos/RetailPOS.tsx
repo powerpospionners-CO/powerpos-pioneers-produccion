@@ -107,7 +107,7 @@ export default function RetailPOS() {
       }
       throw e;
     }
-  }, [usuario?.empresaId, usuario?.sucursalId]);
+  }, [usuario]);
 
   const cargar = async () => {
     const [p, cajaRes] = await Promise.allSettled([
@@ -154,9 +154,13 @@ export default function RetailPOS() {
 
   const refrescarContadoresSync = useCallback(() => {
     if (!usuario?.empresaId || !usuario?.sucursalId) return;
-    setPendientesSync(listarVentasPendientes(usuario.empresaId, usuario.sucursalId).length);
-    setFallidasSync(listarVentasFallidas(usuario.empresaId, usuario.sucursalId));
-  }, [usuario?.empresaId, usuario?.sucursalId]);
+    try {
+      setPendientesSync(listarVentasPendientes(usuario.empresaId, usuario.sucursalId).length);
+      setFallidasSync(listarVentasFallidas(usuario.empresaId, usuario.sucursalId));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'No se puede leer el respaldo de ventas.');
+    }
+  }, [usuario]);
 
   // Reintenta las ventas guardadas offline al volver la conexión. También
   // reintenta cada 20s por si el evento 'online' no dispara (pasa en

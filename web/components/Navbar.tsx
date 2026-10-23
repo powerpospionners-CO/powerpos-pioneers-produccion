@@ -81,6 +81,8 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
+    const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];
+    if (individual === false || (typeof individual === 'object' && individual.ver !== true)) return false;
     if (item.href === '/administracion' && (!esAdminOGerente || usuario?.permisos?.administracion !== true)) return false;
     if (item.href === '/compras' && !esAdminOGerente) return false;
     if (item.href === '/caja/recaudo') return esAdminOGerente && recaudoEfectivoHabilitado;

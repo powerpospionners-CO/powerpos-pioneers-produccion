@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
 import { suscripcionSuspendida } from './fechas';
+import { moduloRuta, permisoIndividual } from '../auth/permisos';
 
 const MODULOS_POR_PLAN: Record<string, string[]> = {
   BASICO: ['pos', 'productos'],
@@ -73,7 +74,20 @@ export class PlanAccessInterceptor implements NestInterceptor {
       }));
     }
 
-    const modulo = RUTAS_POR_MODULO.find(([prefijo]) => ruta.startsWith(prefijo))?.[1];
+    // Perfil propio y metadatos necesarios para dibujar el puesto no conceden
+    // acceso a la administración de otros usuarios ni a la configuración.
+    const propio = ruta === '/usuarios/mi-perfil' || (ruta === '/empresa' && request.method === 'GET');
+    // El cajero necesita el catálogo y la búsqueda de clientes para vender,
+    // aunque no tenga acceso a sus módulos administrativos.
+    const consultaPos = usuario.rol === 'CAJERO' && request.method === 'GET' &&
+      ['/productos', '/productos/comandas/configuracion', '/clientes'].includes(ruta);
+    const moduloIndividual = consultaPos ? 'pos' : moduloRuta(ruta);
+    const escritura = !['GET', 'HEAD', 'OPTIONS'].includes(request.method || 'GET');
+    if (!propio && moduloIndividual && !permisoIndividual(usuario.permisosUsuario, moduloIndividual, escritura)) {
+      return throwError(() => new ForbiddenException({ error: 'USER_PERMISSION_DENIED', message: 'Tu usuario no tiene permiso para esta operación.' }));
+    }
+    if (propio) return next.handle();
+    const modulo = RUTAS_POR_MODULO.find(([prefijo]) => ruta === prefijo || ruta.startsWith(prefijo + '/'))?.[1];
     if (!modulo) return next.handle();
     const permisos = usuario.permisos && typeof usuario.permisos === 'object'
       ? usuario.permisos as Record<string, unknown>

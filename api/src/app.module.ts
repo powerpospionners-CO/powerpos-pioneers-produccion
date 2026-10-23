@@ -32,9 +32,12 @@ import { ComprasModule } from './compras/compras.module';
 import { PlanAccessInterceptor } from './suscripciones/plan-access.interceptor';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { SedeInterceptor } from './prisma/sede.interceptor';
+import { EventosModule } from './eventos/eventos.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
+    EventosModule,
     AdministracionModule,
     TiendaModule,
     // La copia de migración no debe enviar alertas ni ejecutar cierres en paralelo.
@@ -65,7 +68,7 @@ import { SedeInterceptor } from './prisma/sede.interceptor';
     SuscripcionesModule,
     ComprasModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [AppService, { provide: APP_INTERCEPTOR, useClass: SedeInterceptor }, { provide: APP_INTERCEPTOR, useClass: PlanAccessInterceptor }],
 })
 export class AppModule {}

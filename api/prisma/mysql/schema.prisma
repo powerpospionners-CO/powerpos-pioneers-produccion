@@ -6,6 +6,22 @@ generator client {
   binaryTargets = ["native", "windows"]
 }
 
+// Canal compartido y trabajos reclamados una sola vez entre procesos.
+model EventoSistema {
+  id String @id @default(uuid())
+  empresaId Int
+  sucursalId Int?
+  canal String
+  datos Json
+  creadoEn DateTime @default(now())
+  venceEn DateTime
+  reclamadoEn DateTime?
+  confirmacion Json?
+  @@index([empresaId, sucursalId, canal, creadoEn])
+  @@index([venceEn])
+  @@map("eventos_sistema")
+}
+
 // Control-plane tables. Never copy their records into an operational database.
 model BaseSede {
   id Int @id @default(autoincrement())

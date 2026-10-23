@@ -4,7 +4,7 @@
 
 Consulta el [expediente académico y técnico](docs/README.md) y el [paquete de entrega al cliente](docs/cliente/README.md), con requerimientos, diagramas entidad-relación, diccionario de datos, API, instalación, manuales, pruebas y acta de entrega. Las versiones imprimibles están en [docs/entregables](docs/entregables/).
 
-La documentación describe el código revisado el 15 de septiembre de 2026 y distingue funciones observadas, limitaciones y pruebas pendientes.
+El expediente inicial describe el código del 15 de septiembre de 2026. El estado de arquitectura, las correcciones del 23 de octubre y los pasos de activación están en [operación y validación](docs/operacion-y-validacion.md).
 
 Sistema POS multiempresa con flujos de restaurante y comercio.
 
@@ -21,7 +21,7 @@ El super admin configura cada empresa como restaurante, supermercado, tienda u o
 - **Super admin:** elige el tipo al crear la empresa y puede cambiarlo en su configuración. Al cambiar una empresa existente a comercio, revisa los códigos y existencias de sus productos antes de vender.
 - **Tema:** el botón de sol/luna en la barra superior permite alternar claro y oscuro; la preferencia se guarda en el navegador.
 
-La migración `20260918090000_tipos_negocio_stock_retail` añade el tipo de negocio y los campos de comercio sin modificar pedidos ni recetas existentes. El control de existencias es por empresa y por unidades enteras. Devoluciones, inventario por sucursal, venta por peso e integración con escáneres especiales aún requieren desarrollo; los lectores que escriben el código como teclado sí funcionan. La facturación electrónica no está implementada.
+El comercio incluye devoluciones, crédito, presentaciones y venta a granel; el inventario guarda unidades base enteras (unidades, gramos o mililitros). El aislamiento físico por sede utiliza una base operativa independiente y una base central de control. Los lectores de códigos que funcionan como teclado son compatibles. La integración de balanzas y otros dispositivos especiales depende de su protocolo. La facturación electrónica DIAN no está implementada; el campo de habilitación no equivale a una integración fiscal.
 
 La migración `20260919100000_ingredientes_por_empresa` asigna cada ingrediente a una empresa. Si detecta que un ingrediente está compartido entre empresas o no puede identificar su dueño en una base con varias empresas, se detiene para evitar una asignación incorrecta. La API filtra inventario, ventas, cajas y usuarios usando la empresa del usuario autenticado, y valida las referencias entre registros antes de guardarlas.
 
@@ -34,24 +34,30 @@ La migración `20260919100000_ingredientes_por_empresa` asigna cada ingrediente 
 - ✅ Inventario inteligente — descuento automático por receta
 - ✅ Autenticación JWT con roles
 - ✅ Arquitectura multiempresa
+- ✅ Compras, proveedores, crédito, devoluciones y administración financiera
+- ✅ Tienda pública, domicilios, fidelización y distribuidores
+- ✅ Suscripciones y validación de pagos Wompi
+- ✅ Aplicación Windows con impresión local — ver [desktop/README.md](desktop/README.md)
 
 ## Roles del sistema
 
 | Rol | Acceso |
 |-----|--------|
 | SUPERADMIN | Gestión global de empresas |
-| ADMIN_EMPRESA | Dashboard, POS, Cocina, Productos |
-| GERENTE | Dashboard, reportes |
+| ADMIN_EMPRESA | Administración de su empresa según plan y permisos |
+| GERENTE | Gestión operativa, productos y reportes según permisos |
 | CAJERO | POS — registro de pedidos |
 | COCINERO | KDS — pantalla de cocina |
+| DOMICILIARIO | Pedidos y operación de entregas autorizada |
+| DISTRIBUIDOR | Pedidos de su perfil de distribución habilitado |
 
 ## Stack tecnológico
 
 ### Backend
 - NestJS + TypeScript
-- PostgreSQL + Prisma ORM
+- PostgreSQL o MySQL/MariaDB + Prisma ORM, con clientes separados
 - JWT + Passport
-- Redis
+- Eventos SSE locales o compartidos en base de datos mediante `EVENTOS_COMPARTIDOS`
 - Docker
 
 ### Frontend
@@ -62,7 +68,7 @@ La migración `20260919100000_ingredientes_por_empresa` asigna cada ingrediente 
 
 ## Requisitos previos
 
-- Node.js 20+
+- Node.js 22 LTS
 - Docker Desktop
 - npm
 
@@ -92,7 +98,7 @@ Crea el archivo `.env` en la carpeta `api`:
 
 ```env
 DATABASE_URL="postgresql://powerpos:powerpos123@localhost:5432/powerpos_dev?schema=public"
-JWT_SECRET="powerpos_jwt_super_secreto_2024"
+JWT_SECRET="REEMPLAZAR_POR_UN_SECRETO_ALEATORIO_PRIVADO"
 ```
 
 ```bash
@@ -118,7 +124,21 @@ npm run dev
 
 El frontend corre en `http://localhost:3001`
 
+Ejecuta `npm run dev -- --port 3001` si el backend ocupa el puerto 3000. Configura `NEXT_PUBLIC_API_URL` al desplegar fuera del equipo local.
+
+## Producción y comprobaciones
+
+La documentación de migración registra MariaDB en Hostinger. No ejecutes las migraciones PostgreSQL contra MariaDB: usa el cliente y SQL del motor correspondiente. La configuración local en Docker sigue siendo PostgreSQL para desarrollo; Redis es opcional y no transporta los eventos actuales.
+
+La API expone `/health` para comprobar el proceso y `/health/ready` para comprobar la base central y el estado de mantenimiento. Los permisos individuales se aplican además del rol y del plan, y nunca amplían lo autorizado a la empresa. Login y registro validan entradas y limitan intentos.
+
+El canal compartido requiere aplicar la nueva tabla en control y cada sede antes de activar `EVENTOS_COMPARTIDOS=true`. Ver [procedimiento de operación](docs/operacion-y-validacion.md). Las acciones pendientes de impresión no se reenvían automáticamente cuando su entrega pudo haber ocurrido.
+
+La integración continua está en `.github/workflows/validacion.yml`; incluye pruebas unitarias, contrato HTTP, flujo POS con bases efímeras PostgreSQL/MariaDB, compilación web y comprobación de escritorio. Un workflow preparado no acredita una ejecución remota hasta que GitHub lo ejecute.
+
 ## Usuarios de prueba
+
+Estos usuarios pertenecen al seed de desarrollo. No cargues el seed ni reutilices estas contraseñas en producción.
 
 | Usuario | Email | Password | Rol |
 |---------|-------|----------|-----|
