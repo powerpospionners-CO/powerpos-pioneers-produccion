@@ -71,6 +71,7 @@ export class UsuariosService {
         activo: true,
         permisos: true,
         creadoEn: true,
+        sucursalId: true,
         sucursal: { select: { nombre: true } },
       },
       orderBy: { creadoEn: 'asc' },
@@ -94,16 +95,28 @@ export class UsuariosService {
     return usuario;
   }
 
-  async actualizar(id: number, datos: any, empresaId: number) {
-    await this.obtener(id, empresaId);
-    if (datos.rol === 'SUPERADMIN') throw new BadRequestException('Rol no permitido');
+  async actualizar(id: number, datos: any, empresaId: number, actorId?: number) {
+    if (!Number.isSafeInteger(id) || id < 1 || !datos || typeof datos !== 'object' || Array.isArray(datos)) throw new BadRequestException('Datos de usuario no válidos');
+    const actual = await this.obtener(id, empresaId);
+    if (actual.rol === 'SUPERADMIN' || (datos.rol !== undefined && !['ADMIN_EMPRESA', 'GERENTE', 'CAJERO', 'COCINERO', 'DOMICILIARIO', 'DISTRIBUIDOR'].includes(datos.rol))) throw new BadRequestException('Rol no permitido');
+    if (id === actorId && datos.rol !== undefined && datos.rol !== actual.rol) throw new BadRequestException('No puedes cambiar tu propio rol');
+    if (datos.nombre !== undefined && (typeof datos.nombre !== 'string' || !datos.nombre.trim() || datos.nombre.trim().length > 191)) throw new BadRequestException('Nombre no válido');
+    if (datos.email !== undefined && (typeof datos.email !== 'string' || datos.email.trim().length > 191 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email.trim()))) throw new BadRequestException('Email no válido');
+    if (datos.password !== undefined && (typeof datos.password !== 'string' || datos.password.length < 10 || Buffer.byteLength(datos.password, 'utf8') > 72)) throw new BadRequestException('La contraseña debe tener al menos 10 caracteres y un máximo de 72 bytes');
+    if (datos.sucursalId !== undefined && datos.sucursalId !== null && (!Number.isSafeInteger(datos.sucursalId) || datos.sucursalId < 1)) throw new BadRequestException('Sucursal no válida');
     if (datos.sucursalId) {
       const sucursal = await this.prisma.sucursal.findFirst({ where: { id: Number(datos.sucursalId), empresaId } });
       if (!sucursal) throw new BadRequestException('La sucursal no pertenece a esta empresa');
     }
 
     const data: any = {};
-    if (datos.nombre !== undefined) data.nombre = datos.nombre;
+    if (datos.nombre !== undefined) data.nombre = datos.nombre.trim();
+    if (datos.email !== undefined) {
+      const email = datos.email.trim().toLowerCase();
+      const duplicado = await this.prisma.usuario.findUnique({ where: { email } });
+      if (duplicado && duplicado.id !== id) throw new ConflictException('Ya existe un usuario con ese email');
+      data.email = email;
+    }
     if (datos.rol !== undefined) data.rol = datos.rol;
     if (datos.sucursalId !== undefined) data.sucursalId = datos.sucursalId || null;
     if (datos.permisos !== undefined) data.permisos = datos.permisos;
@@ -114,6 +127,9 @@ export class UsuariosService {
     const usuario = await this.prisma.usuario.update({
       where: { id },
       data,
+    }).catch(error => {
+      if (error.code === 'P2002') throw new ConflictException('Ya existe un usuario con ese email');
+      throw error;
     });
 
     const { password, ...resultado } = usuario;

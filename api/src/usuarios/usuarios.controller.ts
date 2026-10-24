@@ -36,9 +36,9 @@ export class UsuariosController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  @Roles('ADMIN_EMPRESA')
   actualizar(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.usuariosService.actualizar(+id, body, req.user.empresaId);
+    return this.usuariosService.actualizar(+id, body, req.user.empresaId, req.user.id);
   }
 
   @Patch(':id/permisos')

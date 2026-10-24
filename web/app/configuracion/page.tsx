@@ -52,6 +52,8 @@ export default function ConfiguracionPage() {
   // ---- Usuarios ----
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [modalNuevoUsuario, setModalNuevoUsuario] = useState(false);
+  const [usuarioEditando, setUsuarioEditando] = useState<number | null>(null);
+  const [errorUsuario, setErrorUsuario] = useState('');
   const [modalPermisos, setModalPermisos] = useState<any>(null);
   const [permisosTemp, setPermisosTemp] = useState<any>(permisosVacios());
   const [loadingUsuario, setLoadingUsuario] = useState(false);
@@ -193,21 +195,35 @@ export default function ConfiguracionPage() {
   };
 
   const crearUsuario = async () => {
-    if (!formNuevoUsuario.nombre || !formNuevoUsuario.email || !formNuevoUsuario.password) return;
+    if (!formNuevoUsuario.nombre.trim() || !formNuevoUsuario.email.trim() || (!usuarioEditando && !formNuevoUsuario.password)) {
+      setErrorUsuario('Completa nombre, email y, para usuarios nuevos, contraseña.'); return;
+    }
     setLoadingUsuario(true);
+    setErrorUsuario('');
     try {
-      await api.post('/usuarios', {
+      const datos = {
         ...formNuevoUsuario,
+        ...(usuarioEditando && !formNuevoUsuario.password ? { password: undefined } : {}),
         sucursalId: formNuevoUsuario.sucursalId ? Number(formNuevoUsuario.sucursalId) : null,
-      });
+      };
+      if (usuarioEditando) await api.patch(`/usuarios/${usuarioEditando}`, datos);
+      else await api.post('/usuarios', datos);
       setModalNuevoUsuario(false);
+      setUsuarioEditando(null);
       setFormNuevoUsuario({ nombre: '', email: '', password: '', rol: 'CAJERO', sucursalId: '' });
       cargarUsuarios();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setErrorUsuario(e?.response?.data?.message || 'No se pudo guardar el usuario.');
     } finally {
       setLoadingUsuario(false);
     }
+  };
+
+  const editarUsuario = (u: any) => {
+    setUsuarioEditando(u.id);
+    setErrorUsuario('');
+    setFormNuevoUsuario({ nombre: u.nombre, email: u.email, password: '', rol: u.rol, sucursalId: u.sucursalId ? String(u.sucursalId) : '' });
+    setModalNuevoUsuario(true);
   };
 
   const abrirPermisos = (u: any) => {
@@ -657,6 +673,7 @@ export default function ConfiguracionPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {usuario?.rol === 'ADMIN_EMPRESA' && <button type="button" onClick={() => editarUsuario(u)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-lg">Editar</button>}
                       <button
                         onClick={() => abrirPermisos(u)}
                         className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-lg transition-colors"
@@ -727,7 +744,8 @@ export default function ConfiguracionPage() {
         {modalNuevoUsuario && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
             <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-md border border-gray-800">
-              <h3 className="text-white font-bold text-lg mb-4">Nuevo usuario</h3>
+              <h3 className="text-white font-bold text-lg mb-4">{usuarioEditando ? 'Editar usuario' : 'Nuevo usuario'}</h3>
+              {errorUsuario && <p role="alert" className="mb-3 text-sm text-red-400">{errorUsuario}</p>}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Nombre</label>
@@ -742,7 +760,7 @@ export default function ConfiguracionPage() {
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Contraseña</label>
+                  <label className="block text-sm text-gray-400 mb-1">{usuarioEditando ? 'Nueva contraseña (opcional, mínimo 10 caracteres)' : 'Contraseña'}</label>
                   <input type="password" value={formNuevoUsuario.password}
                     onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, password: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500" />
@@ -750,10 +768,10 @@ export default function ConfiguracionPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Rol</label>
-                    <select value={formNuevoUsuario.rol}
+                    <select value={formNuevoUsuario.rol} disabled={usuarioEditando === usuario?.id}
                       onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, rol: e.target.value })}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">
-                      {ROLES.map((r) => (
+                      {[...ROLES, ...(formNuevoUsuario.rol === 'DISTRIBUIDOR' ? ['DISTRIBUIDOR'] : [])].map((r) => (
                         <option key={r} value={r}>{r.replace('_', ' ')}</option>
                       ))}
                     </select>
@@ -764,22 +782,22 @@ export default function ConfiguracionPage() {
                       onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, sucursalId: e.target.value })}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">
                       <option value="">Sin asignar</option>
-                      {sucursales.filter((s) => s.activo).map((s) => (
+                      {sucursales.filter((s) => s.activo || String(s.id) === formNuevoUsuario.sucursalId).map((s) => (
                         <option key={s.id} value={s.id}>{s.nombre}</option>
                       ))}
                     </select>
                   </div>
                 </div>
-                <p className="text-gray-600 text-xs">Los permisos por módulo se configuran después de crear el usuario</p>
+                <p className="text-gray-600 text-xs">{usuarioEditando ? 'Deja la contraseña vacía para conservar la actual. Los permisos se administran con el botón Permisos.' : 'Los permisos por módulo se configuran después de crear el usuario'}</p>
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={() => setModalNuevoUsuario(false)}
+                <button disabled={loadingUsuario} onClick={() => { setModalNuevoUsuario(false); setUsuarioEditando(null); setErrorUsuario(''); setFormNuevoUsuario({ nombre: '', email: '', password: '', rol: 'CAJERO', sucursalId: '' }); }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors">
                   Cancelar
                 </button>
                 <button onClick={crearUsuario} disabled={loadingUsuario}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white font-bold rounded-lg py-3 transition-colors">
-                  {loadingUsuario ? 'Creando...' : 'Crear usuario'}
+                  {loadingUsuario ? 'Guardando...' : usuarioEditando ? 'Guardar cambios' : 'Crear usuario'}
                 </button>
               </div>
             </div>
