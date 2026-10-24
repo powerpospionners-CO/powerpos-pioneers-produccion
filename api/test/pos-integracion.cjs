@@ -115,6 +115,36 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     const cierre = (await http.post(`/caja/${caja.id}/cerrar`).set('Authorization', token).send({ montoFinal: 70000 }).expect(201)).body;
     assert.equal(cierre.estado, 'CERRADA'); assert.equal(Number(cierre.totalEfectivo), 20000); assert.equal(Number(cierre.diferencia), 0);
     console.log('PASS apertura → venta → reintento → crédito → cobro → devolución → cierre sin diferencias');
+    // Recaudo: solo se restan gastos marcados; ni costos contables ni gastos bancarios.
+    const { rangoSemana, fechaBogota, sumarDias } = require('../dist/src/caja/calendario-caja');
+    const hoy = fechaBogota(new Date());
+    const lunesActual = sumarDias(hoy, -((new Date(hoy + 'T12:00:00Z').getUTCDay() + 6) % 7));
+    const semana = sumarDias(lunesActual, -7), rango = rangoSemana(semana);
+    const fechaGasto = new Date(rango.desde.getTime() + 3600000).toISOString();
+    await db.empresa.update({ where: { id: empresa.id }, data: { recaudoEfectivoHabilitado: true } });
+    await db.sucursal.update({ where: { id: sede.id }, data: { baseEfectivoCaja: 50000 } });
+    await db.retiroEfectivoCaja.create({ data: { empresaId: empresa.id, sucursalId: sede.id, usuarioId: usuario.id, cajaId: caja.id, montoEsperado: 1000, montoRetirado: 1000, creadoEn: new Date(fechaGasto) } });
+    const gastoMarcado = (await http.post('/financiero/movimiento').set('Authorization', token).send({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: 'Gasto pagado del recaudo', monto: 200, fecha: fechaGasto, pagadoConRecaudo: true }).expect(201)).body;
+    await http.post('/financiero/movimiento').set('Authorization', token).send({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: 'Gasto pagado por banco', monto: 300, fecha: fechaGasto, pagadoConRecaudo: false }).expect(201);
+    await http.post('/financiero/movimiento').set('Authorization', token).send({ tipo: 'EGRESO', categoria: 'COSTO_VENTA', descripcion: 'No es una salida de caja nueva', monto: 300, fecha: fechaGasto, pagadoConRecaudo: true }).expect(400);
+    let recaudo = (await http.get('/caja/recaudo/semanal').query({ periodoInicio: semana }).set('Authorization', token).expect(200)).body;
+    assert.equal(recaudo.gastosDelRecaudo, 200); assert.equal(recaudo.disponibleConsignar, 800);
+    await http.patch(`/financiero/movimiento/${gastoMarcado.id}`).set('Authorization', token).send({ pagadoConRecaudo: false }).expect(200);
+    recaudo = (await http.get('/caja/recaudo/semanal').query({ periodoInicio: semana }).set('Authorization', token).expect(200)).body;
+    assert.equal(recaudo.gastosDelRecaudo, 0);
+    await http.patch(`/financiero/movimiento/${gastoMarcado.id}`).set('Authorization', token).send({ pagadoConRecaudo: true }).expect(200);
+    await http.post('/compras/saldo-inicial').set('Authorization', token).send({ monto: 10000 }).expect(201);
+    await db.saldoInicialCuenta.update({ where: { empresaId: empresa.id }, data: { desde: rango.desde } });
+    await http.post('/compras').set('Authorization', token).send({ categoria: 'SERVICIOS', descripcion: 'Servicio pagado del recaudo', monto: 50, fecha: fechaGasto, pagadoConRecaudo: true }).expect(201);
+    recaudo = (await http.get('/caja/recaudo/semanal').query({ periodoInicio: semana }).set('Authorization', token).expect(200)).body;
+    assert.equal(recaudo.gastosDelRecaudo, 250); assert.equal(recaudo.disponibleConsignar, 750); assert.equal(recaudo.gastos.length, 2);
+    const consignacion = (await http.post('/caja/recaudo/consignar').set('Authorization', token).send({ periodoInicio: semana, montoConsignado: 750 }).expect(201)).body;
+    assert.equal(consignacion.diferencia, 0); assert.equal(consignacion.efectivoRecaudado, 1000);
+    // Cambios posteriores no reescriben el cálculo guardado al consignar.
+    await http.patch(`/financiero/movimiento/${gastoMarcado.id}`).set('Authorization', token).send({ monto: 220 }).expect(200);
+    recaudo = (await http.get('/caja/recaudo/semanal').query({ periodoInicio: semana }).set('Authorization', token).expect(200)).body;
+    assert.equal(recaudo.gastosDelRecaudo, 270); assert.equal(recaudo.consignacion.esperadoAlRegistrar, 750); assert.equal(recaudo.consignacion.diferencia, 0);
+    console.log('PASS recaudo menos gastos marcados, cambio de origen y cierre histórico conservado');
 
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));

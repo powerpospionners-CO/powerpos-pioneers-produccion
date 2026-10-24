@@ -2,12 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { excelReport } from '../common/excel-report';
 import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { PrismaService } from '../prisma/prisma.service';
+import { guardarMarcaRecaudo, idsGastosRecaudo, validarMarcaRecaudo } from '../caja/gastos-recaudo';
 
 @Injectable()
 export class FinancieroService {
   constructor(private prisma: PrismaService) {}
 
   async registrarMovimiento(datos: any, usuarioId: number, empresaId: number, sucursalId: number) {
+    validarMarcaRecaudo(datos.pagadoConRecaudo, datos.tipo, datos.categoria, datos.pedidoId);
     if (datos.categoria === 'COMPRA_MERCANCIA') {
       throw new BadRequestException('Registra la compra de mercancía desde el módulo Compras para actualizar el inventario');
     }
@@ -49,7 +51,8 @@ export class FinancieroService {
           },
         },
       });
-      return movimiento;
+      await guardarMarcaRecaudo(tx, empresaId, usuarioId, movimiento.id, datos.pagadoConRecaudo === true ? true : undefined);
+      return { ...movimiento, pagadoConRecaudo: datos.pagadoConRecaudo === true };
     });
   }
 
@@ -59,6 +62,7 @@ export class FinancieroService {
   async editarMovimiento(id: number, datos: any, empresaId: number, usuarioId: number) {
     const movimiento = await this.prisma.movimientoFinanciero.findFirst({ where: { id, empresaId } });
     if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+    validarMarcaRecaudo(datos.pagadoConRecaudo, movimiento.tipo, datos.categoria ?? movimiento.categoria, movimiento.pedidoId);
     if (movimiento.compraGastoId !== null) {
       throw new ForbiddenException('Este movimiento está vinculado a Compras y no se puede editar aquí');
     }
@@ -112,6 +116,7 @@ export class FinancieroService {
           },
         },
       });
+      await guardarMarcaRecaudo(tx, empresaId, usuarioId, id, datos.pagadoConRecaudo);
       return actualizado;
     });
   }
@@ -178,7 +183,7 @@ export class FinancieroService {
     // rango, aunque sí cumplían el filtro de fecha).
     const sinLimite = filtros?.completo || filtros?.fechaDesde || filtros?.fechaHasta;
 
-    return this.prisma.movimientoFinanciero.findMany({
+    const movimientos = await this.prisma.movimientoFinanciero.findMany({
       where,
       include: {
         usuario: { select: { nombre: true } },
@@ -187,6 +192,8 @@ export class FinancieroService {
       orderBy: { fecha: 'desc' },
       take: sinLimite ? undefined : 100,
     });
+    const marcados = await idsGastosRecaudo(this.prisma, empresaId, movimientos.map(m => m.id));
+    return movimientos.map(m => ({ ...m, pagadoConRecaudo: marcados.has(m.id) }));
   }
 
   private async ventasPorMetodoPagoEnRango(empresaId: number, fechaDesde?: string, fechaHasta?: string) {

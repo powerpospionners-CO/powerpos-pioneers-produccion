@@ -30,6 +30,11 @@ type ResumenRecaudo = {
   semanaCompleta: boolean;
   ventasEfectivo: number;
   efectivoRecaudado: number;
+  gastosDelRecaudo: number;
+  saldoDespuesGastos: number;
+  disponibleConsignar: number;
+  faltanteParaGastos: number;
+  gastos: { id: number; descripcion: string; monto: number; fecha: string; registradoPor: string }[];
   diferenciaRecaudo: number;
   retiros: Retiro[];
   consignacion: {
@@ -38,6 +43,8 @@ type ResumenRecaudo = {
     fechaConsignacion: string;
     referencia: string | null;
     usuario: string;
+    esperadoAlRegistrar: number;
+    gastosAlRegistrar: number | null;
   } | null;
 };
 
@@ -98,7 +105,7 @@ export default function RecaudoSemanalPage() {
         params: { periodoInicio: inicio },
       });
       setResumen(data);
-      setMontoConsignado(String(data.efectivoRecaudado));
+      setMontoConsignado(String(data.disponibleConsignar ?? data.efectivoRecaudado));
     } catch (e: any) {
       setError(e?.response?.data?.message || 'No se pudo cargar el recaudo de la semana.');
       setResumen(null);
@@ -224,6 +231,12 @@ export default function RecaudoSemanalPage() {
                       <div className={`rounded-xl border p-4 ${resumen.diferenciaRecaudo === 0 ? 'border-green-500/30' : 'border-yellow-500/30'}`}><p className="text-xs text-gray-400">Diferencia de retiros</p><p className="mt-1 text-lg font-bold">{moneda(resumen.diferenciaRecaudo)}</p></div>
                     </div>
 
+                    <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-4">
+                      <div className="grid gap-4 sm:grid-cols-3"><div><p className="text-xs text-gray-400">Efectivo retirado de caja</p><p className="mt-1 font-semibold">{moneda(resumen.efectivoRecaudado)}</p></div><div><p className="text-xs text-gray-400">Menos gastos pagados del recaudo</p><p className="mt-1 font-semibold text-orange-300">− {moneda(resumen.gastosDelRecaudo ?? 0)}</p></div><div><p className="text-xs text-gray-300">Disponible para consignar</p><p className="mt-1 text-xl font-bold text-green-300">{moneda(resumen.disponibleConsignar ?? resumen.efectivoRecaudado)}</p></div></div>
+                      <p className="mt-3 text-xs text-gray-400">Solo se descuentan los gastos marcados como “Pagado con dinero del recaudo”, por su fecha y sucursal. La base fija no se utiliza.</p>
+                      {resumen.faltanteParaGastos > 0 && <p role="alert" className="mt-3 text-sm text-yellow-300">Los gastos superan el efectivo retirado en {moneda(resumen.faltanteParaGastos)}. Revisa cómo se cubrió ese faltante.</p>}
+                    </div>
+                    {(resumen.gastos?.length ?? 0) > 0 && <details className="mt-4 rounded-xl border border-gray-800 p-4"><summary className="cursor-pointer text-sm font-medium">Ver gastos descontados ({resumen.gastos.length})</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-gray-400"><tr><th className="p-2">Fecha</th><th className="p-2">Gasto</th><th className="p-2">Registrado por</th><th className="p-2 text-right">Valor</th></tr></thead><tbody>{resumen.gastos.map(g => <tr key={g.id} className="border-t border-gray-800"><td className="p-2">{new Date(g.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}</td><td className="p-2">{g.descripcion}</td><td className="p-2">{g.registradoPor}</td><td className="p-2 text-right">{moneda(g.monto)}</td></tr>)}</tbody></table></div></details>}
                     {resumen.retiros.length > 0 ? (
                       <div className="mt-5 overflow-x-auto rounded-xl border border-gray-800">
                         <table className="w-full text-left text-sm">
@@ -239,7 +252,9 @@ export default function RecaudoSemanalPage() {
                         <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
                           <p>Fecha: <strong>{new Date(resumen.consignacion.fechaConsignacion).toLocaleDateString('es-CO')}</strong></p>
                           <p>Consignado: <strong>{moneda(resumen.consignacion.montoConsignado)}</strong></p>
-                          <p>Diferencia frente al recaudo: <strong className={resumen.consignacion.diferencia === 0 ? 'text-green-300' : 'text-yellow-300'}>{moneda(resumen.consignacion.diferencia)}</strong></p>
+                          <p>Diferencia frente al valor esperado al registrar: <strong className={resumen.consignacion.diferencia === 0 ? 'text-green-300' : 'text-yellow-300'}>{moneda(resumen.consignacion.diferencia)}</strong></p>
+                          <p>Esperado al registrar: <strong>{moneda(resumen.consignacion.esperadoAlRegistrar)}</strong></p>
+                          {resumen.consignacion.gastosAlRegistrar !== null && <p>Gastos descontados al registrar: <strong>{moneda(resumen.consignacion.gastosAlRegistrar)}</strong></p>}
                           <p>Registró: <strong>{resumen.consignacion.usuario}</strong></p>
                           {resumen.consignacion.referencia && <p className="sm:col-span-2">Referencia: <strong>{resumen.consignacion.referencia}</strong></p>}
                         </div>
@@ -247,7 +262,7 @@ export default function RecaudoSemanalPage() {
                     ) : (
                       <form onSubmit={guardarConsignacion} className="mt-5 rounded-xl border border-gray-800 p-4">
                         <h3 className="font-semibold">Registrar envío a la cuenta de la empresa</h3>
-                        <p className="mt-1 text-sm text-gray-400">Valor esperado para consignar: <strong className="text-white">{moneda(resumen.efectivoRecaudado)}</strong> (retiros de ventas; excluye la base fija).</p>
+                        <p className="mt-1 text-sm text-gray-400">Valor esperado para consignar: <strong className="text-white">{moneda(resumen.disponibleConsignar ?? resumen.efectivoRecaudado)}</strong> (efectivo retirado menos gastos pagados del recaudo; excluye la base fija).</p>
                         {!resumen.semanaCompleta && <p className="mt-2 text-sm text-yellow-200">El período aún no termina; la consignación se habilita al finalizar el domingo.</p>}
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
                           <label className="text-sm text-gray-300">Fecha del envío

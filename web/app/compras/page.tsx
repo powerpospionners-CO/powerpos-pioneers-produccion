@@ -99,6 +99,7 @@ function ComprasContenido() {
   const [proveedores, setProveedores] = useState<{ id: number; nombre: string; activo: boolean }[]>([]);
   const [proveedorId, setProveedorId] = useState('');
   const [condicionPago, setCondicionPago] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
+  const [pagadoConRecaudo, setPagadoConRecaudo] = useState(false);
   const [documentoCompra, setDocumentoCompra] = useState('');
   const [vencimientoCompra, setVencimientoCompra] = useState('');
   const administracion = usuario?.permisos?.administracion === true;
@@ -183,6 +184,7 @@ function ComprasContenido() {
     setGuardando(true);
     try {
       await api.post('/compras', {
+        pagadoConRecaudo: (!administracion || condicionPago === 'CONTADO') && pagadoConRecaudo,
         categoria,
         descripcion: descripcion.trim(),
         ...(administracion ? {
@@ -202,6 +204,7 @@ function ComprasContenido() {
           : { monto: Number(monto) }),
       });
       setDescripcion('');
+      setPagadoConRecaudo(false);
       setMonto('');
       setLineas([nuevaLinea()]);
       setExito(condicionPago === 'CREDITO' && administracion
@@ -382,6 +385,7 @@ function ComprasContenido() {
                   </label>
                 )}
 
+                {(!administracion || condicionPago === 'CONTADO') && <label className="block rounded-xl border border-orange-500/25 bg-orange-500/5 p-3 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={pagadoConRecaudo} onChange={e => setPagadoConRecaudo(e.target.checked)} />Pagado con dinero del recaudo</span><span className="mt-1 block text-xs text-gray-400">Solo si se usó el efectivo ya retirado de caja. Este gasto se descontará del disponible semanal para consignar.</span></label>}
                 <button disabled={guardando || !saldo?.configurado || (esMercancia && (!productos.length || totalCompra <= 0))} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-3 font-semibold hover:bg-orange-500 disabled:opacity-50">
                   <Save size={18} />{guardando ? 'Guardando...' : 'Guardar egreso'}
                 </button>

@@ -49,6 +49,7 @@ export default function FinancieroPage() {
   const [editando, setEditando] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorForm, setErrorForm] = useState('');
+  const [pagadoConRecaudo, setPagadoConRecaudo] = useState(false);
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [desdePersonalizado, setDesdePersonalizado] = useState('');
   const [hastaPersonalizado, setHastaPersonalizado] = useState('');
@@ -120,6 +121,7 @@ export default function FinancieroPage() {
 
 
   const abrirModalNuevo = () => {
+    setPagadoConRecaudo(false);
     setEditando(null);
     setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '', fecha: '' });
     setErrorForm('');
@@ -127,6 +129,7 @@ export default function FinancieroPage() {
   };
 
   const abrirModalEditar = (mov: any) => {
+    setPagadoConRecaudo(mov.pagadoConRecaudo === true);
     setEditando(mov);
     setForm({ tipo: mov.tipo, categoria: mov.categoria, descripcion: mov.descripcion, monto: String(mov.monto), fecha: fechaLocal(mov.fecha) });
     setErrorForm('');
@@ -140,6 +143,7 @@ export default function FinancieroPage() {
     try {
       if (editando) {
         await api.patch(`/financiero/movimiento/${editando.id}`, {
+          pagadoConRecaudo,
           categoria: form.categoria,
           descripcion: form.descripcion,
           monto: Number(form.monto),
@@ -147,6 +151,7 @@ export default function FinancieroPage() {
         });
       } else {
         await api.post('/financiero/movimiento', {
+          pagadoConRecaudo: form.tipo === 'EGRESO' && pagadoConRecaudo,
           tipo: form.tipo,
           categoria: form.categoria,
           descripcion: form.descripcion,
@@ -507,6 +512,7 @@ export default function FinancieroPage() {
                 </div>
               </div>
 
+              {form.tipo === 'EGRESO' && <label className="mt-4 block rounded-xl border border-orange-500/25 bg-orange-500/5 p-3 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={pagadoConRecaudo} onChange={e => setPagadoConRecaudo(e.target.checked)} />Pagado con dinero del recaudo</span><span className="mt-1 block text-xs text-gray-400">Marca solo si salió del efectivo ya retirado de caja. Se descontará del disponible para consignar de la semana del gasto.</span></label>}
               {errorForm && (
                 <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg p-3 mt-4 text-sm">
                   {errorForm}

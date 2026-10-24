@@ -24,6 +24,7 @@ const CAMPOS: Record<string, string> = {
   categoriaId: 'Categoría', descripcion: 'Descripción', activo: 'Estado activo', cantidad: 'Cantidad',
   montoFinal: 'Dinero contado', motivo: 'Motivo', montoInicial: 'Base de caja', metodoPago: 'Medio de pago',
   estado: 'Estado', monto: 'Valor', direccion: 'Dirección', telefono: 'Teléfono',
+  pagadoConRecaudo: 'Pago con dinero del recaudo',
 };
 export const rolAuditoria = (rol?: string) => ({ ADMIN_EMPRESA: 'Administrador', GERENTE: 'Gerente', CAJERO: 'Cajero', COCINERO: 'Cocinero', DOMICILIARIO: 'Domiciliario', DISTRIBUIDOR: 'Distribuidor', SUPERADMIN: 'Administrador de PowerPOS' }[rol || ''] || 'Usuario');
 export const nombrePantalla = (ruta?: string) => {

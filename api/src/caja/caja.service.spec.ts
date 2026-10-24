@@ -23,6 +23,7 @@ function escenario() {
   };
   const db: any = {
     operacionVentaCaja: { findMany: jest.fn().mockResolvedValue([]) },
+    auditoria: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     sucursal: {
       findFirst: jest.fn().mockResolvedValue(caja.sucursal),

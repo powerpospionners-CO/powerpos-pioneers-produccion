@@ -5,6 +5,7 @@ import {
 import { CategoriaMovimiento, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { fechaDia, texto } from '../administracion/administracion.service';
+import { guardarMarcaRecaudo, validarMarcaRecaudo } from '../caja/gastos-recaudo';
 
 const CATEGORIAS_EGRESO = new Set<CategoriaMovimiento>([
   CategoriaMovimiento.COMPRA_MERCANCIA,
@@ -26,6 +27,7 @@ type ItemCompraInput = {
 };
 
 type CompraInput = {
+  pagadoConRecaudo?: boolean;
   proveedorId?: number;
   condicionPago?: 'CONTADO' | 'CREDITO';
   documento?: string;
@@ -133,6 +135,8 @@ export class ComprasService {
     const condicionPago = datos.condicionPago ?? 'CONTADO';
     if (!['CONTADO', 'CREDITO'].includes(condicionPago)) throw new BadRequestException('Condición de pago no válida');
     const credito = condicionPago === 'CREDITO';
+    validarMarcaRecaudo(datos.pagadoConRecaudo, 'EGRESO', datos.categoria);
+    if (credito && datos.pagadoConRecaudo) throw new BadRequestException('Una compra a crédito aún no se ha pagado; no puede descontarse del recaudo');
     let documento: string | undefined;
     let vencimiento: Date | undefined;
     if (credito || datos.proveedorId !== undefined) {
@@ -327,7 +331,8 @@ export class ComprasService {
           tercero: `${proveedor!.nombre} (${proveedor!.documento})`, documento: documento!,
           descripcion, monto, saldo: monto, vencimiento: vencimiento!, compraGastoId: compra.id,
         } });
-      } else await tx.movimientoFinanciero.create({
+      } else {
+        const movimiento = await tx.movimientoFinanciero.create({
         data: {
           empresaId,
           sucursalId,
@@ -339,7 +344,9 @@ export class ComprasService {
           fecha,
           compraGastoId: compra.id,
         },
-      });
+        });
+        if (datos.pagadoConRecaudo === true) await guardarMarcaRecaudo(tx, empresaId, usuarioId, movimiento.id, true);
+      }
       await tx.auditoria.create({
         data: {
           empresaId,

@@ -14,6 +14,7 @@ import { ImpresionService } from '../impresion/impresion.service';
 import { bloquearCajaSucursal } from './caja-lock';
 import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { impresionEnEscritorio } from '../impresion/transporte-escritorio';
+import { disponibleRecaudo, idsGastosRecaudo, SNAPSHOT_RECAUDO } from './gastos-recaudo';
 
 @Injectable()
 export class CajaService {
@@ -795,6 +796,17 @@ export class CajaService {
       (total, retiro) => total + Number(retiro.montoRetirado),
       0,
     );
+    const marcados = await idsGastosRecaudo(this.prisma, empresaId);
+    const gastos = marcados.size ? await this.prisma.movimientoFinanciero.findMany({
+      where: { empresaId, sucursalId, id: { in: [...marcados] }, tipo: 'EGRESO', categoria: { notIn: ['COSTO_VENTA', 'VENTA'] }, pedidoId: null, fecha: { gte: periodo.desde, lt: periodo.hasta } },
+      select: { id: true, descripcion: true, categoria: true, monto: true, fecha: true, usuario: { select: { nombre: true } } },
+      orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+    }) : [];
+    const gastosDelRecaudo = gastos.reduce((total, gasto) => total.plus(gasto.monto), new Prisma.Decimal(0)).toDecimalPlaces(2).toNumber();
+    const disponible = disponibleRecaudo(efectivoRecaudado, gastosDelRecaudo);
+    const snapshot = consignacion ? await this.prisma.auditoria.findFirst({ where: { empresaId, entidad: SNAPSHOT_RECAUDO, entidadId: consignacion.id }, orderBy: { id: 'desc' } }) : null;
+    const guardado = snapshot?.detalle as any;
+    const esperadoConsignacion = guardado?.disponibleConsignar ?? (consignacion ? Number(consignacion.efectivoRecaudado) : disponible.disponibleConsignar);
     const hoyBogota = fechaBogota(new Date());
     return {
       periodoInicio,
@@ -804,6 +816,9 @@ export class CajaService {
       semanaCompleta: periodo.fin < hoyBogota,
       ventasEfectivo,
       efectivoRecaudado,
+      gastosDelRecaudo,
+      ...disponible,
+      gastos: gastos.map(gasto => ({ ...gasto, monto: Number(gasto.monto), registradoPor: gasto.usuario.nombre })),
       diferenciaRecaudo: efectivoRecaudado - ventasEfectivo,
       retiros: retiros.map((retiro) => ({
         id: retiro.id,
@@ -822,7 +837,9 @@ export class CajaService {
             montoConsignado: Number(consignacion.montoConsignado),
             diferencia:
               Number(consignacion.montoConsignado) -
-              Number(consignacion.efectivoRecaudado),
+              esperadoConsignacion,
+            esperadoAlRegistrar: esperadoConsignacion,
+            gastosAlRegistrar: guardado?.gastosDelRecaudo ?? null,
             fechaConsignacion: consignacion.fechaConsignacion,
             referencia: consignacion.referencia,
             usuario: consignacion.usuario.nombre,
@@ -905,7 +922,8 @@ export class CajaService {
       throw new BadRequestException('La referencia no puede superar 120 caracteres');
     }
     try {
-      const consignacion = await this.prisma.consignacionEfectivo.create({
+      const consignacion = await this.prisma.$transaction(async tx => {
+        const registro = await tx.consignacionEfectivo.create({
         data: {
           empresaId,
           sucursalId,
@@ -918,13 +936,21 @@ export class CajaService {
           fechaConsignacion,
           referencia,
         },
+        });
+        await tx.auditoria.create({ data: {
+          empresaId, usuarioId, entidad: SNAPSHOT_RECAUDO, entidadId: registro.id, accion: 'REGISTRAR',
+          detalle: { efectivoRecaudado: resumen.efectivoRecaudado, gastosDelRecaudo: resumen.gastosDelRecaudo, disponibleConsignar: resumen.disponibleConsignar, gastos: resumen.gastos.map(g => ({ id: g.id, monto: g.monto })) },
+        } });
+        return registro;
       });
       return {
         ...consignacion,
         ventasEfectivo: Number(consignacion.ventasEfectivo),
         efectivoRecaudado: Number(consignacion.efectivoRecaudado),
         montoConsignado: Number(consignacion.montoConsignado),
-        diferencia: montoConsignado - resumen.efectivoRecaudado,
+        diferencia: montoConsignado - resumen.disponibleConsignar,
+        gastosDelRecaudo: resumen.gastosDelRecaudo,
+        disponibleConsignar: resumen.disponibleConsignar,
       };
     } catch (error) {
       if (
