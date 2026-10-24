@@ -23,7 +23,7 @@ export class AccesoBarrasController {
   @Roles('CAJERO')
   async guardar(@Param('id') id: string, @Body() body: any, @Request() req: any, @Headers('x-acceso-barras') token: string) {
     const producto = await this.servicio.guardar(req.user, token, +id, body);
-    req.auditoriaDetalle = { productoId: producto.id, nombre: producto.nombre, anterior: producto.anterior, nuevo: producto.codigoBarras };
+    req.auditoriaDetalle = { productoId: producto.id, tipo: producto.tipo, destinoId: producto.destinoId, nombre: producto.nombre, anterior: producto.anterior, nuevo: producto.codigoBarras };
     return producto;
   }
 }

@@ -50,7 +50,7 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     const acceso = (await http.post('/acceso-barras/desbloquear').set('Authorization', sesionPaula).send({ codigo: autorizacion.codigo }).expect(201)).body;
     const listadoBarras = (await http.get('/acceso-barras/productos').set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).expect(200)).body;
     assert(listadoBarras.productos.some(p => p.id === producto.id));
-    assert(listadoBarras.productos.every(p => Object.keys(p).sort().join(',') === 'codigoBarras,id,nombre'));
+    assert(listadoBarras.productos.every(p => Object.keys(p).sort().join(',') === 'codigoBarras,codigosBarras,id,nombre,presentaciones'));
     await http.patch(`/acceso-barras/productos/${producto.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ codigoBarras: '7700000000001', anterior: null, precio: 1 }).expect(400);
     await http.patch(`/acceso-barras/productos/${producto.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ codigoBarras: '7700000000001', anterior: null }).expect(200);
     await http.patch(`/acceso-barras/productos/${producto.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ codigoBarras: '7700000000002', anterior: null }).expect(409);
@@ -67,6 +67,28 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert(!JSON.stringify(auditoria).includes(acceso.token));
     assert(!JSON.stringify(auditoria).includes('NO_DEBE_VERSE'));
     await http.get('/auditoria').set('Authorization', sesionPaula).expect(403);
+    // Códigos por sabor completos no obligan a inventar un código del producto.
+    const porSabor = await db.producto.create({ data: { empresaId: empresa.id, categoriaId: categoria.id, nombre: 'Refresco sabores', precio: 12000, stockActual: 19 } });
+    const mango = await db.productoCodigoBarras.create({ data: { empresaId: empresa.id, productoId: porSabor.id, sabor: 'MANGO', codigoBarras: '7700000000010' } });
+    const pendientesAntes = (await http.get('/acceso-barras/productos?sinCodigo=true').set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).expect(200)).body;
+    assert(!pendientesAntes.productos.some(p => p.id === porSabor.id));
+    const presentacion = await db.productoPresentacion.create({ data: { productoId: porSabor.id, nombre: 'Paquete', factorUnidades: 6, precio: 65000 } });
+    const pendientesDespues = (await http.get('/acceso-barras/productos?sinCodigo=true').set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).expect(200)).body;
+    const pendiente = pendientesDespues.productos.find(p => p.id === porSabor.id);
+    assert(pendiente.presentaciones.some(p => p.id === presentacion.id && p.codigoBarras === null));
+    assert(pendiente.codigosBarras.some(p => p.sabor === 'MANGO'));
+    assert(!Object.hasOwn(pendiente.presentaciones[0], 'precio'));
+    await http.patch(`/acceso-barras/productos/${producto.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ tipo: 'PRESENTACION', destinoId: presentacion.id, codigoBarras: '7700000000011', anterior: null }).expect(404);
+    await http.patch(`/acceso-barras/productos/${porSabor.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ tipo: 'PRESENTACION', destinoId: presentacion.id, codigoBarras: '7700000000011', anterior: null, factorUnidades: 1 }).expect(400);
+    await http.patch(`/acceso-barras/productos/${porSabor.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ tipo: 'PRESENTACION', destinoId: presentacion.id, codigoBarras: '7700000000011', anterior: null }).expect(200);
+    await http.patch(`/acceso-barras/productos/${porSabor.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ tipo: 'SABOR', destinoId: mango.id, codigoBarras: '7700000000011', anterior: mango.codigoBarras }).expect(409);
+    await http.patch(`/acceso-barras/productos/${porSabor.id}`).set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send({ tipo: 'SABOR', destinoId: mango.id, codigoBarras: '7700000000012', anterior: mango.codigoBarras }).expect(200);
+    const presentacionGuardada = await db.productoPresentacion.findUnique({ where: { id: presentacion.id } });
+    assert.equal(presentacionGuardada.factorUnidades, 6); assert.equal(Number(presentacionGuardada.precio), 65000);
+    const productoSaboresGuardado = await db.producto.findUnique({ where: { id: porSabor.id } });
+    assert.equal(productoSaboresGuardado.codigoBarras, null); assert.equal(productoSaboresGuardado.stockActual, 19);
+    const pendientesFinal = (await http.get('/acceso-barras/productos?sinCodigo=true').set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).expect(200)).body;
+    assert(!pendientesFinal.productos.some(p => p.id === porSabor.id));
     await http.post(`/acceso-barras/usuarios/${paula.id}`).set('Authorization', token).send({ habilitado: false }).expect(201);
     await http.get('/acceso-barras/productos').set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).expect(403);
     assert.equal(login.body.usuario.permisosUsuario.productos.editar, false);

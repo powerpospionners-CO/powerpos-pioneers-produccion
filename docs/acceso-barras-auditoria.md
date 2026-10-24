@@ -12,7 +12,11 @@ La pantalla Productos · Códigos permite buscar productos activos, filtrar los
 que no tienen código y escanear con una pistola que escribe como teclado.
 La API acepta exclusivamente codigoBarras y el valor anterior. Valida empresa,
 sesión, duplicados de productos/sabores/presentaciones y cambios concurrentes.
-No permite editar nombre, precio, costo, existencias ni eliminar productos.
+Reconoce productos con códigos por sabor y presentaciones activas. El filtro de
+pendientes omite el código general cuando hay sabores/presentaciones, y detecta
+los códigos faltantes de esos elementos. Solo edita códigos de elementos ya
+creados; no permite crear sabores/presentaciones ni editar sus nombres, precios
+o factores de unidades. No permite editar nombre, precio, costo, existencias ni eliminar productos.
 El cambio y su auditoría local se confirman en una transacción.
 
 La autorización y las sesiones se representan como eventos versionados en la
