@@ -18,6 +18,7 @@ const ITEMS = [
   { href: '/caja/recaudo', label: 'Recaudo semanal', icon: Wallet },
   { href: '/productos', label: 'Productos', icon: Package },
   { href: '/codigos-barras', label: 'Productos · Códigos', icon: Package },
+  { href: '/gastos', label: 'Registrar gasto', icon: DollarSign },
   { href: '/auditoria', label: 'Auditoría', icon: BookOpen },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
   { href: '/clientes', label: 'Clientes', icon: Users },
@@ -65,6 +66,14 @@ export default function Navbar() {
   const [recaudoEfectivoHabilitado, setRecaudoEfectivoHabilitado] = useState(false);
   const [distribuidoresHabilitado, setDistribuidoresHabilitado] = useState(false);
   const [accesoBarras, setAccesoBarras] = useState(false);
+  const [accesoGastos, setAccesoGastos] = useState(false);
+  useEffect(() => {
+    setAccesoGastos(false);
+    if (usuario?.rol !== 'CAJERO') return;
+    let activo = true;
+    api.get('/acceso-gastos/estado').then(r => { if (activo) setAccesoGastos(r.data.habilitado); }).catch(() => undefined);
+    return () => { activo = false; };
+  }, [usuario?.id, usuario?.rol]);
   useEffect(() => { if (usuario?.id) api.post('/actividad/vista', { ruta: pathname }).catch(() => undefined); }, [pathname, usuario?.id]);
   useEffect(() => {
     setAccesoBarras(false);
@@ -94,6 +103,7 @@ export default function Navbar() {
   const itemsVisibles = ITEMS.filter((item) => {
     if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
+    if (item.href === '/gastos') return usuario?.rol === 'CAJERO' && accesoGastos;
     const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];
     if (individual === false || (typeof individual === 'object' && individual.ver !== true)) return false;
     if (item.href === '/administracion' && (!esAdminOGerente || usuario?.permisos?.administracion !== true)) return false;

@@ -3,23 +3,25 @@ import { excelReport } from '../common/excel-report';
 import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { guardarMarcaRecaudo, idsGastosRecaudo, validarMarcaRecaudo } from '../caja/gastos-recaudo';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class FinancieroService {
   constructor(private prisma: PrismaService) {}
 
-  async registrarMovimiento(datos: any, usuarioId: number, empresaId: number, sucursalId: number) {
+  async registrarMovimiento(datos: any, usuarioId: number, empresaId: number, sucursalId: number, transaccion?: Prisma.TransactionClient) {
+    const consulta = transaccion || this.prisma;
     validarMarcaRecaudo(datos.pagadoConRecaudo, datos.tipo, datos.categoria, datos.pedidoId);
     if (datos.categoria === 'COMPRA_MERCANCIA') {
       throw new BadRequestException('Registra la compra de mercancía desde el módulo Compras para actualizar el inventario');
     }
-    const sucursal = await this.prisma.sucursal.findFirst({ where: { id: sucursalId, empresaId, activo: true }, select: { id: true } });
+    const sucursal = await consulta.sucursal.findFirst({ where: { id: sucursalId, empresaId, activo: true }, select: { id: true } });
     if (!sucursal) throw new BadRequestException('La sucursal no pertenece a esta empresa');
     if (datos.pedidoId) {
-      const pedido = await this.prisma.pedido.findFirst({ where: { id: Number(datos.pedidoId), sucursal: { empresaId } }, select: { id: true } });
+      const pedido = await consulta.pedido.findFirst({ where: { id: Number(datos.pedidoId), sucursal: { empresaId } }, select: { id: true } });
       if (!pedido) throw new BadRequestException('La venta no pertenece a esta empresa');
     }
-    return this.prisma.$transaction(async (tx) => {
+    const operar = async (tx: Prisma.TransactionClient) => {
       const movimiento = await tx.movimientoFinanciero.create({
         data: {
           empresaId,
@@ -53,7 +55,8 @@ export class FinancieroService {
       });
       await guardarMarcaRecaudo(tx, empresaId, usuarioId, movimiento.id, datos.pagadoConRecaudo === true ? true : undefined);
       return { ...movimiento, pagadoConRecaudo: datos.pagadoConRecaudo === true };
-    });
+    };
+    return transaccion ? operar(transaccion) : this.prisma.$transaction(operar);
   }
 
   // Solo los egresos que el admin registró a mano (sin pedidoId) se pueden

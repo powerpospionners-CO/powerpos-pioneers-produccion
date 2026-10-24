@@ -14,7 +14,7 @@ const SUBDOMINIOS_RESERVADOS = new Set(['app', 'www', 'api']);
 // hacia la tienda pública. La raíz "/" del subdominio sigue mostrando la
 // tienda pública — es el enlace que se comparte con clientes.
 const RUTAS_PANEL = [
-  '/codigos-barras', '/auditoria',
+  '/codigos-barras', '/auditoria', '/gastos',
   '/login', '/auth', '/dashboard', '/pos', '/cocina', '/domicilios', '/productos',
   '/inventario', '/clientes', '/financiero', '/reportes', '/configuracion',
   '/mi-tienda', '/fidelizacion', '/consumo-empleados', '/cliente', '/llamado',

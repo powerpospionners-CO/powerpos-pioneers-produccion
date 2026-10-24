@@ -16,6 +16,7 @@ const MODULOS_POR_PLAN: Record<string, string[]> = {
 };
 
 const RUTAS_POR_MODULO: Array<[string, string]> = [
+  ['/acceso-gastos', 'financiero'],
   ['/administracion', 'financiero'],
   ['/suscripciones', 'suscripciones'],
   ['/pedidos', 'pos'],

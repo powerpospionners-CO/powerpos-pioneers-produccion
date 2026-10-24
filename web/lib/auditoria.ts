@@ -4,7 +4,7 @@ export type RegistroAuditoria = {
     metodo?: string; ruta?: string; estado?: number; recursoId?: number;
     actor?: { id?: number; nombre?: string; rol?: string; sucursalId?: number };
     campos?: string[];
-    cambio?: { nombre?: string; anterior?: string | null; nuevo?: string; pantalla?: string; tipo?: string };
+    cambio?: { nombre?: string; anterior?: string | null; nuevo?: string; pantalla?: string; tipo?: string; repetido?: boolean; gasto?: { id: number; categoria: string; descripcion: string; monto: number; fecha: string; pagadoConRecaudo: boolean } };
   };
 };
 
@@ -17,6 +17,7 @@ const PANTALLAS: Record<string, string> = {
   distribuidores: 'Distribuidores', distribuidor: 'Pedidos del distribuidor', suscripcion: 'Suscripción',
   'consumo-empleados': 'Consumo de empleados', catalogo: 'Catálogo', empresa: 'Configuración de la empresa',
   'acceso-barras': 'Códigos de barras', 'tienda-admin': 'Tienda en línea', adicionales: 'Adicionales', notificaciones: 'Notificaciones', preparaciones: 'Preparaciones', tareas: 'Tareas de cocina',
+  gastos: 'Gastos', 'acceso-gastos': 'Gastos',
 };
 const CAMPOS: Record<string, string> = {
   nombre: 'Nombre', email: 'Correo electrónico', rol: 'Rol', sucursalId: 'Sucursal', permisos: 'Permisos',
@@ -26,6 +27,7 @@ const CAMPOS: Record<string, string> = {
   estado: 'Estado', monto: 'Valor', direccion: 'Dirección', telefono: 'Teléfono',
   pagadoConRecaudo: 'Pago con dinero del recaudo',
 };
+const CATEGORIAS_GASTO: Record<string, string> = { OTROS: 'Otros gastos', COMPRA_INSUMOS: 'Compra de insumos', NOMINA: 'Nómina', SERVICIOS: 'Servicios', ARRIENDO: 'Arriendo', MANTENIMIENTO: 'Mantenimiento', IMPUESTOS: 'Impuestos', COMISION_DISTRIBUIDOR: 'Comisiones' };
 export const rolAuditoria = (rol?: string) => ({ ADMIN_EMPRESA: 'Administrador', GERENTE: 'Gerente', CAJERO: 'Cajero', COCINERO: 'Cocinero', DOMICILIARIO: 'Domiciliario', DISTRIBUIDOR: 'Distribuidor', SUPERADMIN: 'Administrador de PowerPOS' }[rol || ''] || 'Usuario');
 export const nombrePantalla = (ruta?: string) => {
   if (ruta === '/caja/recaudo') return 'Recaudo semanal';
@@ -54,6 +56,14 @@ export function describirAuditoria(registro: RegistroAuditoria) {
     if (ruta.includes('abrir-cajon')) { titulo = 'Solicitó abrir el cajón'; descripcion = 'Envió la orden de apertura del cajón de dinero.'; }
     else if (ruta.includes('comanda')) { titulo = 'Solicitó imprimir una comanda'; descripcion = 'Envió una comanda a la impresora de cocina.'; }
     else { titulo = 'Solicitó imprimir un recibo'; descripcion = 'Envió un recibo a impresión. Este registro no confirma que haya salido en papel.'; }
+  } else if (ruta === '/acceso-gastos/registrar') {
+    seccion = 'Gastos'; titulo = d.cambio?.repetido ? 'Confirmó un gasto ya registrado' : 'Registró un gasto';
+    descripcion = d.cambio?.gasto?.descripcion || 'Registró un gasto de su sucursal mediante el acceso autorizado.';
+    referencia = d.cambio?.gasto?.id ? `Gasto n.º ${d.cambio.gasto.id}` : '';
+  } else if (ruta === '/acceso-gastos/desbloquear') {
+    seccion = 'Gastos'; titulo = 'Ingresó al registro de gastos'; descripcion = 'Solicitó abrir el formulario con su código de acceso.'; grupo = 'Sesiones';
+  } else if (ruta.includes('/acceso-gastos/usuarios/')) {
+    seccion = 'Usuarios'; titulo = 'Configuró el acceso a registrar gastos'; descripcion = 'Generó o revocó la autorización especial de un cajero para ingresar gastos.';
   } else if (ruta === '/acceso-barras/desbloquear') {
     seccion = 'Códigos de barras'; titulo = 'Ingresó al apartado de códigos'; descripcion = 'Solicitó habilitar temporalmente la edición con su código de acceso.';
   } else if (ruta.includes('/acceso-barras/usuarios/')) {
@@ -111,5 +121,6 @@ export function describirAuditoria(registro: RegistroAuditoria) {
     usuario: d.actor?.nombre || 'Usuario no identificado', rol: rolAuditoria(d.actor?.rol), sucursalId: d.actor?.sucursalId,
     campos: ['PATCH','PUT'].includes(metodo) && !ruta.startsWith('/impresion/') ? [...new Set((d.campos || []).map(c => CAMPOS[c]).filter(Boolean))] : [],
     cambio: !fallo && d.cambio?.nuevo ? { nombre: d.cambio.nombre, anterior: d.cambio.anterior || 'Sin código', nuevo: d.cambio.nuevo } : null,
+    gasto: !fallo && d.cambio?.gasto ? { ...d.cambio.gasto, categoriaNombre: CATEGORIAS_GASTO[d.cambio.gasto.categoria] || 'Otros gastos' } : undefined,
   };
 }

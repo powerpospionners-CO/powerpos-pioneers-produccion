@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowRight, CheckCircle2, ChevronRight, Clock3, History, LayoutGrid, LogIn, RefreshCw, Search, ShieldCheck, UserRound, X } from 'lucide-react';
 import { describirAuditoria, type RegistroAuditoria } from '@/lib/auditoria';
+import { moneda } from '@/lib/formato';
 
 const fecha = (valor: string) => new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(valor));
 const hora = (valor: string) => new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(valor));
@@ -28,6 +29,7 @@ export function DetalleAuditoria({ registro, sucursales, cerrar }: { registro: R
       <div className="space-y-6 p-6">
         <div className={`flex items-center gap-2 text-sm ${info.fallo ? 'text-amber-300' : 'text-emerald-300'}`}>{info.fallo ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}<span>{info.estado}</span></div>
         <p className="leading-relaxed text-gray-200">{info.descripcion}</p>
+        {info.gasto && <div className="rounded-xl border border-orange-500/25 bg-orange-500/5 p-4"><h3 className="mb-3 text-sm font-semibold">Gasto registrado</h3><p className="mb-3 text-2xl font-bold">{moneda(info.gasto.monto)}</p><p className="mb-3 text-sm text-gray-300">Categoría: {info.gasto.categoriaNombre}</p><dl className="grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-xs text-gray-500">Fecha del gasto</dt><dd>{fecha(info.gasto.fecha)}</dd></div><div><dt className="text-xs text-gray-500">Origen del dinero</dt><dd>{info.gasto.pagadoConRecaudo ? 'Dinero del recaudo semanal' : 'Otro origen; no se descuenta del recaudo'}</dd></div></dl></div>}
         <dl className="grid gap-5 rounded-xl border border-gray-800 bg-gray-950/50 p-4 sm:grid-cols-2">
           {[['Responsable', info.usuario], ['Rol', info.rol], ['Fecha y hora', `${fecha(registro.creadoEn)} · ${hora(registro.creadoEn)}`], ['Sucursal', sucursal], ['Apartado', info.seccion], ...(info.referencia ? [['Referencia', info.referencia]] : [])].map(([etiqueta, valor]) => <div key={etiqueta}><dt className="mb-1 text-xs text-gray-500">{etiqueta}</dt><dd className="text-sm font-medium text-gray-200">{valor}</dd></div>)}
         </dl>

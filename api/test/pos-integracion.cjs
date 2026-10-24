@@ -145,6 +145,34 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     recaudo = (await http.get('/caja/recaudo/semanal').query({ periodoInicio: semana }).set('Authorization', token).expect(200)).body;
     assert.equal(recaudo.gastosDelRecaudo, 270); assert.equal(recaudo.consignacion.esperadoAlRegistrar, 750); assert.equal(recaudo.consignacion.diferencia, 0);
     console.log('PASS recaudo menos gastos marcados, cambio de origen y cierre histórico conservado');
+    // Acceso de la cajera: solo crear gastos, con código independiente y sin duplicar reintentos.
+    const codigoGastos = (await http.post(`/acceso-gastos/usuarios/${paula.id}`).set('Authorization', token).send({ habilitado: true }).expect(201)).body.codigo;
+    await http.post(`/acceso-gastos/usuarios/${paula.id}`).set('Authorization', sesionPaula).send({ habilitado: true }).expect(403);
+    await http.post('/acceso-gastos/desbloquear').set('Authorization', sesionPaula).send({ codigo: codigoGastos === autorizacion.codigo ? '00000000' : autorizacion.codigo }).expect(403);
+    const accesoGastos = (await http.post('/acceso-gastos/desbloquear').set('Authorization', sesionPaula).send({ codigo: codigoGastos }).expect(201)).body;
+    const gastoPaula = { categoria: 'OTROS', descripcion: 'Transporte registrado por la cajera', monto: 25, fecha: fechaBogota(new Date(fechaGasto)), pagadoConRecaudo: true, clave: randomUUID() };
+    await http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Barras', acceso.token).send(gastoPaula).expect(403);
+    await http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send({ ...gastoPaula, empresaId: otraEmpresa.id }).expect(400);
+    await http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send({ ...gastoPaula, categoria: 'COMPRA_MERCANCIA' }).expect(400);
+    const [nuevoGasto, reintentoGasto] = await Promise.all([
+      http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send(gastoPaula).expect(201),
+      request(otra.getHttpServer()).post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send(gastoPaula).expect(201),
+    ]);
+    assert.equal(nuevoGasto.body.id, reintentoGasto.body.id);
+    const gastoDb = await db.movimientoFinanciero.findUnique({ where: { id: nuevoGasto.body.id } });
+    assert.equal(gastoDb.usuarioId, paula.id); assert.equal(gastoDb.empresaId, empresa.id); assert.equal(gastoDb.sucursalId, sede.id); assert.equal(gastoDb.tipo, 'EGRESO');
+    assert.equal(await db.movimientoFinanciero.count({ where: { empresaId: empresa.id, descripcion: gastoPaula.descripcion } }), 1);
+    await http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send({ ...gastoPaula, monto: 99 }).expect(409);
+    await http.get('/financiero/movimientos').set('Authorization', sesionPaula).expect(403);
+    await http.patch(`/financiero/movimiento/${gastoDb.id}`).set('Authorization', sesionPaula).send({ monto: 1 }).expect(403);
+    const recauPaula = (await http.get('/caja/recaudo/semanal').query({ periodoInicio: semana }).set('Authorization', token).expect(200)).body;
+    assert.equal(recauPaula.gastosDelRecaudo, 295);
+    const auditGastos = (await http.get('/auditoria').set('Authorization', token).expect(200)).body;
+    assert(auditGastos.registros.some(r => r.detalle?.actor?.id === paula.id && r.detalle?.cambio?.gasto?.id === gastoDb.id && r.detalle.cambio.gasto.pagadoConRecaudo === true));
+    assert(!JSON.stringify(auditGastos).includes(codigoGastos)); assert(!JSON.stringify(auditGastos).includes(accesoGastos.token));
+    await http.post(`/acceso-gastos/usuarios/${paula.id}`).set('Authorization', token).send({ habilitado: false }).expect(201);
+    await http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send({ ...gastoPaula, clave: randomUUID() }).expect(403);
+    console.log('PASS cajera registra un gasto, reintento entre instancias no duplica, auditoría y recaudo correctos, revocación inmediata');
 
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));

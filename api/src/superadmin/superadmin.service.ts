@@ -285,7 +285,7 @@ export class SuperadminService {
 
   listarAuditoria() {
     return this.prisma.auditoria.findMany({
-      where: { entidad: { notIn: ['AccesoBarrasConfiguracion', 'AccesoBarrasSesion'] } },
+      where: { entidad: { notIn: ['AccesoBarrasConfiguracion', 'AccesoBarrasSesion', 'AccesoGastosConfiguracion', 'AccesoGastosSesion'] } },
       include: {
         usuario: { select: { nombre: true, email: true } },
         empresa: { select: { nombre: true } },

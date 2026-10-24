@@ -42,3 +42,11 @@ test('los campos se traducen y se omiten nombres desconocidos o secretos', () =>
   assert.equal(edicion.titulo, 'Editó un usuario');
   assert.equal(Array.from(edicion.campos).join(', '), 'Nombre, Correo electrónico, Rol, Sucursal');
 });
+test('el gasto de un cajero identifica importe, categoría y origen del dinero', () => {
+  const gasto = describirAuditoria(registro({ metodo: 'POST', ruta: '/acceso-gastos/registrar', cambio: { gasto: { id: 9, categoria: 'SERVICIOS', descripcion: 'Pago de internet', monto: 50000, fecha: '2026-10-24T05:00:00Z', pagadoConRecaudo: true } } }));
+  assert.equal(gasto.titulo, 'Registró un gasto');
+  assert.equal(gasto.referencia, 'Gasto n.º 9');
+  assert.equal(gasto.gasto.monto, 50000);
+  assert.equal(gasto.gasto.categoriaNombre, 'Servicios');
+  assert.equal(gasto.gasto.pagadoConRecaudo, true);
+});
