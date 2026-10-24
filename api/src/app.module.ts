@@ -34,9 +34,12 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { SedeInterceptor } from './prisma/sede.interceptor';
 import { EventosModule } from './eventos/eventos.module';
 import { HealthController } from './health/health.controller';
+import { ActividadInterceptor } from './auditoria/actividad.interceptor';
+import { AccesoBarrasModule } from './acceso-barras/acceso-barras.module';
 
 @Module({
   imports: [
+    AccesoBarrasModule,
     EventosModule,
     AdministracionModule,
     TiendaModule,
@@ -69,6 +72,6 @@ import { HealthController } from './health/health.controller';
     ComprasModule,
   ],
   controllers: [AppController, HealthController],
-  providers: [AppService, { provide: APP_INTERCEPTOR, useClass: SedeInterceptor }, { provide: APP_INTERCEPTOR, useClass: PlanAccessInterceptor }],
+  providers: [AppService, { provide: APP_INTERCEPTOR, useClass: SedeInterceptor }, { provide: APP_INTERCEPTOR, useClass: ActividadInterceptor }, { provide: APP_INTERCEPTOR, useClass: PlanAccessInterceptor }],
 })
 export class AppModule {}

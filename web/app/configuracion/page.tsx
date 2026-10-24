@@ -6,6 +6,7 @@ import { Upload, Settings, User, Users, Plus, X, Shield, MapPin, Image as ImageI
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import AlertasAdministradores from '@/components/AlertasAdministradores';
+import AccesoBarrasUsuario from '@/components/AccesoBarrasUsuario';
 
 const MODULOS = [
   { key: 'pos', label: 'POS' },
@@ -671,6 +672,7 @@ export default function ConfiguracionPage() {
                       <div className="text-gray-500 text-xs mt-0.5">
                         {u.email} · {u.rol} {u.sucursal?.nombre ? `· ${u.sucursal.nombre}` : ''}
                       </div>
+                      {usuario?.rol === 'ADMIN_EMPRESA' && u.rol === 'CAJERO' && u.activo && <AccesoBarrasUsuario id={u.id} />}
                     </div>
                     <div className="flex items-center gap-2">
                       {usuario?.rol === 'ADMIN_EMPRESA' && <button type="button" onClick={() => editarUsuario(u)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-lg">Editar</button>}

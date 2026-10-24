@@ -18,7 +18,7 @@ async function bootstrap() {
   app.enableCors({
     origin: (origen, callback) => callback(null, origenPermitido(origen, process.env.NODE_ENV !== 'production')),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-PowerPOS-Desktop'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-PowerPOS-Desktop', 'X-Acceso-Barras'],
   });
 
   const uploadsPath = directorioUploads();

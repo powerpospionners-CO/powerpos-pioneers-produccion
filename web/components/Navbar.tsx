@@ -17,6 +17,8 @@ const ITEMS = [
   { href: '/caja', label: 'Cajas', icon: Wallet },
   { href: '/caja/recaudo', label: 'Recaudo semanal', icon: Wallet },
   { href: '/productos', label: 'Productos', icon: Package },
+  { href: '/codigos-barras', label: 'Productos · Códigos', icon: Package },
+  { href: '/auditoria', label: 'Auditoría', icon: BookOpen },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
@@ -62,6 +64,15 @@ export default function Navbar() {
   const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
   const [recaudoEfectivoHabilitado, setRecaudoEfectivoHabilitado] = useState(false);
   const [distribuidoresHabilitado, setDistribuidoresHabilitado] = useState(false);
+  const [accesoBarras, setAccesoBarras] = useState(false);
+  useEffect(() => { if (usuario?.id) api.post('/actividad/vista', { ruta: pathname }).catch(() => undefined); }, [pathname, usuario?.id]);
+  useEffect(() => {
+    setAccesoBarras(false);
+    if (usuario?.rol !== 'CAJERO') return;
+    let activo = true;
+    api.get('/acceso-barras/estado').then(r => { if (activo) setAccesoBarras(r.data.habilitado); }).catch(() => undefined);
+    return () => { activo = false; };
+  }, [usuario?.id, usuario?.rol]);
   useEffect(() => {
     if (!usuario?.empresaId) return;
     api.get('/empresa').then((respuesta) => {
@@ -81,6 +92,8 @@ export default function Navbar() {
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
   const itemsVisibles = ITEMS.filter((item) => {
+    if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
+    if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
     const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];
     if (individual === false || (typeof individual === 'object' && individual.ver !== true)) return false;
     if (item.href === '/administracion' && (!esAdminOGerente || usuario?.permisos?.administracion !== true)) return false;
@@ -109,7 +122,7 @@ export default function Navbar() {
     itemsVisibles.push({ href: '/consumo-empleados', label: 'Consumo staff', icon: UtensilsCrossed });
   }
 
-  const handleLogout = () => { logout(); irALoginGenerico(router); };
+  const handleLogout = async () => { try { await api.post('/actividad/salir', {}, { timeout: 1500 }); } catch {} finally { logout(); irALoginGenerico(router); } };
 
   return (
     <header className="bg-gray-900 border-b border-gray-800">
