@@ -7,6 +7,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { moneda } from '@/lib/formato';
 import { useNotificar } from '@/components/Notificaciones';
+import { useAuthStore } from '@/store/authStore';
 
 type CajaCerrada = {
   id: number;
@@ -43,6 +44,9 @@ const ETIQUETAS_METODO: Record<string, string> = {
 
 export default function CajaHistorialPage() {
   const { aviso } = useNotificar();
+  const esAdmin = useAuthStore(s => s.usuario?.rol === 'ADMIN_EMPRESA');
+  const [verArchivadas, setVerArchivadas] = useState(false);
+  const [cambiandoArchivo, setCambiandoArchivo] = useState<number | null>(null);
   const [cajas, setCajas] = useState<CajaCerrada[]>([]);
   const [reimprimiendo, setReimprimiendo] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,13 +61,25 @@ export default function CajaHistorialPage() {
 
   useEffect(() => {
     cargarHistorial();
-  }, []);
+  }, [verArchivadas]);
 
   const cargarHistorial = () => {
-    api.get('/caja/historial')
+    api.get('/caja/historial', { params: { archivadas: verArchivadas } })
       .then((r) => setCajas(r.data))
       .catch(() => setError('No se pudo cargar el historial de cajas.'))
       .finally(() => setLoading(false));
+  };
+
+  const cambiarArchivo = async (c: CajaCerrada) => {
+    if (!window.confirm(`${verArchivadas ? 'Restaurar' : 'Quitar del historial'} el cierre de ${c.usuario?.nombre || 'caja'} del ${c.cerradaEn ? new Date(c.cerradaEn).toLocaleString('es-CO') : ''}? Las ventas y movimientos se conservan. Puedes restaurarlo desde Archivados.`)) return;
+    setCambiandoArchivo(c.id);
+    try {
+      await api.patch(`/caja/${c.id}/archivo-historial`, { archivada: !verArchivadas });
+      setCajas(actuales => actuales.filter(caja => caja.id !== c.id));
+      aviso(verArchivadas ? 'Cierre restaurado.' : 'Cierre quitado del historial. Puedes restaurarlo desde Archivados.', 'exito');
+    } catch {
+      aviso('No se pudo cambiar el cierre. Intenta nuevamente.', 'error');
+    } finally { setCambiandoArchivo(null); }
   };
 
   const verDetalle = async (id: number) => {
@@ -124,6 +140,8 @@ export default function CajaHistorialPage() {
 
         {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
 
+        {esAdmin && <button type="button" onClick={() => { setVerArchivadas(!verArchivadas); setCajas([]); setLoading(true); }} className="mb-4 rounded-lg border border-gray-700 px-3 py-2 text-sm">{verArchivadas ? 'Ver historial' : 'Ver archivados'}</button>}
+
         <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-gray-800 text-gray-400">
@@ -148,6 +166,7 @@ export default function CajaHistorialPage() {
                   <td className={`px-4 py-3 text-right font-semibold ${c.diferencia && Math.abs(Number(c.diferencia)) > 1000 ? 'text-red-400' : 'text-gray-300'}`}>{c.diferencia !== null ? moneda(Number(c.diferencia)) : '—'}</td>
                   <td className="px-4 py-3 text-right">
                     <button type="button" onClick={() => verDetalle(c.id)} className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-white">Ver detalle</button>
+                    {esAdmin && <button type="button" disabled={cambiandoArchivo !== null} onClick={() => cambiarArchivo(c)} className="ml-2 rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:text-white disabled:opacity-50">{cambiandoArchivo === c.id ? 'Guardando…' : verArchivadas ? 'Restaurar' : 'Quitar del historial'}</button>}
                   </td>
                 </tr>
               ))}

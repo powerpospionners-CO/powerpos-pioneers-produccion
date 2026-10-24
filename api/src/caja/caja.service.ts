@@ -497,7 +497,19 @@ export class CajaService {
 
   // Lista de cajas ya cerradas, para que el admin elija cuál revisar en
   // detalle (ver obtenerResumenCaja). Más reciente primero.
-  async listarCajasCerradas(empresaId: number, sucursalId?: number) {
+  async cambiarArchivoHistorial(id: number, empresaId: number, usuarioId: number, archivar: boolean) {
+    if (!Number.isSafeInteger(id) || id < 1) throw new BadRequestException('Caja no válida');
+    const caja = await this.prisma.caja.findFirst({ where: { id, sucursal: { empresaId }, estado: 'CERRADA' } });
+    if (!caja) throw new NotFoundException('Cierre de caja no encontrado');
+    await this.prisma.auditoria.create({ data: {
+      empresaId, usuarioId, entidad: 'CajaHistorial', entidadId: id,
+      accion: archivar ? 'ARCHIVAR' : 'RESTAURAR',
+      detalle: { motivo: 'Cambio de visibilidad en el historial; conserva ventas y movimientos.' },
+    } });
+    return { id, archivada: archivar };
+  }
+
+  async listarCajasCerradas(empresaId: number, sucursalId?: number, soloArchivadas = false) {
     const cambios = await this.prisma.auditoria.findMany({
       where: { empresaId, entidad: 'CajaHistorial', accion: { in: ['ARCHIVAR', 'RESTAURAR'] } },
       select: { entidadId: true, accion: true }, orderBy: { id: 'asc' },
@@ -512,7 +524,7 @@ export class CajaService {
       where: {
         sucursal: { empresaId, ...(sucursalId ? { id: sucursalId } : {}) },
         estado: 'CERRADA',
-        ...(archivadas.size ? { id: { notIn: [...archivadas] } } : {}),
+        ...(soloArchivadas ? { id: { in: [...archivadas] } } : archivadas.size ? { id: { notIn: [...archivadas] } } : {}),
       },
       include: {
         usuario: { select: { nombre: true } },

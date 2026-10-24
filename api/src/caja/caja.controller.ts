@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { CajaService } from './caja.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -48,8 +48,15 @@ export class CajaController {
 
   @Get('historial')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
-  historial(@Request() req: any, @Query('sucursalId') sucursalId?: string) {
-    return this.cajaService.listarCajasCerradas(req.user.empresaId, sucursalId ? +sucursalId : undefined);
+  historial(@Request() req: any, @Query('sucursalId') sucursalId?: string, @Query('archivadas') archivadas?: string) {
+    return this.cajaService.listarCajasCerradas(req.user.empresaId, sucursalId ? +sucursalId : undefined, req.user.rol === 'ADMIN_EMPRESA' && archivadas === 'true');
+  }
+
+  @Patch(':id/archivo-historial')
+  @Roles('ADMIN_EMPRESA')
+  archivoHistorial(@Param('id') id: string, @Body() body: { archivada?: boolean }, @Request() req: any) {
+    if (typeof body?.archivada !== 'boolean') throw new BadRequestException('Indica si se debe archivar el cierre');
+    return this.cajaService.cambiarArchivoHistorial(+id, req.user.empresaId, req.user.id, body.archivada);
   }
 
   @Get(':id/resumen')
