@@ -4,6 +4,8 @@ describe('Corrección auditada de costo por kilo',()=>{
   function preparar(){
     const tx:any={
       $queryRaw:jest.fn(),
+      $executeRaw:jest.fn(),
+      sucursal:{findMany:jest.fn().mockResolvedValue([{id:2}])},
       producto:{findFirst:jest.fn().mockResolvedValue({id:454,nombre:'Maíz',ventaGranel:true,unidadGranel:'kg',costo:12000,precio:20}),update:jest.fn()},
       auditoria:{findFirst:jest.fn().mockResolvedValue(null),create:jest.fn()},
       pedido:{findMany:jest.fn().mockResolvedValue([{id:346,numero:'PED-2-20261019-0011',costoVentaHistorico:7897650,operacionesCaja:[],detalles:[{id:834,productoId:454,cantidad:658,factorUnidades:1,costoVentaHistorico:7896000}]}]),update:jest.fn()},

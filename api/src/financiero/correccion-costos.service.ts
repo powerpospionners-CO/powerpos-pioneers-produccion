@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { bloquearCajaSucursal } from '../caja/caja-lock';
 
 const pesos = (n: number) => Math.round(n * 100) / 100;
 
@@ -10,6 +11,11 @@ export class CorreccionCostosService {
   async corregir(empresaId: number, usuarioId: number, datos: { productoId: number; costoRegistrado: number; aplicar?: boolean }) {
     if (!Number.isSafeInteger(datos.productoId) || datos.productoId <= 0 || !Number.isFinite(datos.costoRegistrado) || datos.costoRegistrado <= 0 || (datos.aplicar !== undefined && typeof datos.aplicar !== 'boolean')) throw new BadRequestException('Indica producto y costo por kilo/litro registrado incorrectamente.');
     return this.prisma.$transaction(async tx => {
+      // Mismo orden que las devoluciones: operaciones, cajas y productos.
+      // Una venta simultánea debe leer el costo después de esta conversión.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73108, ${empresaId}::integer)`;
+      const sedes = await tx.sucursal.findMany({ where: { empresaId }, select: { id: true }, orderBy: { id: 'asc' } });
+      for (const sede of sedes) await bloquearCajaSucursal(tx, sede.id);
       await tx.$queryRaw`SELECT id FROM productos WHERE id = ${datos.productoId} AND "empresaId" = ${empresaId} FOR UPDATE`;
       const producto = await tx.producto.findFirst({ where: { id: datos.productoId, empresaId } });
       if (!producto?.ventaGranel || !['kg', 'l'].includes(producto.unidadGranel || '')) throw new BadRequestException('Esta corrección solo convierte kilos/litros a gramos/mililitros.');
