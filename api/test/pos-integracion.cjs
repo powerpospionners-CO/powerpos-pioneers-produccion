@@ -208,7 +208,9 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal((await db.producto.findUnique({where:{id:mercanciaParcial.id}})).stockActual,4);
     const movimientosParciales=await db.movimientoFinanciero.findMany({where:{pedidoId:parcial.id,tipo:'INGRESO'}});
     assert.equal(movimientosParciales.reduce((s,m)=>s+Number(m.monto),0),122000);
-    const cierreParcial=(await http.post(`/caja/${cajaParcial.id}/cerrar`).set('Authorization',token).send({montoFinal:140600}).expect(201)).body;
+    const respuestaCierreParcial=await http.post(`/caja/${cajaParcial.id}/cerrar`).set('Authorization',token).send({montoFinal:140600,montoRetirado:0});
+    assert.equal(respuestaCierreParcial.status,201,JSON.stringify(respuestaCierreParcial.body));
+    const cierreParcial=respuestaCierreParcial.body;
     assert.equal(Number(cierreParcial.totalEfectivo),90600);assert.equal(Number(cierreParcial.diferencia),0);
     console.log('PASS venta 172000 con abonos Nequi 31400 y efectivo 90600, saldo 50000, reintento único y caja sin diferencias');
 
