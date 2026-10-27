@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { SuperadminService } from './superadmin.service';
 import { PlanesService } from '../suscripciones/planes.service';
+import { PeriodicidadPlan } from '@prisma/client';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPERADMIN')
@@ -119,5 +120,18 @@ export class SuperadminController {
     @Request() req: any,
   ) {
     return this.planesService.actualizarEmpresa(+id, body, req.user.id);
+  }
+
+  @Get('empresas/:id/suscripcion')
+  estadoSuscripcion(@Param('id') id: string) { return this.planesService.estado(+id); }
+
+  @Post('empresas/:id/suscripcion/pagos')
+  registrarPago(@Param('id') id: string, @Body() body: { clave: string; periodicidad: PeriodicidadPlan; estado: 'APROBADO' | 'PENDIENTE' }, @Request() req: any) {
+    return this.planesService.registrarPagoManual(+id, body, req.user.id);
+  }
+
+  @Post('empresas/:id/suscripcion/pagos/:referencia/confirmar')
+  confirmarPago(@Param('id') id: string, @Param('referencia') referencia: string, @Request() req: any) {
+    return this.planesService.confirmarPagoManual(+id, referencia, req.user.id);
   }
 }

@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 import { useNotificar } from '@/components/Notificaciones';
+import PagosSuscripcion from '@/components/PagosSuscripcion';
 
 type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number };
 
@@ -289,9 +290,9 @@ export default function SuperadminPage() {
       await api.patch(`/superadmin/empresas/${seleccionada.id}/suscripcion`, {
         pagoExonerado,
         motivoExoneracion: motivoExoneracion.trim() || null,
-        suscripcionVenceEn: vencimiento || null,
-        soporteIncluidoHasta: soporteIncluidoHasta || null,
-        soportePagadoHasta: soportePagadoHasta || null,
+        ...(vencimiento !== (seleccionada.suscripcionVenceEn?.slice(0, 10) || '') ? { suscripcionVenceEn: vencimiento || null } : {}),
+        ...(soporteIncluidoHasta !== (seleccionada.soporteIncluidoHasta?.slice(0, 10) || '') ? { soporteIncluidoHasta: soporteIncluidoHasta || null } : {}),
+        ...(soportePagadoHasta !== (seleccionada.soportePagadoHasta?.slice(0, 10) || '') ? { soportePagadoHasta: soportePagadoHasta || null } : {}),
       });
       await cargarDatos();
       aviso('Suscripcion actualizada.', 'exito');
@@ -509,13 +510,17 @@ export default function SuperadminPage() {
               <button type="button" onClick={guardarConfiguracion} disabled={guardando} className="w-full mt-6 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2"><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar plan y funciones'}</button>
               <div className="mt-6 border-t border-slate-800 pt-5 space-y-3">
                 <p className="text-xs text-slate-500 uppercase tracking-wider">Suscripcion y soporte</p>
+                <PagosSuscripcion key={`${seleccionada.id}:${seleccionada.suscripcionVenceEn}:${seleccionada.pagoExonerado}`} empresaId={seleccionada.id} alGuardar={cargarDatos} />
                 <label className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg px-3 py-2.5 text-sm"><span>Exonerar pago del plan</span><input type="checkbox" checked={pagoExonerado} onChange={(event) => setPagoExonerado(event.target.checked)} className="h-4 w-4 accent-orange-500" /></label>
                 <p className="text-xs text-slate-500">La exoneracion no cubre soporte opcional ni desarrollos personalizados.</p>
                 {pagoExonerado && <label className="block text-sm text-slate-300">Motivo<input value={motivoExoneracion} onChange={(event) => setMotivoExoneracion(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>}
+                <details className="space-y-3 rounded-lg border border-slate-700 p-3"><summary className="cursor-pointer text-sm text-slate-400">Ajustes excepcionales de fechas y soporte</summary>
+                <p className="text-xs text-slate-500">Para cobrar el mes utiliza el registro de pagos de arriba. No necesitas modificar estas fechas en cada renovación.</p>
                 <label className="block text-sm text-slate-300">Vencimiento del plan<input type="date" value={vencimiento} onChange={(event) => setVencimiento(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>
                 <label className="block text-sm text-slate-300">Soporte incluido hasta<input type="date" value={soporteIncluidoHasta} onChange={(event) => setSoporteIncluidoHasta(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>
                 <label className="block text-sm text-slate-300">Soporte pagado hasta<input type="date" value={soportePagadoHasta} onChange={(event) => setSoportePagadoHasta(event.target.value)} className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white" /></label>
-                <button type="button" onClick={guardarSuscripcion} disabled={guardandoSuscripcion} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5">{guardandoSuscripcion ? 'Guardando...' : 'Guardar suscripcion'}</button>
+                </details>
+                <button type="button" onClick={guardarSuscripcion} disabled={guardandoSuscripcion} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5">{guardandoSuscripcion ? 'Guardando...' : 'Guardar ajustes y exoneración'}</button>
               </div>
               <div className="mt-6 border-t border-slate-800 pt-5">
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Administradores de la empresa</p>

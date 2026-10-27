@@ -50,6 +50,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     ) {
       throw new UnauthorizedException('Cuenta inactiva');
     }
+    const suscripcion = this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN'
+      ? await this.prisma.control.empresa.findUnique({ where: { id: usuario.empresaId }, select: { suscripcionVenceEn: true, pagoExonerado: true } }) : usuario.empresa;
+    if (this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN' && !suscripcion) throw new UnauthorizedException('Empresa no encontrada');
     return {
       id: usuario.id,
       nombre: usuario.nombre,
@@ -61,8 +64,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       empresaPlan: usuario.empresa?.plan,
       permisos: usuario.empresa?.permisos,
       permisosUsuario: usuario.permisos,
-      suscripcionVenceEn: usuario.empresa?.suscripcionVenceEn,
-      pagoExonerado: usuario.empresa?.pagoExonerado,
+      suscripcionVenceEn: suscripcion?.suscripcionVenceEn,
+      pagoExonerado: suscripcion?.pagoExonerado,
       distribuidoresHabilitado: usuario.empresa?.distribuidoresHabilitado,
       recaudoEfectivoHabilitado: usuario.empresa?.recaudoEfectivoHabilitado,
     };

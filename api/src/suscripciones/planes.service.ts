@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
@@ -8,7 +9,7 @@ import {
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { EstadoPagoPlan, PeriodicidadPlan, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { sumarMeses } from './fechas';
+import { sumarMeses, estadoCobro } from './fechas';
 
 const CONFIG_ID = 1;
 type EventoWompi = {
@@ -104,15 +105,78 @@ export class PlanesService {
       where: { empresaId },
       orderBy: { creadoEn: 'desc' },
       take: 20,
-      select: { plan: true, periodicidad: true, monto: true, estado: true, referencia: true, incluyeSoporte: true, creadoEn: true, pagadoEn: true },
+      select: { plan: true, periodicidad: true, monto: true, estado: true, referencia: true, incluyeSoporte: true, creadoEn: true, pagadoEn: true, periodoDesde: true, periodoHasta: true },
     });
     return {
       ...empresa,
+      estadoCobro: estadoCobro(empresa),
       accesoExento: empresa.pagoExonerado || !empresa.suscripcionVenceEn ||
         Date.now() <= empresa.suscripcionVenceEn.getTime() + 5 * 86400000,
       precios: await this.obtenerPrecios(),
       pagos,
     };
+  }
+
+  async registrarPagoManual(empresaId: number, datos: { clave: string; periodicidad: PeriodicidadPlan; estado: 'APROBADO' | 'PENDIENTE' }, usuarioId: number) {
+    if (!Number.isSafeInteger(empresaId) || empresaId < 1 || !datos || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(datos.clave || '') ||
+      !Object.values(PeriodicidadPlan).includes(datos.periodicidad) || !['APROBADO', 'PENDIENTE'].includes(datos.estado))
+      throw new BadRequestException('Selecciona pago recibido o pendiente y un período válido');
+    const referencia = `MANUAL-${datos.clave}`;
+    const precios = await this.obtenerPrecios();
+    const registrar = async () => this.prisma.$transaction(async (tx) => {
+      const previo = await tx.pagoPlan.findUnique({ where: { referencia } });
+      if (previo) {
+        if (previo.empresaId !== empresaId || previo.periodicidad !== datos.periodicidad) throw new ConflictException('La referencia pertenece a otro registro');
+        return previo;
+      }
+      const empresa = await tx.empresa.findUnique({ where: { id: empresaId } });
+      if (!empresa) throw new NotFoundException('Empresa no encontrada');
+      if (['AL_DIA', 'EXONERADO'].includes(estadoCobro(empresa))) throw new ConflictException('La empresa está al día o exonerada; no tiene un pago del plan pendiente');
+      const precio = precios.planes.find((p) => p.plan === empresa.plan);
+      if (!precio) throw new BadRequestException('Plan no válido');
+      const ahora = new Date();
+      const hasta = sumarMeses(ahora, datos.periodicidad === 'ANUAL' ? 12 : 1);
+      const pago = await tx.pagoPlan.create({ data: { empresaId, plan: empresa.plan, periodicidad: datos.periodicidad,
+        monto: datos.periodicidad === 'ANUAL' ? precio.anual : precio.mensual, referencia, estado: datos.estado,
+        incluyePlan: true, incluyeSoporte: false, periodoDesde: ahora, periodoHasta: hasta,
+        pagadoEn: datos.estado === 'APROBADO' ? ahora : null } });
+      if (datos.estado === 'APROBADO') {
+        const cambio = await tx.empresa.updateMany({ where: { id: empresaId, pagoExonerado: false, suscripcionVenceEn: empresa.suscripcionVenceEn }, data: { suscripcionVenceEn: hasta } });
+        if (!cambio.count) throw new ConflictException('La suscripción cambió mientras se registraba el pago. Actualiza el estado');
+      }
+      await tx.auditoria.create({ data: { usuarioId, entidad: 'SUSCRIPCION', entidadId: empresaId, accion: datos.estado === 'APROBADO' ? 'PAGAR' : 'REGISTRAR',
+        detalle: { referencia, estado: datos.estado, monto: pago.monto, periodicidad: datos.periodicidad, periodoHasta: hasta.toISOString() } } });
+      return pago;
+    });
+    try { return await registrar(); }
+    catch (e) {
+      if ((e as { code?: string }).code === 'P2002') {
+        const previo = await this.prisma.pagoPlan.findUnique({ where: { referencia } });
+        if (previo?.empresaId === empresaId && previo.periodicidad === datos.periodicidad) return previo;
+      }
+      throw e;
+    }
+  }
+
+  async confirmarPagoManual(empresaId: number, referencia: string, usuarioId: number) {
+    if (!Number.isSafeInteger(empresaId) || empresaId < 1 || typeof referencia !== 'string' || !/^MANUAL-[0-9a-f-]{36}$/i.test(referencia)) throw new BadRequestException('Referencia manual no válida');
+    return this.prisma.$transaction(async (tx) => {
+      const pago = await tx.pagoPlan.findUnique({ where: { referencia } });
+      if (!pago || pago.empresaId !== empresaId) throw new NotFoundException('Pago no encontrado');
+      if (pago.estado === 'APROBADO') return pago;
+      if (pago.estado !== 'PENDIENTE') throw new ConflictException('El pago no está pendiente');
+      const empresa = await tx.empresa.findUnique({ where: { id: empresaId } });
+      if (!empresa) throw new NotFoundException('Empresa no encontrada');
+      if (['AL_DIA', 'EXONERADO'].includes(estadoCobro(empresa))) throw new ConflictException('La empresa ya está al día o exonerada. No registres el mismo período otra vez');
+      if (empresa.plan !== pago.plan) throw new ConflictException('El plan cambió. Registra el pago con el plan actual');
+      const ahora = new Date(), hasta = sumarMeses(ahora, pago.periodicidad === 'ANUAL' ? 12 : 1);
+      const cambio = await tx.empresa.updateMany({ where: { id: empresaId, pagoExonerado: false, suscripcionVenceEn: empresa.suscripcionVenceEn }, data: { suscripcionVenceEn: hasta } });
+      if (!cambio.count) throw new ConflictException('La suscripción cambió. Actualiza el estado');
+      const aprobado = await tx.pagoPlan.updateMany({ where: { id: pago.id, estado: 'PENDIENTE' }, data: { estado: 'APROBADO', pagadoEn: ahora, periodoDesde: ahora, periodoHasta: hasta } });
+      if (!aprobado.count) throw new ConflictException('Este pago ya fue procesado. Actualiza el estado');
+      await tx.auditoria.create({ data: { usuarioId, entidad: 'SUSCRIPCION', entidadId: empresaId, accion: 'PAGAR', detalle: { referencia, periodoHasta: hasta.toISOString(), monto: pago.monto } } });
+      return { ...pago, estado: 'APROBADO', pagadoEn: ahora, periodoDesde: ahora, periodoHasta: hasta };
+    });
   }
 
   async actualizarEmpresa(empresaId: number, datos: {
@@ -173,9 +237,9 @@ export class PlanesService {
     const precios = this.precios(configuracion);
     const planPrecio = precios.planes.find((item) => item.plan === empresa.plan);
     if (!planPrecio) throw new BadRequestException('El plan de la empresa no es válido');
-    const incluirPlan = !empresa.pagoExonerado;
+    const incluirPlan = !empresa.pagoExonerado && estadoCobro(empresa) !== 'AL_DIA';
     if (!incluirPlan && !incluyeSoporte) {
-      throw new BadRequestException('La empresa está exonerada del plan; no hay un cobro pendiente');
+      throw new BadRequestException('No tienes pagos pendientes del plan. Puedes renovar cuando venza el período actual');
     }
     const ahora = new Date();
     const montoPlan = incluirPlan ? periodicidad === 'ANUAL' ? planPrecio.anual : planPrecio.mensual : 0;

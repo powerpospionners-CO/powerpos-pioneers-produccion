@@ -44,6 +44,22 @@ describe('Crédito y devoluciones del POS', ()=>{
     expect(db.abonoAdministrativo.create).toHaveBeenCalled();
     expect(db.movimientoFinanciero.create).toHaveBeenCalledWith({data:expect.objectContaining({tipo:'INGRESO',categoria:'VENTA',empresaId:1})});
   });
+  it('una venta de 172000 con abonos Nequi 31400 y efectivo 90600 conserva una deuda de 50000', async()=>{
+    const {db,pedido,service}=escenario();
+    pedido.total=decimal(172000); pedido.cuentaCredito.saldo=decimal(172000);
+    db.cuentaAdministrativa.update.mockImplementation(async ({data}:any)=>{
+      pedido.cuentaCredito.saldo=pedido.cuentaCredito.saldo.minus(data.saldo.decrement);
+      return pedido.cuentaCredito;
+    });
+    const nequi=await service.cobrar(10,{clave:'caso-nequi',monto:31400,metodoPago:'NEQUI',referencia:'Abono inicial Nequi'},actor);
+    const efectivo=await service.cobrar(10,{clave:'caso-efectivo',monto:90600,metodoPago:'EFECTIVO',referencia:'Abono inicial efectivo'},actor);
+    expect(pedido.cuentaCredito.saldo.toNumber()).toBe(50000);
+    expect(desgloseCobros([{metodoPago:'CREDITO',total:172000}],[nequi,efectivo])).toEqual(expect.arrayContaining([
+      {metodo:'NEQUI',total:31400},{metodo:'EFECTIVO',total:90600},
+    ]));
+    expect(db.movimientoFinanciero.create).toHaveBeenCalledTimes(2);
+    expect(db.abonoAdministrativo.create).toHaveBeenCalledTimes(2);
+  });
   it('rechaza abonos por encima del saldo', async()=>{
     const {db,service}=escenario(); await expect(service.cobrar(10,{...cobro,monto:101},actor)).rejects.toThrow('supera');
     expect(db.movimientoFinanciero.create).not.toHaveBeenCalled();

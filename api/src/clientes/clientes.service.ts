@@ -17,15 +17,18 @@ export class ClientesService {
   constructor(private prisma: PrismaService) {}
 
   async listar(empresaId: number, busqueda?: string) {
+    if (busqueda !== undefined && (typeof busqueda !== 'string' || busqueda.length > 150))
+      throw new BadRequestException('La búsqueda debe ser un nombre, documento o teléfono de hasta 150 caracteres');
+    const termino = busqueda?.trim();
     return this.prisma.cliente.findMany({
       where: {
         empresaId,
         activo: true,
-        ...(busqueda && {
+        ...(termino && {
           OR: [
-            { nombre: { contains: busqueda, mode: 'insensitive' } },
-            { telefono: { contains: busqueda } },
-            { documento: { contains: busqueda } },
+            { nombre: { contains: termino, mode: 'insensitive' } },
+            { telefono: { contains: termino } },
+            { documento: { contains: termino } },
           ],
         }),
       },

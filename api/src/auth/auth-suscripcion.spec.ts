@@ -2,6 +2,7 @@ import { AuthService } from './auth.service';
 import { ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { suscripcionSuspendida } from '../suscripciones/fechas';
+import { JwtStrategy } from './jwt.strategy';
 
 describe('Acceso según pago de suscripción', () => {
   const vence = new Date('2026-10-20T15:00:00Z');
@@ -24,5 +25,20 @@ describe('Acceso según pago de suscripción', () => {
     expect(jwt.sign).not.toHaveBeenCalled();
     usuario.empresa.suscripcionVenceEn = new Date('2026-11-20T15:00:00Z');
     await expect(servicio.login(usuario.email, 'correcta')).resolves.toMatchObject({ access_token: 'token' });
+  });
+  it('el acceso de una sede usa el pago central aunque su copia local tenga otra fecha', async () => {
+    const usuario = { id: 1, activo: true, rol: 'ADMIN_EMPRESA', empresaId: 3, sucursalId: 8,
+      empresa: { activo: true, pagoExonerado: false, suscripcionVenceEn: vence } };
+    const central = { pagoExonerado: false, suscripcionVenceEn: new Date('2026-11-20T15:00:00Z') };
+    const prisma: any = { aislamientoActivo: true, estadoAislamiento: jest.fn(),
+      control: { empresa: { findUnique: jest.fn(async () => central) } },
+      contexto: jest.fn(async () => ({ cliente: { usuario: { findUnique: jest.fn(async () => usuario) } } })) };
+    const estrategia = Object.assign(Object.create(JwtStrategy.prototype), { prisma }) as JwtStrategy;
+    const resultado = await estrategia.validate({ sub: 1, rol: 'ADMIN_EMPRESA', empresaId: 3, sucursalId: 8 });
+    expect(resultado.suscripcionVenceEn).toEqual(central.suscripcionVenceEn);
+    central.suscripcionVenceEn = new Date('2026-09-01T15:00:00Z');
+    usuario.empresa.suscripcionVenceEn = new Date('2026-12-01T15:00:00Z');
+    const vencido = await estrategia.validate({ sub: 1, rol: 'ADMIN_EMPRESA', empresaId: 3, sucursalId: 8 });
+    expect(suscripcionSuspendida(vencido, new Date('2026-10-26T15:00:00Z').getTime())).toBe(true);
   });
 });

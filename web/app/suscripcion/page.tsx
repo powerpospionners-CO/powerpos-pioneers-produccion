@@ -17,6 +17,7 @@ type Estado = {
   soporteIncluidoHasta: string | null;
   soportePagadoHasta: string | null;
   accesoExento: boolean;
+  estadoCobro: 'AL_DIA' | 'PENDIENTE' | 'EXONERADO' | 'SIN_CONFIGURAR';
   precios: {
     soporteMensual: number;
     planes: Array<{ plan: string; nombre: string; mensual: number; anual: number }>;
@@ -65,6 +66,7 @@ function SuscripcionContenido() {
     try {
       const respuesta = await api.get('/suscripciones/estado');
       setEstado(respuesta.data);
+      setPagando(false);
     } catch (err: any) {
       setError(err.response?.data?.message || 'No fue posible consultar la suscripcion.');
     } finally {
@@ -84,6 +86,14 @@ function SuscripcionContenido() {
     }
     void cargarEstado();
   }, [usuario, router, cargarEstado]);
+
+  useEffect(() => {
+    if (usuario?.rol !== 'ADMIN_EMPRESA') return;
+    const actualizar = () => { if (document.visibilityState === 'visible') void cargarEstado(); };
+    const reloj = setInterval(actualizar, 60000);
+    window.addEventListener('focus', actualizar);
+    return () => { clearInterval(reloj); window.removeEventListener('focus', actualizar); };
+  }, [usuario?.rol, cargarEstado]);
 
   const iniciarPago = async () => {
     setPagando(true);
@@ -110,7 +120,9 @@ function SuscripcionContenido() {
 
   const plan = estado?.precios.planes.find((item) => item.plan === estado.plan);
   const montoPlan = plan ? (periodicidad === 'ANUAL' ? plan.anual : plan.mensual) : 0;
-  const montoTotal = (estado?.pagoExonerado ? 0 : montoPlan) +
+  const alDia = estado?.estadoCobro === 'AL_DIA';
+  const cobrarPlan = !!estado && !estado.pagoExonerado && !alDia;
+  const montoTotal = (cobrarPlan ? montoPlan : 0) +
     (incluyeSoporte ? estado?.precios.soporteMensual || 0 : 0);
 
   return (
@@ -158,6 +170,12 @@ function SuscripcionContenido() {
                 </div>
               </section>
 
+              {alDia && <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-emerald-200">
+                <p className="font-bold">Al día — no tienes pagos pendientes</p>
+                <p className="mt-1 text-sm">Saldo pendiente del plan: {moneda(0)}. Próximo pago: {estado.suscripcionVenceEn ? new Date(estado.suscripcionVenceEn).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : 'Sin fecha'}.</p>
+              </div>}
+              {estado.estadoCobro === 'PENDIENTE' && estado.accesoExento && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">Tu período terminó. Tienes una renovación pendiente y estás dentro de los cinco días de gracia.</div>}
+
               {estado.pagoExonerado && <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm text-blue-200">
                 El plan de software esta exonerado{estado.motivoExoneracion ? `: ${estado.motivoExoneracion}` : '.'} El soporte opcional y los desarrollos personalizados se cobran por separado.
               </div>}
@@ -166,10 +184,10 @@ function SuscripcionContenido() {
               </div>}
 
               <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 md:p-6">
-                <div className="flex items-center gap-2"><CreditCard size={19} className="text-orange-400" /><h2 className="text-xl font-bold">Realizar un pago</h2></div>
+                <div className="flex items-center gap-2"><CreditCard size={19} className="text-orange-400" /><h2 className="text-xl font-bold">{alDia || estado.pagoExonerado ? 'Soporte opcional' : 'Renovar el plan'}</h2></div>
                 <p className="mt-2 text-sm text-gray-400">Pago manual seguro con Wompi. No se realizan cobros automaticos en futuras renovaciones.</p>
                 <div className="mt-5 grid gap-3 md:grid-cols-2">
-                  {!estado.pagoExonerado && <div className="rounded-xl border border-gray-800 p-4">
+                  {cobrarPlan && <div className="rounded-xl border border-gray-800 p-4">
                     <p className="font-semibold">{plan?.nombre || 'Plan actual'}</p>
                     <div className="mt-3 flex gap-2">
                       {(['MENSUAL', 'ANUAL'] as const).map((opcion) => <button key={opcion} type="button" onClick={() => setPeriodicidad(opcion)} className={`rounded-lg border px-4 py-2 text-sm ${periodicidad === opcion ? 'border-orange-500 bg-orange-500/10 text-orange-300' : 'border-gray-700 text-gray-400'}`}>{opcion === 'MENSUAL' ? 'Mensual' : 'Anual'}</button>)}

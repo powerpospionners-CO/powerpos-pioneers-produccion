@@ -16,3 +16,9 @@ export function suscripcionSuspendida(empresa: {
   const vence = new Date(empresa.suscripcionVenceEn).getTime();
   return Number.isFinite(vence) && ahora > vence + 5 * 86400000;
 }
+
+export function estadoCobro(empresa: { pagoExonerado?: boolean | null; suscripcionVenceEn?: Date | string | null }, ahora = Date.now()) {
+  if (empresa.pagoExonerado) return 'EXONERADO' as const;
+  if (!empresa.suscripcionVenceEn) return 'SIN_CONFIGURAR' as const;
+  return new Date(empresa.suscripcionVenceEn).getTime() > ahora ? 'AL_DIA' as const : 'PENDIENTE' as const;
+}

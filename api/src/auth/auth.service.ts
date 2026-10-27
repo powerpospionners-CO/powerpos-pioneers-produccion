@@ -66,7 +66,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    if (usuario.rol !== 'SUPERADMIN' && suscripcionSuspendida(usuario.empresa)) {
+    const suscripcion = this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN'
+      ? await this.prisma.control.empresa.findUnique({ where: { id: usuario.empresaId }, select: { suscripcionVenceEn: true, pagoExonerado: true } }) : usuario.empresa;
+    if (this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN' && !suscripcion) throw new UnauthorizedException('Empresa no encontrada');
+    if (usuario.rol !== 'SUPERADMIN' && suscripcionSuspendida(suscripcion)) {
       throw new ForbiddenException({
         error: 'SUBSCRIPTION_EXPIRED',
         message: 'La suscripción venció y finalizaron los cinco días de plazo. Renueva el pago o contacta a PowerPOS para restablecer el acceso.',
