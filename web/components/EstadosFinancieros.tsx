@@ -9,19 +9,24 @@ function Filas({ filas }: { filas: [string, number | null][] }) {
 export default function EstadosFinancieros({ desde, hasta }: { desde?: string; hasta?: string }) {
   const [datos,setDatos] = useState<any>(null);
   const [error,setError] = useState('');
+  const [actualizando,setActualizando] = useState(true);
   const [vista,setVista] = useState('resultado');
   const [reintento,setReintento] = useState(0);
   useEffect(()=>{
     const controller=new AbortController();
-    setDatos(null);setError('');
-    api.get('/financiero/estados',{params:{fechaDesde:desde,fechaHasta:hasta},signal:controller.signal}).then(r=>{if(!controller.signal.aborted)setDatos(r.data);}).catch(e=>{if(!controller.signal.aborted)setError(e?.response?.data?.message||'No se pudieron cargar los estados financieros.');});
+    // El refresco no desmonta el informe: conserva scroll, pestaña y detalles abiertos.
+    setActualizando(true);setError('');
+    api.get('/financiero/estados',{params:{fechaDesde:desde,fechaHasta:hasta},signal:controller.signal}).then(r=>{if(!controller.signal.aborted)setDatos(r.data);}).catch(e=>{if(!controller.signal.aborted)setError(e?.response?.data?.message||'No se pudieron cargar los estados financieros.');}).finally(()=>{if(!controller.signal.aborted)setActualizando(false);});
     return ()=>controller.abort();
   },[desde,hasta,reintento]);
   const r=datos?.resultado,b=datos?.balance,f=datos?.flujo;
-  return <section aria-label="Estados financieros" className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-    <h2 className="mb-3 text-lg font-semibold">Estados financieros</h2>
+  return <section aria-label="Estados financieros" aria-busy={actualizando} className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+    <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
+      <h2 className="text-lg font-semibold">Estados financieros</h2>
+      <span role="status" className="text-right text-xs text-gray-400">{error&&datos?<button title={error} className="text-amber-300 underline" onClick={()=>setReintento(v=>v+1)}>Datos anteriores · reintentar</button>:actualizando?'Actualizando…':''}</span>
+    </div>
     <div className="no-imprimir mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Informes financieros">{[['resultado','Estado de resultados'],['balance','Balance general'],['flujo','Estado de flujo de caja']].map(([id,nombre])=><button key={id} role="tab" aria-selected={vista===id} onClick={()=>setVista(id)} className={`rounded-lg px-4 py-2 text-sm ${vista===id?'bg-orange-500 text-white':'bg-gray-800 text-gray-300'}`}>{nombre}</button>)}</div>
-    {error?<div role="alert" className="text-red-300">{error}<button className="ml-4 underline" onClick={()=>setReintento(v=>v+1)}>Reintentar</button></div>:!datos?<p role="status" className="text-gray-400">Calculando los estados financieros…</p>:<>
+    {error&&!datos?<div role="alert" className="text-red-300">{error}<button className="ml-4 underline" onClick={()=>setReintento(v=>v+1)}>Reintentar</button></div>:!datos?<p role="status" className="text-gray-400">Calculando los estados financieros…</p>:<>
       {vista==='resultado'&&<div role="tabpanel">
         <h3 className="mb-2 font-semibold">Estado de resultados · periodo seleccionado</h3>
         {!r.completo&&<div role="alert" className="mb-3 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">Resultado parcial: {r.ventasSinCosto.length} venta(s) contienen productos sin costo histórico. No se ha estimado su costo; este resultado no es una utilidad definitiva.<details className="mt-2"><summary className="cursor-pointer">Ver ventas pendientes de costo</summary><p className="mt-2">{r.ventasSinCosto.join(', ')}</p></details></div>}
