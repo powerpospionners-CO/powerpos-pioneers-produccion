@@ -21,6 +21,11 @@ test('permite dejar exactamente 50.000 a crédito conservando Nequi y efectivo',
 test('sin cliente no ofrece asignar el saldo a crédito',()=>{
   const p=modal({permitirCredito:false});assert.equal(hijos(p.render(),n=>n.type==='button'&&texto(n).includes('restantes a crédito')).length,0);
 });
+test('marcar crédito después de dividir el pago conserva los abonos ya escritos',()=>{
+  const p=modal();const casilla=hijos(p.render(),n=>n.type==='input'&&n.props.type==='checkbox')[0];casilla.props.onChange({target:{checked:true}});
+  const arbol=p.render();assert.match(texto(arbol),/Abono de hoy: \$122000 · Saldo a crédito: \$50000/);
+  hijos(arbol,n=>n.type==='button'&&texto(n)==='Registrar crédito')[0].props.onClick();assert.equal(p.confirmados[0].pagos.length,2);
+});
 test('conserva el crédito completo sin abonos y exige vencimiento',()=>{
   const p=modal({borradorInicial:{credito:true,vencimiento:'2099-01-01',lineas:[],recibidosMixto:{}}});
   const confirmar=hijos(p.render(),n=>n.type==='button'&&texto(n)==='Registrar crédito')[0];confirmar.props.onClick();assert.equal(p.confirmados[0].pagos.length,0);
