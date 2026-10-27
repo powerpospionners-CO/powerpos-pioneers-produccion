@@ -174,6 +174,26 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     await http.post('/acceso-gastos/registrar').set('Authorization', sesionPaula).set('X-Acceso-Gastos', accesoGastos.token).send({ ...gastoPaula, clave: randomUUID() }).expect(403);
     console.log('PASS cajera registra un gasto, reintento entre instancias no duplica, auditoría y recaudo correctos, revocación inmediata');
 
+    // Conversión histórica de kilos a gramos en ambos motores, sin tocar caja ni stock.
+    const maiz = await db.producto.create({ data: { empresaId: empresa.id, categoriaId: categoria.id, nombre: 'Maíz prueba por gramo', precio: 20, costo: 12000, ventaGranel: true, unidadGranel: 'kg', controlaStock: true, stockActual: 1000 } });
+    const ventaMaiz = await db.pedido.create({ data: { sucursalId: sede.id, usuarioId: usuario.id, numero: 'COSTO-'+sufijo, subtotal: 13160, total: 13160, costoVentaHistorico: 7896000, detalles: { create: [{ productoId: maiz.id, cantidad: 658, precioUnitario: 20, subtotal: 13160, exclusiones: [], costoVentaHistorico: 7896000 }] } } });
+    const costoMaiz = await db.movimientoFinanciero.create({ data: { empresaId: empresa.id, sucursalId: sede.id, usuarioId: usuario.id, pedidoId: ventaMaiz.id, tipo: 'EGRESO', categoria: 'COSTO_VENTA', monto: 7896000, descripcion: 'Costo prueba' } });
+    const conversion = { productoId: maiz.id, costoRegistrado: 12000 };
+    await http.post('/financiero/corregir-costo-granel').set('Authorization', sesionPaula).send(conversion).expect(403);
+    const vistaCosto = (await http.post('/financiero/corregir-costo-granel').set('Authorization', token).send(conversion).expect(201)).body;
+    assert.equal(vistaCosto.ajustes[0].costoCorregido, 7896);
+    assert.equal(Number((await db.producto.findUnique({where:{id:maiz.id}})).costo),12000);
+    await http.post('/financiero/corregir-costo-granel').set('Authorization', token).send({...conversion,aplicar:true}).expect(201);
+    const maizCorregido = await db.producto.findUnique({where:{id:maiz.id}});
+    assert.equal(Number(maizCorregido.costo),12); assert.equal(Number(maizCorregido.precio),20); assert.equal(maizCorregido.stockActual,1000);
+    assert.equal(Number((await db.movimientoFinanciero.findUnique({where:{id:costoMaiz.id}})).monto),7896);
+    const repetidaCosto = (await http.post('/financiero/corregir-costo-granel').set('Authorization', token).send({...conversion,aplicar:true}).expect(201)).body;
+    assert.equal(repetidaCosto.yaAplicada,true);
+    const estados = (await http.get('/financiero/estados').set('Authorization',token).expect(200)).body;
+    assert(!estados.flujo.categorias.some(c=>c.categoria==='COSTO_VENTA'));
+    assert.equal(typeof estados.resultado.ventasNetas,'number'); assert.equal(typeof estados.balance.inventario,'number');
+    console.log('PASS corrección histórica auditada e idempotente, permisos y estados financieros sin duplicar costo en caja');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);
