@@ -109,5 +109,15 @@ describe('ComprasService', () => {
     expect(tx.auditoria.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ accion: 'CREAR', entidad: 'COMPRA_GASTO', entidadId: 55 }),
     }));
+    const conEnvio = await service.registrar({
+      categoria: CategoriaMovimiento.COMPRA_MERCANCIA,
+      descripcion: 'Compra con IVA incluido y flete',
+      costoEnvio: 600,
+      items: [{ productoId: 7, presentacionId: 3, cantidad: 2, costoUnitario: 3000 }],
+    }, 2, 1, 1);
+    expect(conEnvio.monto).toBe(6600);
+    expect(tx.producto.update).toHaveBeenLastCalledWith({ where: { id: 7 }, data: { stockActual: 34, costo: 252.94 } });
+    expect(tx.movimientoFinanciero.create).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ monto: 6600 }) }));
+    expect(tx.auditoria.create).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ detalle: expect.objectContaining({ ivaIncluido: true, costoEnvio: 600, distribucionEnvio: [600] }) }) }));
   });
 });

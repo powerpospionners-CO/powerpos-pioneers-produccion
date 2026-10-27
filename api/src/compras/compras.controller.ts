@@ -26,6 +26,7 @@ export class ComprasController {
   registrar(
     @Body() body: {
       categoria: CategoriaMovimiento;
+      costoEnvio?: number;
       pagadoConRecaudo?: boolean;
       descripcion: string;
       monto?: number;

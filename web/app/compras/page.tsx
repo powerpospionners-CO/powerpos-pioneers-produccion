@@ -104,6 +104,7 @@ function ComprasContenido() {
   const [vencimientoCompra, setVencimientoCompra] = useState('');
   const administracion = usuario?.permisos?.administracion === true;
   const [monto, setMonto] = useState('');
+  const [costoEnvio, setCostoEnvio] = useState('');
   const [lineas, setLineas] = useState<Linea[]>([nuevaLinea()]);
   const [saldoInicial, setSaldoInicial] = useState('');
   const [mostrarAjusteSaldo, setMostrarAjusteSaldo] = useState(false);
@@ -139,11 +140,12 @@ function ComprasContenido() {
     if (usuario && !['ADMIN_EMPRESA', 'GERENTE'].includes(usuario.rol)) router.replace('/pos');
   }, [usuario, router]);
 
-  const totalCompra = useMemo(() => lineas.reduce((total, linea) => {
+  const subtotalCompra = useMemo(() => lineas.reduce((total, linea) => {
     const cantidad = Number(linea.cantidad);
     const costo = Number(linea.costoUnitario);
     return total + (Number.isFinite(cantidad) && Number.isFinite(costo) ? cantidad * costo : 0);
   }, 0), [lineas]);
+  const totalCompra = subtotalCompra + (categoria === 'COMPRA_MERCANCIA' ? Number(costoEnvio) || 0 : 0);
 
   const esMercancia = categoria === 'COMPRA_MERCANCIA';
   const actualizarLinea = (id: number, cambios: Partial<Linea>) => {
@@ -194,6 +196,7 @@ function ComprasContenido() {
         } : {}),
         ...(esMercancia
           ? {
+              costoEnvio: Number(costoEnvio) || 0,
               items: lineas.map((linea) => ({
                 productoId: Number(linea.productoId),
                 presentacionId: linea.presentacionId ? Number(linea.presentacionId) : null,
@@ -206,6 +209,7 @@ function ComprasContenido() {
       setDescripcion('');
       setPagadoConRecaudo(false);
       setMonto('');
+      setCostoEnvio('');
       setLineas([nuevaLinea()]);
       setExito(condicionPago === 'CREDITO' && administracion
         ? 'Compra a crédito registrada. La obligación está en Administración; el saldo de dinero se descuenta al registrar abonos.'
@@ -365,7 +369,7 @@ function ComprasContenido() {
                             <input required min="0.001" step="0.001" type="number" value={linea.cantidad} onChange={(e) => actualizarLinea(linea.id, { cantidad: e.target.value })} className="mt-1 w-full rounded border border-gray-700 bg-gray-900 px-2 py-2 text-sm text-white" />
                           </label>
                           <label className="text-xs text-gray-400">
-                            Costo por presentación
+                            Compra por presentación · IVA incluido
                             <input required min="0.01" step="0.01" type="number" value={linea.costoUnitario} onChange={(e) => actualizarLinea(linea.id, { costoUnitario: e.target.value })} className="mt-1 w-full rounded border border-gray-700 bg-gray-900 px-2 py-2 text-sm text-white" placeholder="Ej. 25000" />
                           </label>
                           <p className="text-sm text-gray-300 sm:col-span-2">Subtotal: <strong>{COP((Number(linea.cantidad) || 0) * (Number(linea.costoUnitario) || 0))}</strong></p>
@@ -373,6 +377,8 @@ function ComprasContenido() {
                         </div>
                       );
                     })}
+                    <label className="block text-sm text-gray-300">Envío total de esta compra<input type="number" min="0" step="0.01" value={costoEnvio} onChange={e=>setCostoEnvio(e.target.value)} placeholder="0" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2" /></label>
+                    <p className="text-xs text-gray-400">Mercancía con IVA incluido: {COP(subtotalCompra)}. El envío se distribuye proporcionalmente al valor comprado y se incorpora al costo del inventario. La ganancia es parte del precio de venta; no se suma al costo.</p>
                     <div className="flex items-center justify-between rounded-lg bg-gray-800 px-3 py-3">
                       <span className="font-medium">Total de compra</span><strong className="text-lg text-orange-300">{COP(totalCompra)}</strong>
                     </div>

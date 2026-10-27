@@ -6,6 +6,7 @@ import { CategoriaMovimiento, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { fechaDia, texto } from '../administracion/administracion.service';
 import { guardarMarcaRecaudo, validarMarcaRecaudo } from '../caja/gastos-recaudo';
+import { distribuirEnvio } from './distribuir-envio';
 
 const CATEGORIAS_EGRESO = new Set<CategoriaMovimiento>([
   CategoriaMovimiento.COMPRA_MERCANCIA,
@@ -27,6 +28,7 @@ type ItemCompraInput = {
 };
 
 type CompraInput = {
+  costoEnvio?: number;
   pagadoConRecaudo?: boolean;
   proveedorId?: number;
   condicionPago?: 'CONTADO' | 'CREDITO';
@@ -157,6 +159,9 @@ export class ComprasService {
     if (Number.isNaN(fecha.getTime())) throw new BadRequestException('La fecha no es válida');
     const esCompraMercancia = datos.categoria === CategoriaMovimiento.COMPRA_MERCANCIA;
     const items = Array.isArray(datos.items) ? datos.items : [];
+    if (items.some(i=>!i || typeof i !== 'object' || Array.isArray(i))) throw new BadRequestException('Las líneas de compra no son válidas.');
+    if (!esCompraMercancia && datos.costoEnvio) throw new BadRequestException('El envío se distribuye solo en compras de mercancía.');
+    const envios = esCompraMercancia ? distribuirEnvio(items, datos.costoEnvio ?? 0) : [];
     if (esCompraMercancia && items.length === 0) {
       throw new BadRequestException('Agrega al menos un producto a la compra de mercancía');
     }
@@ -222,7 +227,7 @@ export class ComprasService {
         subtotal: number;
       }> = [];
 
-      for (const item of items) {
+      for (const [indice, item] of items.entries()) {
         const cantidad = Number(item.cantidad);
         const costoUnitario = Number(item.costoUnitario);
         if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad > 999_999.999) {
@@ -255,7 +260,7 @@ export class ComprasService {
         }
         const unidadCompra = presentacion?.nombre ??
           (granelEnUnidadMayor ? producto.unidadGranel! : producto.unidadGranel || 'Unidad');
-        const subtotal = redondearPesos(cantidad * costoUnitarioRedondeado);
+        const subtotal = redondearPesos(cantidad * costoUnitarioRedondeado + envios[indice]);
         if (!Number.isFinite(subtotal) || subtotal <= 0) {
           throw new BadRequestException(`El subtotal de ${producto.nombre} no es válido`);
         }
@@ -266,7 +271,7 @@ export class ComprasService {
           unidadCompra,
           factorAplicado,
           cantidadInventario,
-          costoUnitario: costoUnitarioRedondeado,
+          costoUnitario: redondearPesos(subtotal / cantidad),
           subtotal,
         });
 
@@ -370,6 +375,10 @@ export class ComprasService {
               cantidadInventario: detalle.cantidadInventario,
               subtotal: detalle.subtotal,
             })),
+            ivaIncluido: true,
+            costoEnvio: Number(datos.costoEnvio || 0),
+            distribucionEnvio: envios,
+            costosCompraSinEnvio: items.map(i=>({ productoId:i.productoId, costoUnitario:Number(i.costoUnitario), cantidad:Number(i.cantidad) })),
           },
         },
       });

@@ -6,6 +6,7 @@ import { Plus, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Printer, Wall
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import ExcelDownload from '@/components/ExcelDownload';
+import EstadosFinancieros from '@/components/EstadosFinancieros';
 
 type Periodo = 'hoy' | 'semana' | 'mes' | 'anio' | 'personalizado';
 
@@ -281,7 +282,7 @@ export default function FinancieroPage() {
                 <div className="bg-orange-500/10 p-2 rounded-lg">
                   <DollarSign size={18} className="text-orange-500" />
                 </div>
-                <span className="text-gray-400 text-sm">Utilidad neta</span>
+                <span className="text-gray-400 text-sm">Resultado registrado</span>
               </div>
               <div className={`text-2xl font-bold ${(resumen?.utilidad || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 ${resumen?.utilidad?.toLocaleString() || 0}
@@ -299,6 +300,8 @@ export default function FinancieroPage() {
               <div className="text-gray-500 text-xs mt-1">{resumen?.cantidadPedidosHoy || 0} pedidos</div>
             </div>
           </div>
+
+          <EstadosFinancieros desde={rango.desde} hasta={rango.hasta} />
 
           {/* Ventas por forma de pago */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -414,6 +417,7 @@ export default function FinancieroPage() {
                         <div className={`w-2 h-2 rounded-full ${mov.tipo === 'INGRESO' ? 'bg-green-400' : 'bg-red-400'}`} />
                         <div>
                           <div className="text-white text-sm font-medium">{mov.descripcion}</div>
+                          {mov.costoCompleto === false && <p className="mt-1 text-xs text-amber-300">Costo parcial: hay productos sin costo histórico registrado.</p>}
                           <div className="text-gray-500 text-xs mt-0.5">
                             {mov.categoria} · {mov.usuario?.nombre} · {new Date(mov.fecha).toLocaleString('es-CO')}
                           </div>

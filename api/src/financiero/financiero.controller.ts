@@ -4,12 +4,25 @@ import { FinancieroService } from './financiero.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { EstadosFinancierosService } from './estados-financieros.service';
+import { CorreccionCostosService } from './correccion-costos.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN_EMPRESA', 'GERENTE')
 @Controller('financiero')
 export class FinancieroController {
-  constructor(private readonly financieroService: FinancieroService) {}
+  constructor(private readonly financieroService: FinancieroService, private readonly estados: EstadosFinancierosService, private readonly costos: CorreccionCostosService) {}
+
+  @Get('estados')
+  estadosFinancieros(@Request() req: any, @Query('fechaDesde') desde?: string, @Query('fechaHasta') hasta?: string) {
+    return this.estados.obtener(req.user.empresaId, desde, hasta);
+  }
+
+  @Post('corregir-costo-granel')
+  @Roles('ADMIN_EMPRESA')
+  corregirCosto(@Request() req: any, @Body() datos: { productoId: number; costoRegistrado: number; aplicar?: boolean }) {
+    return this.costos.corregir(req.user.empresaId, req.user.id, datos);
+  }
 
   @Post('movimiento')
   registrar(@Body() body: any, @Request() req: any) {

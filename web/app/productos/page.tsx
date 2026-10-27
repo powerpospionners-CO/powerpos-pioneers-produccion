@@ -547,7 +547,7 @@ export default function ProductosPage() {
         nombre: producto.nombre,
         descripcion: producto.descripcion || '',
         precio: producto.ventaGranel ? String(Number(producto.precio) * factorGranel) : producto.precio,
-        costo: producto.costo ? String(producto.costo) : '',
+        costo: producto.costo !== null && producto.costo !== undefined ? String(Number(producto.costo) * (producto.ventaGranel ? factorGranel : 1)) : '',
         margenDeseado: margenInicial > 0 ? String(Math.round(margenInicial * 10) / 10) : '',
         categoriaId: String(producto.categoria.id),
         disponible: producto.disponible,
@@ -747,7 +747,7 @@ export default function ProductosPage() {
         aceptaAdicionales: form.aceptaAdicionales,
         adicionalIds: adicionalIdsTemp,
         ...(!esRestaurante ? {
-          costo: form.costo ? Number(form.costo) : null,
+          costo: form.costo ? Math.round(Number(form.costo) / factorGranelGuardar * 100) / 100 : null,
           codigoBarras: form.codigoBarras,
           controlaStock: form.controlaStock,
           stockActual: Math.round(Number(form.stockActual) * factorGranelGuardar),
@@ -1238,14 +1238,14 @@ export default function ProductosPage() {
                 return (
                   <div className="space-y-3 rounded-xl border border-gray-800 p-3">
                     <div className="grid grid-cols-2 gap-3">
-                      <label className="text-sm text-gray-400">Costo (lo que te vale)
-                        <input type="number" min="0" step="1" value={form.costo} onChange={(e) => actualizarCosto(e.target.value)} placeholder="0" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                      <label className="text-sm text-gray-400">Costo con IVA y envío{form.ventaGranel ? ` por ${form.unidadGranel}` : ' por unidad'}
+                        <input type="number" min="0" step="0.01" value={form.costo} onChange={(e) => actualizarCosto(e.target.value)} placeholder="0" className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                       </label>
                       <label className="text-sm text-gray-400">% de ganancia que quieres
                         <input type="number" min="0" step="1" value={form.margenDeseado} onChange={(e) => actualizarMargen(e.target.value)} placeholder="Ej: 40" disabled={!form.costo} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white disabled:opacity-50" />
                       </label>
                     </div>
-                    <p className="text-xs text-gray-500 -mt-1">Escribe el costo y el % que quieres ganarle — el precio de venta se calcula solo. También puedes escribir el precio directamente abajo.</p>
+                    <p className="text-xs text-gray-500 -mt-1">Incluye en el costo lo pagado por el producto y su parte del envío. El IVA ya incluido no se suma otra vez. El porcentaje es tu ganancia sobre ese costo; también puedes conservar o escribir el precio de venta.</p>
                     <div className="text-sm text-gray-400">
                       Ganancia por unidad
                       <div className={`mt-1 w-full rounded-lg border px-3 py-2 font-semibold ${costoNum > 0 && precioNum > 0 ? (ganancia >= 0 ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400') : 'border-gray-700 bg-gray-800/50 text-gray-500'}`}>
@@ -1280,6 +1280,7 @@ export default function ProductosPage() {
                             setForm({
                               ...form,
                               unidadGranel: nuevaUnidad,
+                              costo: form.costo ? String(Number(form.costo) / factorAnterior * factorNuevo) : '',
                               precio: String(precioBase * factorNuevo),
                               stockActual: String(stockBase / factorNuevo),
                               stockMinimo: String(stockMinBase / factorNuevo),

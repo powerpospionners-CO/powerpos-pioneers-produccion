@@ -190,13 +190,13 @@ export class FinancieroService {
       where,
       include: {
         usuario: { select: { nombre: true } },
-        pedido: { select: { numero: true } },
+        pedido: { select: { numero: true, costoVentaHistorico: true } },
       },
       orderBy: { fecha: 'desc' },
       take: sinLimite ? undefined : 100,
     });
     const marcados = await idsGastosRecaudo(this.prisma, empresaId, movimientos.map(m => m.id));
-    return movimientos.map(m => ({ ...m, pagadoConRecaudo: marcados.has(m.id) }));
+    return movimientos.map(m => ({ ...m, pagadoConRecaudo: marcados.has(m.id), costoCompleto: m.categoria === 'COSTO_VENTA' ? m.pedido?.costoVentaHistorico !== null && m.pedido?.costoVentaHistorico !== undefined : undefined }));
   }
 
   private async ventasPorMetodoPagoEnRango(empresaId: number, fechaDesde?: string, fechaHasta?: string) {
