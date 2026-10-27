@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import { Plus, Trash2, X, Banknote, CreditCard, ArrowLeftRight, Smartphone } from 'lucide-react';
 import { moneda } from '@/lib/formato';
@@ -24,9 +24,13 @@ function MarcaPago({ metodo, grande = false }: { metodo: string; grande?: boolea
 
 export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number; condicionPago?: "CREDITO"; vencimientoCredito?: string };
 
+export type BorradorCobro = { credito: boolean; vencimiento: string; mixto: boolean; metodoUnico: string; recibidoUnico: number; bancoTransferencia: string; lineas: { metodoPago: string; monto: string }[]; recibidosMixto: Record<number, number> };
+
 type Linea = { metodoPago: string; monto: string };
 
-export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion }: {
+export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion, borradorInicial, onBorradorChange }: {
+  borradorInicial?: BorradorCobro | null;
+  onBorradorChange?: (borrador: BorradorCobro) => void;
   total: number;
   permitirCredito?: boolean;
   opcionesImpresion?: ReactNode;
@@ -39,20 +43,24 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
   metodoInicial?: string;
   pagosIniciales?: { metodoPago: string; monto: string | number }[];
 }) {
-  const [credito, setCredito] = useState(false);
-  const [vencimiento, setVencimiento] = useState('');
+  const [credito, setCredito] = useState(borradorInicial?.credito ?? (false));
+  const [vencimiento, setVencimiento] = useState(borradorInicial?.vencimiento ?? (''));
   const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
   const yaEraMixto = metodoInicial === 'MIXTO' && Array.isArray(pagosIniciales) && pagosIniciales.length > 1;
-  const [mixto, setMixto] = useState(yaEraMixto);
-  const [metodoUnico, setMetodoUnico] = useState(metodoInicial === 'MIXTO' ? 'EFECTIVO' : metodoInicial);
-  const [recibidoUnico, setRecibidoUnico] = useState(0);
-  const [bancoTransferencia, setBancoTransferencia] = useState('TRANSFERENCIA');
+  const [mixto, setMixto] = useState(borradorInicial?.mixto ?? (yaEraMixto));
+  const [metodoUnico, setMetodoUnico] = useState(borradorInicial?.metodoUnico ?? (metodoInicial === 'MIXTO' ? 'EFECTIVO' : metodoInicial));
+  const [recibidoUnico, setRecibidoUnico] = useState(borradorInicial?.recibidoUnico ?? (0));
+  const [bancoTransferencia, setBancoTransferencia] = useState(borradorInicial?.bancoTransferencia ?? ('TRANSFERENCIA'));
   const [lineas, setLineas] = useState<Linea[]>(
-    yaEraMixto
+    borradorInicial?.lineas ?? (yaEraMixto
       ? pagosIniciales!.map((p) => ({ metodoPago: p.metodoPago, monto: String(p.monto) }))
-      : [{ metodoPago: 'EFECTIVO', monto: String(total) }, { metodoPago: 'TRANSFERENCIA', monto: '0' }],
+      : [{ metodoPago: 'EFECTIVO', monto: String(total) }, { metodoPago: 'TRANSFERENCIA', monto: '0' }]),
   );
-  const [recibidosMixto, setRecibidosMixto] = useState<Record<number, number>>({});
+  const [recibidosMixto, setRecibidosMixto] = useState<Record<number, number>>(borradorInicial?.recibidosMixto ?? {});
+
+  useEffect(() => {
+    onBorradorChange?.({ credito, vencimiento, mixto, metodoUnico, recibidoUnico, bancoTransferencia, lineas, recibidosMixto });
+  }, [credito, vencimiento, mixto, metodoUnico, recibidoUnico, bancoTransferencia, lineas, recibidosMixto, onBorradorChange]);
 
   const sumaLineas = lineas.reduce((acc, l) => acc + (Number(l.monto) || 0), 0);
   const resta = Math.round((total - sumaLineas) * 100) / 100;
@@ -144,7 +152,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
             </div>
             <div className="min-w-0">
               {metodoUnico === 'EFECTIVO' ? (
-                <MontoRecibido key="unico" objetivo={total} onCambiar={setRecibidoUnico} />
+                <MontoRecibido key="unico" inicial={recibidoUnico} objetivo={total} onCambiar={setRecibidoUnico} />
               ) : (
                 <div className="flex min-h-96 flex-col items-center justify-center rounded-2xl border border-gray-700 bg-gray-950 p-5 text-center sm:p-8">
                   <MarcaPago metodo={metodoUnico === 'TRANSFERENCIA' ? bancoTransferencia : metodoUnico} grande />
@@ -204,7 +212,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
               {Math.abs(resta) > 0.01 ? `Falta asignar ${moneda(resta)}` : 'Los pagos cubren el total ✓'}
             </div>
             {indiceEfectivoMixto >= 0 && (
-              <MontoRecibido key={`mixto-${indiceEfectivoMixto}`} objetivo={montoEfectivoMixto} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
+              <MontoRecibido key={`mixto-${indiceEfectivoMixto}`} inicial={recibidoMixtoEfectivo} objetivo={montoEfectivoMixto} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
             )}
           </div>
         )}

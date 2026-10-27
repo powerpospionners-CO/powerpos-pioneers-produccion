@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
+import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
 import { ShoppingCart, Plus, Minus, Trash2, User, X, Search, Keyboard, LayoutGrid, ChevronDown } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -66,23 +67,25 @@ interface ItemCarrito {
 
 function RestaurantePOS() {
   const { usuario } = useAuthStore();
+  const borrador = useBorradorVenta('restaurante', { carrito: [] as ItemCarrito[], borradorCantidad: {} as Record<number, string>, modalCobroAbierto: false, clienteSeleccionado: null as any, puntosCanjeados: 0, busquedaCliente: '', modalProducto: null as Producto | null, exclusionesTemp: [] as string[], adicionalesTemp: [] as AdicionalSeleccionado[], observacionTemp: '', cantidadTemp: 1, tipoConsumoTemp: null as 'AQUI' | 'PARA_LLEVAR' | null, intento: null as { firma: string; clave: string } | null, cobro: null as import('@/components/ModalCobro').BorradorCobro | null });
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaActiva, setCategoriaActiva] = useState<number | null>(null);
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  const [carrito, setCarrito] = useCampoBorrador(borrador, 'carrito');
   // Mientras el cajero escribe la cantidad se guarda aquí el texto tal cual
   // (incluyendo vacío, mientras borra el número anterior) para que el campo
   // no "rebote" al valor viejo en cada tecla.
-  const [borradorCantidad, setBorradorCantidad] = useState<Record<number, string>>({});
+  const [borradorCantidad, setBorradorCantidad] = useCampoBorrador(borrador, 'borradorCantidad');
   const [adicionalesCatalogo, setAdicionalesCatalogo] = useState<AdicionalProducto[]>([]);
-  const [modalProducto, setModalProducto] = useState<Producto | null>(null);
-  const [exclusionesTemp, setExclusionesTemp] = useState<string[]>([]);
-  const [adicionalesTemp, setAdicionalesTemp] = useState<AdicionalSeleccionado[]>([]);
-  const [observacionTemp, setObservacionTemp] = useState('');
-  const [cantidadTemp, setCantidadTemp] = useState(1);
-  const [tipoConsumoTemp, setTipoConsumoTemp] = useState<'AQUI' | 'PARA_LLEVAR' | null>(null);
-  const intentoVenta = useRef<{ firma: string; clave: string } | null>(null);
-  const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
+  const [modalProducto, setModalProducto] = useCampoBorrador(borrador, 'modalProducto');
+  const [exclusionesTemp, setExclusionesTemp] = useCampoBorrador(borrador, 'exclusionesTemp');
+  const [adicionalesTemp, setAdicionalesTemp] = useCampoBorrador(borrador, 'adicionalesTemp');
+  const [observacionTemp, setObservacionTemp] = useCampoBorrador(borrador, 'observacionTemp');
+  const [cantidadTemp, setCantidadTemp] = useCampoBorrador(borrador, 'cantidadTemp');
+  const [tipoConsumoTemp, setTipoConsumoTemp] = useCampoBorrador(borrador, 'tipoConsumoTemp');
+  const intentoVenta = { get current() { return borrador.almacen.getSnapshot().datos.intento; }, set current(valor: { firma: string; clave: string } | null) { borrador.almacen.set('intento', valor); } };
+  const [cobroGuardado, setCobroGuardado] = useCampoBorrador(borrador, 'cobro');
+  const [modalCobroAbierto, setModalCobroAbierto] = useCampoBorrador(borrador, 'modalCobroAbierto');
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [pedidoExitoso, setPedidoExitoso] = useState<string | null>(null);
@@ -108,13 +111,20 @@ function RestaurantePOS() {
   const canalPantalla = useRef<BroadcastChannel | null>(null);
 
   // Cliente asociado al pedido
-  const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
+  const [clienteSeleccionado, setClienteSeleccionado] = useCampoBorrador(borrador, 'clienteSeleccionado');
   const [reglasPuntos, setReglasPuntos] = useState<{habilitado:boolean;compraPorPunto:number;valorPunto:number;categoriasExcluidas:number[];productosExcluidos:number[]}|null>(null);
-  const [puntosCanjeados, setPuntosCanjeados] = useState(0);
+  const [puntosCanjeados, setPuntosCanjeados] = useCampoBorrador(borrador, 'puntosCanjeados');
   const puntosRestaurados = useRef<number | null>(null);
+  const clienteAnterior = useRef(borrador.almacen.getSnapshot().datos.clienteSeleccionado?.id);
   useEffect(() => { if (!usuario) return; api.get('/tienda-admin/configuracion').then(r=>setReglasPuntos(r.data.fidelizacion)).catch(()=>setReglasPuntos(null)); }, [usuario]);
-  useEffect(() => { setPuntosCanjeados(puntosRestaurados.current ?? 0); puntosRestaurados.current = null; }, [clienteSeleccionado?.id]);
-  const [busquedaCliente, setBusquedaCliente] = useState('');
+  useEffect(() => {
+    const id = clienteSeleccionado?.id;
+    if (id !== borrador.almacen.getSnapshot().datos.clienteSeleccionado?.id || clienteAnterior.current === id) return;
+    clienteAnterior.current = id;
+    setPuntosCanjeados(puntosRestaurados.current ?? 0);
+    puntosRestaurados.current = null;
+  }, [clienteSeleccionado?.id, borrador.almacen, setPuntosCanjeados]);
+  const [busquedaCliente, setBusquedaCliente] = useCampoBorrador(borrador, 'busquedaCliente');
   const [tecladoClienteVisible, setTecladoClienteVisible] = useState(false);
   const [tecladoObservacionVisible, setTecladoObservacionVisible] = useState(false);
   const [resultadosCliente, setResultadosCliente] = useState<any[]>([]);
@@ -912,8 +922,9 @@ function RestaurantePOS() {
       const firma = JSON.stringify(payload);
       if (intentoVenta.current && intentoVenta.current.firma !== firma) throw new Error('Hay una venta pendiente de confirmar. Reintenta con los mismos datos antes de cambiarla.');
       intentoVenta.current ??= { firma, clave: generarClaveVenta() };
+      if (borrador.almacen.getSnapshot().error) throw new Error(borrador.almacen.getSnapshot().error);
       const { data } = await api.post('/pedidos', { ...payload, claveIdempotencia: intentoVenta.current.clave });
-      intentoVenta.current = null;
+      borrador.almacen.reiniciar();
       setModalCobroAbierto(false);
       setPedidoExitoso(data.numero);
       setUltimoPedido(data.numero);
@@ -990,6 +1001,8 @@ function RestaurantePOS() {
     <AuthGuard>
       <div className={`min-h-screen bg-gray-950 flex flex-col${esTrailer ? ' pos-trailer-grande' : ''}`}>
         <Navbar />
+      {borrador.error && <p role="alert" className="p-4 text-red-300">{borrador.error}</p>}
+      {borrador.recuperado && carrito.length > 0 && <p role="status" className="p-4 text-green-300">Venta en preparación recuperada. Puedes continuar donde quedaste.</p>}
 
         {usuario?.rol === 'CAJERO' && (
           <div className="bg-orange-500/10 border-b border-orange-500/20 text-orange-300 px-4 py-2 text-center text-sm font-semibold">
@@ -1000,8 +1013,8 @@ function RestaurantePOS() {
         <VentasPendientes
           clave={usuario ? `pos-pendientes:restaurante:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
           datos={{ carrito, cliente: clienteSeleccionado, puntos: puntosCanjeados }} total={total}
-          vacia={!carrito.length} bloqueado={loading || !cajaAbierta || cajaBloqueadaPorUsuario}
-          onGuardar={() => { setCarrito([]); setClienteSeleccionado(null); setPuntosCanjeados(0); setBusquedaCliente(''); setMostrarDropdownCliente(false); }}
+          vacia={!carrito.length} bloqueado={loading || !!borrador.datos.intento || !cajaAbierta || cajaBloqueadaPorUsuario}
+          onGuardar={() => { borrador.almacen.reiniciar(); setMostrarDropdownCliente(false); }}
           onRestaurar={(venta) => {
             if (clienteSeleccionado?.id !== venta.cliente?.id) puntosRestaurados.current = venta.puntos;
             setCarrito(venta.carrito); setClienteSeleccionado(venta.cliente); setPuntosCanjeados(venta.puntos);
@@ -1467,7 +1480,7 @@ function RestaurantePOS() {
     <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
 
         {modalCobroAbierto && (
-          <ModalCobro opcionesImpresion={esTrailer ? <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading} /> : undefined} permitirCredito={!!clienteSeleccionado && !canjeAplicado} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+          <ModalCobro borradorInicial={cobroGuardado} onBorradorChange={setCobroGuardado} opcionesImpresion={esTrailer ? <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading} /> : undefined} permitirCredito={!!clienteSeleccionado && !canjeAplicado} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
         )}
         {cambioAMostrar !== null && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">

@@ -22,7 +22,7 @@ export function useVersionCheck() {
         const activo = document.activeElement;
         const escribiendo = !!activo && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activo.tagName);
         if (document.visibilityState === 'visible' && !escribiendo) {
-          window.location.reload();
+          if (window.dispatchEvent(new Event('powerpos:antes-actualizar', { cancelable: true }))) window.location.reload();
         }
       } catch {
         // sin conexión momentánea: se reintenta en el próximo ciclo

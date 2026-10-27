@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Barcode, Minus, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
+import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import CajaControl from '@/components/CajaControl';
@@ -48,22 +49,24 @@ type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; monto
 
 export default function RetailPOS() {
   const usuario = useAuthStore((state) => state.usuario);
+  const borrador = useBorradorVenta('retail', { carrito: [] as Linea[], busqueda: '', borradorCantidad: {} as Record<string, string>, modalCobroAbierto: false, clienteCreditoId: null as number | null, descuentoInput: '', intento: null as { firma: string; clave: string } | null, cobro: null as import('@/components/ModalCobro').BorradorCobro | null });
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [busqueda, setBusqueda] = useState('');
-  const [carrito, setCarrito] = useState<Linea[]>([]);
+  const [busqueda, setBusqueda] = useCampoBorrador(borrador, 'busqueda');
+  const [carrito, setCarrito] = useCampoBorrador(borrador, 'carrito');
   const [ultimoAgregado, setUltimoAgregado] = useState<{ key: string } | null>(null);
   const listaCarritoRef = useRef<HTMLDivElement>(null);
   // Mientras el cajero escribe la cantidad se guarda aquí el texto tal cual
   // (incluyendo vacío, mientras borra el número anterior para escribir uno
   // nuevo) para que el campo no "rebote" al valor viejo en cada tecla.
-  const [borradorCantidad, setBorradorCantidad] = useState<Record<string, string>>({});
+  const [borradorCantidad, setBorradorCantidad] = useCampoBorrador(borrador, 'borradorCantidad');
   const [caja, setCaja] = useState<Caja | null>(null);
-  const intentoVenta = useRef<{ firma: string; clave: string } | null>(null);
+  const intentoVenta = { get current() { return borrador.almacen.getSnapshot().datos.intento; }, set current(valor: { firma: string; clave: string } | null) { borrador.almacen.set('intento', valor); } };
+  const [cobroGuardado, setCobroGuardado] = useCampoBorrador(borrador, 'cobro');
   const ultimaVentaEnviada = useRef<string | null>(null);
-  const [modalCobroAbierto, setModalCobroAbierto] = useState(false);
+  const [modalCobroAbierto, setModalCobroAbierto] = useCampoBorrador(borrador, 'modalCobroAbierto');
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
-  const [clienteCreditoId, setClienteCreditoId] = useState<number | null>(null);
+  const [clienteCreditoId, setClienteCreditoId] = useCampoBorrador(borrador, 'clienteCreditoId');
   const [aviso, setAviso] = useState('');
   const [ultimoRecibo, setUltimoRecibo] = useState<any>(null);
   const [cambioAMostrar, setCambioAMostrar] = useState<number | null>(null);
@@ -356,7 +359,7 @@ export default function RetailPOS() {
   // porcentaje sobre el subtotal — el backend siempre recibe el resultado
   // ya convertido a pesos, así que no necesita saber cuál de los dos se usó.
   const esEnchilaMarket = usuario?.empresaId === 2;
-  const [descuentoInput, setDescuentoInput] = useState('');
+  const [descuentoInput, setDescuentoInput] = useCampoBorrador(borrador, 'descuentoInput');
   const descuento = esEnchilaMarket
     ? Math.round(Math.min(subtotal, Math.max(0, Number(descuentoInput) || 0)) * 100) / 100
     : Math.round(subtotal * (Math.min(100, Math.max(0, Number(descuentoInput) || 0)) / 100) * 100) / 100;
@@ -381,11 +384,12 @@ export default function RetailPOS() {
     if (intentoVenta.current && intentoVenta.current.firma !== firma) {
       setError('Hay una venta pendiente de confirmar. Reintenta con los mismos datos antes de cambiarla.'); setProcesando(false); return;
     }
-    intentoVenta.current ??= { firma, clave: payload.claveIdempotencia };
-    payload.claveIdempotencia = intentoVenta.current.clave;
     try {
+      intentoVenta.current ??= { firma, clave: payload.claveIdempotencia };
+      payload.claveIdempotencia = intentoVenta.current.clave;
+      if (borrador.almacen.getSnapshot().error) { setError(borrador.almacen.getSnapshot().error); return; }
       const { data } = await api.post('/pedidos', payload);
-      intentoVenta.current = null;
+      borrador.almacen.reiniciar();
       ultimaVentaEnviada.current = data.numero;
       const tokenVenta = useAuthStore.getState().token;
       const sigueVigente = () => ultimaVentaEnviada.current === data.numero && useAuthStore.getState().token === tokenVenta;
@@ -425,7 +429,7 @@ export default function RetailPOS() {
         // porque para el cajero la venta ya ocurrió — el cliente ya se fue.
         try {
           encolarVentaPendiente(usuario.empresaId, usuario.sucursalId, payload.claveIdempotencia, payload);
-          intentoVenta.current = null;
+          borrador.almacen.reiniciar();
         } catch {
           setError('No se pudo guardar la venta en este equipo. Conserva los datos del cobro y verifica si llegó al servidor antes de repetirla.');
           return;
@@ -487,6 +491,8 @@ export default function RetailPOS() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-500">Venta rápida</p><h1 className="mt-1 text-3xl font-bold">{titulo}</h1><p className="mt-1 text-sm text-gray-400">Escanea el código de barras para agregar de una, o escribe el nombre y selecciona el producto.</p></div>
       </div>
+      {borrador.error && <div role="alert" className="mb-4 rounded-xl bg-red-950 p-3 text-red-200">{borrador.error}</div>}
+      {borrador.recuperado && carrito.length > 0 && <p role="status" className="mb-4 text-green-300">Venta en preparación recuperada. Puedes continuar donde quedaste.</p>}
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-300">{error}</div>}
       {usandoDatosOffline && (
         <div role="status" className="mb-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-yellow-300">
@@ -519,9 +525,9 @@ export default function RetailPOS() {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div className="lg:col-span-2"><VentasPendientes
           clave={usuario ? `pos-pendientes:comercio:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
-          datos={{ carrito }} total={total} vacia={!carrito.length} bloqueado={procesando || !caja || cajaDeOtro}
-          onGuardar={() => { setCarrito([]); setDescuentoInput(''); setBusqueda(''); setAviso('Venta guardada. Ya puedes atender a otro cliente.'); buscarRef.current?.focus(); }}
-          onRestaurar={(venta) => { setCarrito(venta.carrito); setError(''); setAviso('Venta recuperada. Revisa los productos y pulsa Cobrar.'); }}
+          datos={{ carrito, clienteCreditoId, descuentoInput }} total={total} vacia={!carrito.length} bloqueado={procesando || !!borrador.datos.intento || !caja || cajaDeOtro}
+          onGuardar={() => { borrador.almacen.reiniciar(); setAviso('Venta guardada. Ya puedes atender a otro cliente.'); buscarRef.current?.focus(); }}
+          onRestaurar={(venta) => { borrador.almacen.reiniciar(); setCarrito(venta.carrito); setClienteCreditoId(venta.clienteCreditoId ?? null); setDescuentoInput(venta.descuentoInput ?? ''); setError(''); setAviso('Venta recuperada. Revisa los productos y pulsa Cobrar.'); }}
         /></div>
         <section className="min-w-0 rounded-2xl border border-gray-800 bg-gray-900 p-4">
           <form onSubmit={escanear} className="mb-4 flex items-center gap-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3"><Barcode className="text-orange-500" size={23} /><input ref={buscarRef} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setError(''); }} placeholder="Código de barras o nombre del producto" aria-label="Código de barras o nombre del producto" className="min-w-0 flex-1 bg-transparent text-white outline-none" /><button type="submit" aria-label="Buscar código" className="text-gray-400 hover:text-orange-500"><Search size={20} /></button></form>
@@ -622,7 +628,7 @@ export default function RetailPOS() {
     <OperacionesVenta onCambio={()=>{ void cargar(); }} />
     <VentasTurno cajaId={caja?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaDeOtro} />
     {modalCobroAbierto && (
-      <ModalCobro permitirCredito={!!clienteCreditoId} total={total} procesando={procesando} onConfirmar={vender} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+      <ModalCobro borradorInicial={cobroGuardado} onBorradorChange={setCobroGuardado} permitirCredito={!!clienteCreditoId} total={total} procesando={procesando} onConfirmar={vender} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
     )}
     {cambioAMostrar !== null && (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">

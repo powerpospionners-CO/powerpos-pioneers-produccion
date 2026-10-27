@@ -7,8 +7,8 @@ import { moneda } from '@/lib/formato';
 // tocar billete por billete (lento para el cajero), se escribe con cuánto
 // pagó el cliente y se muestra el cambio a devolver. Misma firma de props
 // que CalculadoraBilletes para poder intercambiarlos sin tocar ModalCobro.
-export default function MontoRecibido({ objetivo, onCambiar }: { objetivo: number; onCambiar?: (recibido: number) => void }) {
-  const [texto, setTexto] = useState('');
+export default function MontoRecibido({ objetivo, onCambiar, inicial = 0 }: { objetivo: number; inicial?: number; onCambiar?: (recibido: number) => void }) {
+  const [texto, setTexto] = useState(inicial ? String(inicial) : '');
   const recibido = Number(texto) || 0;
 
   useEffect(() => { onCambiar?.(recibido); }, [recibido]); // eslint-disable-line react-hooks/exhaustive-deps
