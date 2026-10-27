@@ -583,13 +583,17 @@ export class ImpresionService {
     } else if (pedido.metodoPago) {
       lineas.push(pedido.metodoPago === 'CREDITO' ? 'A CREDITO - PENDIENTE DE COBRO\n' : `Pago: ${pedido.metodoPago}\n`);
     }
+    if (pedido.metodoPago === 'CREDITO') {
+      for (const abono of pedido.abonosCredito || []) lineas.push(`${this.lineaMonto(`Abono ${abono.metodoPago}`, Number(abono.monto), ancho)}\n`);
+      if (pedido.cuentaCredito) lineas.push(`${this.lineaMonto('SALDO PENDIENTE', Number(pedido.cuentaCredito.saldo), ancho)}\n`);
+    }
 
     // Cuánto pagó en efectivo y cuánto se le devolvió — solo aplica si hubo
     // vuelto (pago con un billete más grande que el total en efectivo).
     const cambio = Number(pedido.cambio ?? 0);
     if (cambio > 0) {
       const efectivoAtribuido = Number(
-        (Array.isArray(pedido.pagos) ? pedido.pagos.find((p: any) => p.metodoPago === 'EFECTIVO')?.monto : undefined) ?? total,
+        (Array.isArray(pedido.pagos) ? pedido.pagos.find((p: any) => p.metodoPago === 'EFECTIVO')?.monto : undefined) ?? (pedido.abonosCredito || []).find((p: any)=>p.metodoPago==='EFECTIVO')?.monto ?? total,
       );
       lineas.push(separador('-'));
       lineas.push(`${this.lineaMonto('Recibido', efectivoAtribuido + cambio, ancho)}\n`);

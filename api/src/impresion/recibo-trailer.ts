@@ -52,7 +52,11 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
   if (Number(pedido.descuento) > 0) { monto('Subtotal', pedido.subtotal); monto('Descuento', -Number(pedido.descuento)); }
   alto(true); negrita(true); monto('TOTAL A PAGAR', pedido.total); negrita(false); alto(false);
   linea('-'.repeat(ancho));
-  if (pedido.metodoPago === 'CREDITO') linea('A CREDITO - PENDIENTE DE COBRO');
+  if (pedido.metodoPago === 'CREDITO') {
+    linea('A CREDITO - PENDIENTE DE COBRO');
+    for (const abono of pedido.abonosCredito || []) monto('Abono ' + texto(abono.metodoPago), abono.monto);
+    if (pedido.cuentaCredito) monto('SALDO PENDIENTE', pedido.cuentaCredito.saldo);
+  }
   else {
     const pagos = Array.isArray(pedido.pagos) ? pedido.pagos : [];
     if (pagos.length) for (const p of pagos) monto(texto(p.metodoPago), p.monto);

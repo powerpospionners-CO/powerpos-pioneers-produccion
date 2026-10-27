@@ -8,6 +8,16 @@ const METODOS_PAGO_VALIDOS = [
   'DAVIPLATA',
 ];
 
+export function normalizarAbonosIniciales(datos: { pagos?: unknown }, total: number) {
+  if (datos.pagos === undefined || (Array.isArray(datos.pagos) && !datos.pagos.length)) return [];
+  if (!Array.isArray(datos.pagos)) throw new BadRequestException('Los abonos iniciales deben ser una lista de pagos');
+  const suma = datos.pagos.reduce((s, p) => s + Number(p?.monto), 0);
+  if (!Number.isFinite(suma) || suma <= 0) throw new BadRequestException('El abono inicial debe ser mayor a cero');
+  const pagos = normalizarPagos({ pagos: datos.pagos }, Math.round(suma * 100) / 100).pagos;
+  if (pagos.some(p=>p.monto<=0) || Math.round(pagos.reduce((s,p)=>s+p.monto,0)*100) >= Math.round(total*100)) throw new BadRequestException('El abono inicial debe ser menor al total; el restante quedará a crédito');
+  return pagos;
+}
+
 // Valida y normaliza el desglose de pago de una venta. Acepta el campo
 // clásico `metodoPago` (pago único) o `pagos: [{metodoPago, monto}]` para
 // pagos mixtos (ej. parte en efectivo, parte por transferencia).

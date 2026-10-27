@@ -1,4 +1,5 @@
-import { normalizarPagos, calcularCostoVenta } from './calculos-venta';
+import { normalizarPagos, normalizarAbonosIniciales, calcularCostoVenta } from './calculos-venta';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { calcularPuntos, puntosConfig, monto } from '../tienda/reglas';
 import {
@@ -46,6 +47,8 @@ export class PedidosService {
       const existente = await db.pedido.findUnique({
         where: { claveIdempotencia },
         include: {
+          cuentaCredito: true,
+          operacionesCaja: { where: { tipo: 'COBRO_CREDITO' } },
           detalles: { include: { producto: true, adicionales: { include: { adicional: true } } } },
           pagos: true,
           usuario: { select: { nombre: true } },
@@ -57,7 +60,7 @@ export class PedidosService {
           where: { id: existente.sucursalId, empresaId }, select: { id: true },
         });
         if (!pertenece) throw new BadRequestException('La clave de la venta no está disponible');
-        return existente;
+        return existente.metodoPago === 'CREDITO' ? { ...existente, abonosCredito: existente.operacionesCaja.map(o=>({metodoPago:o.metodoPago,monto:Number(o.monto)})) } : existente;
       }
     }
 
@@ -287,7 +290,8 @@ export class PedidosService {
     monto(Math.round(total * 100) / 100, 'Total', 0, 99999999.99);
     if (puntosCalculados > 2147483647) throw new BadRequestException('Revise la regla de acumulación: genera demasiados puntos');
     const cambio = monto(datos.cambio ?? 0, 'Cambio', 0, 99999999.99);
-    if (credito && (total <= 0 || cambio !== 0 || (Array.isArray(datos.pagos) && datos.pagos.length))) throw new BadRequestException('La venta a crédito debe quedar pendiente sin pagos ni cambio');
+    const abonosIniciales = credito ? normalizarAbonosIniciales(datos, total) : [];
+    if (credito && (total <= 0 || (cambio > 0 && !abonosIniciales.some(p=>p.metodoPago==='EFECTIVO')))) throw new BadRequestException('El crédito requiere un saldo pendiente; el cambio solo aplica a un abono en efectivo');
     const { metodoPago, pagos } = credito ? { metodoPago: 'CREDITO', pagos: [] } : normalizarPagos(datos, Math.round(total * 100) / 100);
 
     const consumoInventario: { tipo: 'PRODUCTO' | 'INGREDIENTE'; id: number; cantidad: number }[] = [];
@@ -425,12 +429,24 @@ export class PedidosService {
       },
     });
 
-    if (credito) await db.cuentaAdministrativa.create({ data: {
+    let cuentaCredito: any = null;
+    if (credito) {
+      const abonado = abonosIniciales.reduce((s,p)=>s+p.monto,0);
+      cuentaCredito = await db.cuentaAdministrativa.create({ data: {
       empresaId, sucursalId, usuarioId, pedidoId: pedido.id,
       tipo: 'COBRAR', categoria: 'VENTA', documento: `POS-${pedido.numero}`,
       tercero: `Cliente #${clienteId}`, descripcion: `Venta a crédito ${pedido.numero}`,
-      monto: total, saldo: total, vencimiento: vencimientoCredito!,
+      monto: total, saldo: Math.round((total-abonado)*100)/100, vencimiento: vencimientoCredito!,
     } });
+      for (const [indice, abono] of abonosIniciales.entries()) {
+        const clave = createHash('sha256').update(`abono-inicial:${claveIdempotencia}:${indice}`).digest('hex');
+        const referencia = `Abono inicial ${abono.metodoPago} ${pedido.numero}`;
+        const movimiento = await db.movimientoFinanciero.create({ data: { empresaId, sucursalId, usuarioId, pedidoId: pedido.id, tipo: 'INGRESO', categoria: 'VENTA', monto: abono.monto, descripcion: referencia, comprobante: referencia } });
+        await db.abonoAdministrativo.create({ data: { cuentaId: cuentaCredito.id, usuarioId, monto: abono.monto, referencia, clave, movimientoId: movimiento.id } });
+        const op = await db.operacionVentaCaja.create({ data: { empresaId, pedidoId: pedido.id, cajaId: cajaActivaId, usuarioId, clave, tipo: 'COBRO_CREDITO', metodoPago: abono.metodoPago as any, monto: abono.monto, motivo: referencia, detalle: { origen: 'ABONO_INICIAL', movimientoId: movimiento.id, puntosOtorgados: 0, puntosBaseDevuelto: 0 } } });
+        await db.auditoria.create({ data: { empresaId, usuarioId, accion: 'CREAR', entidad: 'OPERACION_VENTA_CAJA', entidadId: op.id, detalle: { pedidoId: pedido.id, cajaId: cajaActivaId, monto: abono.monto, origen: 'ABONO_INICIAL' } } });
+      }
+    }
 
     // Registrar también el costo de lo vendido, para que la utilidad neta
     // reste lo invertido y no muestre el ingreso completo como si fuera
@@ -463,7 +479,7 @@ export class PedidosService {
       }
     }
 
-    return pedido;
+    return credito ? { ...pedido, cuentaCredito, abonosCredito: abonosIniciales } : pedido;
   }
 
   private obtenerCantidadInventario(ingrediente: any, cantidadReceta: number) {
@@ -566,7 +582,7 @@ export class PedidosService {
       where: { id, sucursal: { empresaId } },
       include: {
         cuentaCredito: true,
-        operacionesCaja: { where: { tipo: 'DEVOLUCION' } },
+        operacionesCaja: { where: { tipo: { in: ['DEVOLUCION', 'COBRO_CREDITO'] } } },
         detalles: {
           include: {
             producto: {
@@ -582,7 +598,7 @@ export class PedidosService {
       },
     });
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
-    return pedido;
+    return pedido.metodoPago === 'CREDITO' ? { ...pedido, abonosCredito: pedido.operacionesCaja.filter(o=>o.tipo==='COBRO_CREDITO').map(o=>({metodoPago:o.metodoPago,monto:Number(o.monto)})) } : pedido;
   }
 
   async actualizarPago(id: number, datos: any, usuarioId: number, empresaId: number) {

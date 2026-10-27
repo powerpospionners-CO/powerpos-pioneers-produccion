@@ -91,6 +91,22 @@ describe('Pedidos comerciales', () => {
     expect(db.producto.updateMany).not.toHaveBeenCalled();
   });
 
+  it('cobra Nequi y efectivo y deja únicamente el restante en cartera', async () => {
+    const { db, service } = escenario('SUPERMERCADO');
+    db.producto.findFirst.mockResolvedValue({ id:5,nombre:'Mercancía',precio:172000,disponible:true,controlaStock:true,ingredientes:[],adicionales:[] });
+    db.cliente={findFirst:jest.fn().mockResolvedValue({id:9}),update:jest.fn()};
+    db.cuentaAdministrativa={create:jest.fn().mockImplementation(({data})=>({id:21,...data}))};
+    db.movimientoFinanciero.create.mockResolvedValue({id:40});
+    db.abonoAdministrativo={create:jest.fn()};db.operacionVentaCaja={create:jest.fn().mockResolvedValue({id:50})};db.auditoria={create:jest.fn()};
+    const pagos=[{metodoPago:'NEQUI',monto:31400},{metodoPago:'EFECTIVO',monto:90600}];
+    const r=await service.crearEnTransaccion({...venta,items:[{productoId:5,cantidad:1}],clienteId:9,condicionPago:'CREDITO',pagos,claveIdempotencia:'parcial-1',vencimientoCredito:'2099-01-01'},3,1,db);
+    expect(db.cuentaAdministrativa.create).toHaveBeenCalledWith({data:expect.objectContaining({monto:172000,saldo:50000})});
+    expect(db.abonoAdministrativo.create).toHaveBeenCalledTimes(2);expect(db.operacionVentaCaja.create).toHaveBeenCalledTimes(2);
+    expect(db.movimientoFinanciero.create.mock.calls.map(c=>c[0].data.monto)).toEqual([31400,90600]);
+    expect(db.pedido.create.mock.calls[0][0].data.pagos.create).toEqual([]);
+    expect(r).toMatchObject({cuentaCredito:{saldo:50000},abonosCredito:pagos});
+  });
+
   it('entrega la venta comercial y descuenta dos unidades de stock', async () => {
     const { db, service } = escenario('SUPERMERCADO');
     const resultado = await service.crearEnTransaccion(venta, 3, 1, db);

@@ -28,4 +28,8 @@ describe('Recibo térmico del Trailer', () => {
     const texto = reciboTrailer({ ...pedido, metodoPago: 'CREDITO', pagos: [], cambio: 0 }, {}).toString('ascii');
     expect(texto).toContain('PENDIENTE DE COBRO'); expect(texto).not.toContain('Efectivo recibido');
   });
+  it('imprime el total, los dos abonos y solo 50.000 de saldo pendiente',()=>{
+    const texto=reciboTrailer({...pedido,total:172000,metodoPago:'CREDITO',pagos:[],cambio:0,abonosCredito:[{metodoPago:'NEQUI',monto:31400},{metodoPago:'EFECTIVO',monto:90600}],cuentaCredito:{saldo:50000}},{}).toString('ascii');
+    expect(texto).toMatch(/Abono NEQUI\s+\$31\.400/);expect(texto).toMatch(/Abono EFECTIVO\s+\$90\.600/);expect(texto).toMatch(/SALDO PENDIENTE\s+\$50\.000/);
+  });
 });

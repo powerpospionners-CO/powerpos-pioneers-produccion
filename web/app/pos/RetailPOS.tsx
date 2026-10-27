@@ -470,7 +470,9 @@ export default function RetailPOS() {
     if (!pedido) return;
     const ventana = window.open('', '_blank', 'width=420,height=700');
     if (!ventana) { setError('El navegador bloqueó la ventana del recibo. Permite ventanas emergentes para imprimir.'); return; }
-    const pagos = Array.isArray(pedido.pagos) && pedido.pagos.length > 1
+    const pagos = pedido.metodoPago === 'CREDITO'
+      ? ['VENTA A CREDITO', ...(pedido.abonosCredito || []).map((p:any)=>`ABONO ${p.metodoPago}  ${moneda(Number(p.monto))}`), `SALDO PENDIENTE  ${moneda(Number(pedido.cuentaCredito?.saldo ?? pedido.total))}`]
+      : Array.isArray(pedido.pagos) && pedido.pagos.length > 1
       ? pedido.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
       : [pedido.metodoPago === 'CREDITO' ? 'A CREDITO - PENDIENTE DE COBRO' : `PAGO  ${pedido.metodoPago}`];
     const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${pedido.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',

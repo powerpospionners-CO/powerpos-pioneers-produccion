@@ -194,6 +194,22 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(typeof estados.resultado.ventasNetas,'number'); assert.equal(typeof estados.balance.inventario,'number');
     console.log('PASS corrección histórica auditada e idempotente, permisos y estados financieros sin duplicar costo en caja');
 
+    const cajaParcial = (await http.post('/caja/abrir').set('Authorization',token).send({montoInicial:0}).expect(201)).body;
+    const mercanciaParcial = await db.producto.create({data:{empresaId:empresa.id,categoriaId:categoria.id,nombre:'Mercancía abono parcial',precio:172000,costo:100000,controlaStock:true,stockActual:5}});
+    const solicitudParcial={sucursalId:sede.id,claveIdempotencia:randomUUID(),clienteId:cliente.id,condicionPago:'CREDITO',vencimientoCredito:'2099-01-01',items:[{productoId:mercanciaParcial.id,cantidad:1}],pagos:[{metodoPago:'NEQUI',monto:31400},{metodoPago:'EFECTIVO',monto:90600}]};
+    const parcial=(await http.post('/pedidos').set('Authorization',token).send(solicitudParcial).expect(201)).body;
+    assert.equal(Number(parcial.cuentaCredito.saldo),50000);assert.equal(parcial.abonosCredito.length,2);
+    const parcialRepetida=(await http.post('/pedidos').set('Authorization',token).send(solicitudParcial).expect(201)).body;
+    assert.equal(parcialRepetida.id,parcial.id);assert.equal(Number(parcialRepetida.cuentaCredito.saldo),50000);
+    assert.equal(await db.abonoAdministrativo.count({where:{cuentaId:parcial.cuentaCredito.id}}),2);
+    assert.equal(await db.operacionVentaCaja.count({where:{pedidoId:parcial.id,tipo:'COBRO_CREDITO'}}),2);
+    assert.equal((await db.producto.findUnique({where:{id:mercanciaParcial.id}})).stockActual,4);
+    const movimientosParciales=await db.movimientoFinanciero.findMany({where:{pedidoId:parcial.id,tipo:'INGRESO'}});
+    assert.equal(movimientosParciales.reduce((s,m)=>s+Number(m.monto),0),122000);
+    const cierreParcial=(await http.post(`/caja/${cajaParcial.id}/cerrar`).set('Authorization',token).send({montoFinal:90600}).expect(201)).body;
+    assert.equal(Number(cierreParcial.totalEfectivo),90600);assert.equal(Number(cierreParcial.diferencia),0);
+    console.log('PASS venta 172000 con abonos Nequi 31400 y efectivo 90600, saldo 50000, reintento único y caja sin diferencias');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);
