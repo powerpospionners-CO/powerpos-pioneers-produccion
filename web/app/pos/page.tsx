@@ -11,6 +11,7 @@ import CajaControl from '@/components/CajaControl';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import VentasTurno from '@/components/VentasTurno';
 import OperacionesVenta from '@/components/OperacionesVenta';
+import PedidosDistribuidorCaja from '@/components/PedidosDistribuidorCaja';
 import VentasPendientes from '@/components/VentasPendientes';
 import TouchKeyboard from '@/components/TouchKeyboard';
 import RetailPOS from './RetailPOS';
@@ -1001,6 +1002,7 @@ function RestaurantePOS() {
     <AuthGuard>
       <div className={`min-h-screen bg-gray-950 flex flex-col${esTrailer ? ' pos-trailer-grande' : ''}`}>
         <Navbar />
+        <PedidosDistribuidorCaja onCambio={()=>{void cargarCaja();}} />
       {borrador.error && <p role="alert" className="p-4 text-red-300">{borrador.error}</p>}
       {borrador.recuperado && carrito.length > 0 && <p role="status" className="p-4 text-green-300">Venta en preparación recuperada. Puedes continuar donde quedaste.</p>}
 

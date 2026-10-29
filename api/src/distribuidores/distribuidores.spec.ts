@@ -3,6 +3,9 @@ import { DistribuidoresService } from './distribuidores.service';
 
 function escenario(pedidosPendientes: any[]) {
   const tx: any = {
+    $executeRaw: jest.fn(),
+    auditoria: { findMany: jest.fn().mockResolvedValue(pedidosPendientes.map(p=>({entidadId:p.id,detalle:{modalidad:'PAGO_ANTES',pedidoCajaId:p.id+100}}))) },
+    pedido: { findMany: jest.fn().mockResolvedValue(pedidosPendientes.map(p=>({id:p.id+100,estado:'ENTREGADO',operacionesCaja:[],cuentaCredito:null}))) },
     distribuidor: { findFirst: jest.fn().mockResolvedValue({ id: 7, empresaId: 1, sucursalId: 2, codigo: 'DIST-001', nombre: 'Juan Pérez' }) },
     pedidoDistribuidor: {
       findMany: jest.fn().mockResolvedValue(pedidosPendientes),

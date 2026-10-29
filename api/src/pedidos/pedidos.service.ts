@@ -34,7 +34,7 @@ export class PedidosService {
     return pedido;
   }
 
-  async crearEnTransaccion(datos: any, usuarioId: number, empresaId: number, db: Prisma.TransactionClient, costoDomicilio = 0) {
+  async crearEnTransaccion(datos: any, usuarioId: number, empresaId: number, db: Prisma.TransactionClient, costoDomicilio = 0, contextoDistribuidor?: { precios: Record<string, number>; factores: Record<string, number> }) {
     const { items, clienteId, observacion, sucursalId, cajaId } =
       datos;
 
@@ -180,8 +180,9 @@ export class PedidosService {
         });
         if (!presentacion) throw new NotFoundException('La presentación seleccionada no está disponible');
       }
-      const precioUnitario = presentacion ? Number(presentacion.precio) : Number(producto.precio);
+      const precioUnitario = contextoDistribuidor?.precios[`${producto.id}:${presentacion?.id || 0}`] ?? (presentacion ? Number(presentacion.precio) : Number(producto.precio));
       const factorUnidades = presentacion ? presentacion.factorUnidades : 1;
+      if (contextoDistribuidor && contextoDistribuidor.factores[`${producto.id}:${presentacion?.id || 0}`] !== factorUnidades) throw new BadRequestException('La presentación del pedido cambió. Anula el pedido pendiente y vuelve a registrarlo antes de entregar.');
 
       // Adicionales habilitados para este producto: los marcados en el producto,
       // o todo el catálogo activo de la empresa si el producto no tiene ninguno marcado
@@ -284,7 +285,7 @@ export class PedidosService {
     const vencimientoCredito = credito ? fechaDia(datos.vencimientoCredito) : null;
     const hoyCredito = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
     if (vencimientoCredito && vencimientoCredito < fechaDia(hoyCredito)) throw new BadRequestException('El vencimiento no puede estar en el pasado');
-    const puntosCalculados = clienteId ? calcularPuntos(itemsValidados, subtotal, descuento, reglas) : 0;
+    const puntosCalculados = clienteId && !contextoDistribuidor ? calcularPuntos(itemsValidados, subtotal, descuento, reglas) : 0;
     const puntosGanados = credito ? 0 : puntosCalculados;
     const total = subtotal - descuento + costoDomicilio;
     monto(Math.round(total * 100) / 100, 'Total', 0, 99999999.99);

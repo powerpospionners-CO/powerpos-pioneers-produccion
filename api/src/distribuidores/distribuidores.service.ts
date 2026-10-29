@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { monto } from '../tienda/reglas';
+import { gestionPedidos } from './gestion-pedidos';
+import { fechaDia } from '../administracion/administracion.service';
 
 @Injectable()
 export class DistribuidoresService {
@@ -80,8 +82,10 @@ export class DistribuidoresService {
   }
 
   private rangoPeriodo(desde?: string, hasta?: string) {
-    const periodoHasta = hasta ? new Date(hasta) : new Date();
-    const periodoDesde = desde ? new Date(desde) : new Date(periodoHasta.getFullYear(), periodoHasta.getMonth(), 1);
+    const periodoHasta = hasta ? /^\d{4}-\d{2}-\d{2}$/.test(hasta) ? new Date(fechaDia(hasta).getTime()+86400000-1) : new Date(hasta) : new Date();
+    if (Number.isNaN(periodoHasta.getTime())) throw new BadRequestException('El rango de fechas no es válido');
+    const diaHasta = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota'}).format(periodoHasta);
+    const periodoDesde = desde ? /^\d{4}-\d{2}-\d{2}$/.test(desde) ? fechaDia(desde) : new Date(desde) : fechaDia(diaHasta.slice(0,7)+'-01');
     if (Number.isNaN(periodoDesde.getTime()) || Number.isNaN(periodoHasta.getTime()) || periodoDesde > periodoHasta) {
       throw new BadRequestException('El rango de fechas no es válido');
     }
@@ -93,10 +97,11 @@ export class DistribuidoresService {
   async pendientesLiquidar(distribuidorId: number, empresaId: number, desde?: string, hasta?: string) {
     await this.obtener(distribuidorId, empresaId);
     const { periodoDesde, periodoHasta } = this.rangoPeriodo(desde, hasta);
-    const pedidos = await this.prisma.pedidoDistribuidor.findMany({
+    const registros = await this.prisma.pedidoDistribuidor.findMany({
       where: { distribuidorId, empresaId, estado: 'ENTREGADO', liquidacionId: null, creadoEn: { gte: periodoDesde, lte: periodoHasta } },
       orderBy: { creadoEn: 'desc' },
     });
+    const pedidos = (await gestionPedidos(this.prisma,empresaId,registros)).filter(p=>p.comisionDisponible);
     const totalVentas = pedidos.reduce((acc, p) => acc + Number(p.total), 0);
     const totalComision = pedidos.reduce((acc, p) => acc + Number(p.comisionMonto), 0);
     return { pedidos, cantidadPedidos: pedidos.length, totalVentas, totalComision, periodoDesde, periodoHasta };
@@ -111,10 +116,12 @@ export class DistribuidoresService {
     const { periodoDesde, periodoHasta } = this.rangoPeriodo(desde, hasta);
 
     return this.prisma.$transaction(async (tx) => {
-      const pedidos = await tx.pedidoDistribuidor.findMany({
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73111, ${empresaId}::integer)`;
+      const registros = await tx.pedidoDistribuidor.findMany({
         where: { distribuidorId, empresaId, estado: 'ENTREGADO', liquidacionId: null, creadoEn: { gte: periodoDesde, lte: periodoHasta } },
       });
-      if (!pedidos.length) throw new BadRequestException('No hay pedidos pendientes de liquidar en ese periodo');
+      const pedidos = (await gestionPedidos(tx,empresaId,registros)).filter(p=>p.comisionDisponible);
+      if (!pedidos.length) throw new BadRequestException('No hay pedidos entregados y pagados pendientes de liquidar en ese periodo');
 
       const totalVentas = Math.round(pedidos.reduce((acc, p) => acc + Number(p.total), 0) * 100) / 100;
       const totalComision = Math.round(pedidos.reduce((acc, p) => acc + Number(p.comisionMonto), 0) * 100) / 100;

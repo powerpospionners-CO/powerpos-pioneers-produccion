@@ -4,9 +4,10 @@ import { PedidosDistribuidorService } from './pedidos-distribuidor.service';
 function escenario(stockActualizado = 1) {
   const tx: any = {
     $executeRaw: jest.fn().mockResolvedValue(1),
-    distribuidor: { findFirst: jest.fn().mockResolvedValue({ id: 7, codigo: 'DIST-001', porcentajeComision: 10, activo: true }) },
+    auditoria: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
+    distribuidor: { findFirst: jest.fn().mockResolvedValue({ id: 7, sucursalId: 2, codigo: 'DIST-001', porcentajeComision: 10, activo: true }) },
     producto: {
-      findFirst: jest.fn().mockResolvedValue({ id: 5, nombre: 'Arroz', precio: 10000, costo: 6000, disponible: true, activo: true, controlaStock: true }),
+      findFirst: jest.fn().mockResolvedValue({ id: 5, stockActual: stockActualizado ? 100 : 0, nombre: 'Arroz', precio: 10000, costo: 6000, disponible: true, activo: true, controlaStock: true }),
       updateMany: jest.fn().mockResolvedValue({ count: stockActualizado }),
       update: jest.fn().mockResolvedValue({}),
     },
@@ -20,24 +21,22 @@ function escenario(stockActualizado = 1) {
     movimientoFinanciero: { create: jest.fn().mockResolvedValue({ id: 1 }) },
   };
   const prisma: any = { $transaction: jest.fn((cb: any) => cb(tx)) };
-  const service = new PedidosDistribuidorService(prisma);
+  const service = new PedidosDistribuidorService(prisma, {} as any);
   return { tx, service };
 }
 
 describe('Pedidos de distribuidor', () => {
-  const datos = { items: [{ productoId: 5, cantidad: 3 }] };
+  const datos = { modalidad:'PAGO_ANTES', clave:'pedido-prueba-1', items: [{ productoId: 5, cantidad: 3 }] };
 
-  it('calcula el total, descuenta stock y registra la comisión del distribuidor', async () => {
+  it('calcula el total y comisión sin descontar inventario ni inventar dinero recibido', async () => {
     const { tx, service } = escenario();
     const resultado = await service.crearPedido(datos, 7, 2, 1, 9);
     expect(resultado.total).toBe(30000);
     // 10% de 30.000 = 3.000
     expect(resultado.comisionMonto).toBe(3000);
-    expect(tx.producto.updateMany).toHaveBeenCalledWith({
-      where: { id: 5, empresaId: 1, stockActual: { gte: 3 } },
-      data: { stockActual: { decrement: 3 } },
-    });
-    expect(tx.movimientoFinanciero.create).toHaveBeenCalledTimes(2); // INGRESO venta + EGRESO costo
+    expect(tx.producto.updateMany).not.toHaveBeenCalled();
+    expect(tx.movimientoFinanciero.create).not.toHaveBeenCalled();
+    expect(tx.auditoria.create).toHaveBeenCalledTimes(2);
   });
 
   it('rechaza el pedido si no hay existencias suficientes', async () => {

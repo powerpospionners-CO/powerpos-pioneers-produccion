@@ -5,6 +5,8 @@ import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificar } from '@/components/Notificaciones';
 import api from '@/lib/api';
+import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
+import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 import { moneda } from '@/lib/formato';
 import { Ban, List, Plus, Search, Trash2, Truck, X } from 'lucide-react';
 
@@ -18,6 +20,7 @@ type Producto = {
 type ItemCarrito = { key: string; productoId: number; presentacionId: number | null; nombre: string; precio: number; cantidad: number };
 type Pedido = {
   id: number; numero: string; estado: string; total: string; comisionMonto: string; comisionPorcentaje: string;
+  modalidad?: string; estadoGestion?: string; saldoPendiente?: number; entregado?: boolean; comisionDisponible?: boolean;
   liquidacionId: number | null; clienteReferencia: string | null; creadoEn: string;
 };
 type DetallePedido = Pedido & { detalles: { id: number; cantidad: number; precioUnitario: string; subtotal: string; presentacionNombre: string | null; producto: { nombre: string } }[] };
@@ -29,8 +32,11 @@ export default function DistribuidorPage() {
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [busqueda, setBusqueda] = useState('');
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
-  const [clienteReferencia, setClienteReferencia] = useState('');
+  const borrador = useBorradorVenta('distribuidor', { carrito: [] as ItemCarrito[], clienteReferencia: '', modalidad: 'PAGO_ANTES', solicitud: null as Record<string, any> | null });
+  const [carrito, setCarrito] = useCampoBorrador(borrador, 'carrito');
+  const [modalidad, setModalidad] = useCampoBorrador(borrador, 'modalidad');
+  const [compatible, setCompatible] = useState(false);
+  const [clienteReferencia, setClienteReferencia] = useCampoBorrador(borrador, 'clienteReferencia');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,8 +48,11 @@ export default function DistribuidorPage() {
   useEffect(() => {
     if (!permitido) return;
     api.get('/productos').then((r) => setProductos(r.data)).catch(() => undefined);
-    cargarPedidos();
-  }, [permitido]); // eslint-disable-line react-hooks/exhaustive-deps
+    api.get('/pedidos-distribuidor/modalidades').then(r=>setCompatible(r.data.flujoCaja===true)).catch(()=>setCompatible(false));
+    void cargarPedidos();
+    const timer=setInterval(()=>{void cargarPedidos();api.get('/pedidos-distribuidor/modalidades').then(r=>setCompatible(r.data.flujoCaja===true)).catch(()=>setCompatible(false));},5000);
+    return ()=>clearInterval(timer);
+  }, [permitido]);
 
   const cargarPedidos = async () => {
     try {
@@ -88,20 +97,26 @@ export default function DistribuidorPage() {
   const comisionEstimada = usuario?.distribuidorComision ? (total * usuario.distribuidorComision) / 100 : 0;
 
   const registrarPedido = async () => {
-    if (!carrito.length) return;
+    if (!carrito.length || !compatible || enviando) return;
     setEnviando(true);
     setError('');
     try {
-      await api.post('/pedidos-distribuidor', {
+      const datos = borrador.almacen.getSnapshot().datos.solicitud ?? {
         items: carrito.map((l) => ({ productoId: l.productoId, presentacionId: l.presentacionId, cantidad: l.cantidad })),
         clienteReferencia: clienteReferencia || undefined,
-      });
+        modalidad, clave: generarClaveVenta(),
+      };
+      borrador.almacen.set('solicitud', datos);
+      if(borrador.almacen.getSnapshot().error)throw new Error(borrador.almacen.getSnapshot().error);
+      await api.post('/pedidos-distribuidor',datos);
+      borrador.almacen.reiniciar();
       setCarrito([]);
       setClienteReferencia('');
-      aviso('Pedido registrado correctamente.', 'exito');
+      aviso('Pedido enviado a la cajera. La mercancía queda pendiente de retiro.', 'exito');
       await cargarPedidos();
     } catch (e: any) {
-      setError(e?.response?.data?.message || 'No se pudo registrar el pedido.');
+      if(e?.response?.status>=400 && e?.response?.status<500)borrador.almacen.set('solicitud',null);
+      setError(e?.response?.data?.message || e.message || 'No se pudo confirmar el pedido. Reintenta la misma solicitud.');
     } finally {
       setEnviando(false);
     }
@@ -137,7 +152,7 @@ export default function DistribuidorPage() {
     return <AuthGuard><main className="min-h-screen bg-gray-950 text-white"><Navbar /><div className="p-8 text-center text-gray-400">No tienes acceso a esta sección.</div></main></AuthGuard>;
   }
 
-  const comisionPendiente = pedidos.filter((p) => p.estado === 'ENTREGADO' && !p.liquidacionId).reduce((acc, p) => acc + Number(p.comisionMonto), 0);
+  const comisionPendiente = pedidos.filter((p) => p.comisionDisponible && !p.liquidacionId).reduce((acc, p) => acc + Number(p.comisionMonto), 0);
   const comisionLiquidada = pedidos.filter((p) => p.liquidacionId).reduce((acc, p) => acc + Number(p.comisionMonto), 0);
 
   return (
@@ -153,7 +168,7 @@ export default function DistribuidorPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-              <p className="text-sm text-gray-400">Comisión pendiente de liquidar</p>
+              <p className="text-sm text-gray-400">Comisión de pedidos pagados pendiente de liquidar</p>
               <p className="mt-1 text-2xl font-bold text-orange-500">{moneda(comisionPendiente)}</p>
             </div>
             <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
@@ -166,6 +181,10 @@ export default function DistribuidorPage() {
             <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><Truck size={18} className="text-orange-500" /> Registrar pedido</h2>
             {error && <div role="alert" className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
 
+            {borrador.error && <p role="alert" className="mb-3 text-red-300">{borrador.error}</p>}
+            {!compatible && <p className="mb-3 text-amber-200">Esperando conexión con caja. Actualiza la aplicación si el aviso continúa.</p>}
+            {!!borrador.datos.solicitud && <div className="mb-3 text-amber-200">Hay un pedido pendiente de confirmar. Reintentarlo conserva la misma clave y evita duplicarlo.<button type="button" disabled={enviando} onClick={registrarPedido} className="ml-3 underline">Reintentar pedido</button></div>}
+            <fieldset disabled={enviando || !!borrador.datos.solicitud}>
             <div className="relative">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
@@ -216,18 +235,20 @@ export default function DistribuidorPage() {
 
             {carrito.length > 0 && (
               <div className="mt-4 space-y-3 border-t border-gray-800 pt-4">
-                <input value={clienteReferencia} onChange={(e) => setClienteReferencia(e.target.value)} placeholder="Cliente o referencia (opcional)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                <label className="block text-sm text-gray-300">Modalidad de retiro<select aria-label="Modalidad de retiro" value={modalidad} onChange={e=>setModalidad(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 p-3"><option value="PAGO_ANTES">Pagar antes de retirar la mercancía</option><option value="COBRO_POSTERIOR">Retirar y entregar el dinero después</option></select></label><p className="text-xs text-gray-400">La cajera confirmará la salida de la mercancía. La disponibilidad se verifica al retirar. La comisión se liquida aparte cuando el pedido esté pagado.</p>
+                <input maxLength={180} value={clienteReferencia} onChange={(e) => setClienteReferencia(e.target.value)} placeholder="Cliente o referencia (opcional)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <div className="flex items-center justify-between text-sm text-gray-400">
                   <span>Total del pedido</span><span className="text-lg font-bold text-white">{moneda(total)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-400">
                   <span>Tu comisión estimada</span><span className="font-semibold text-orange-400">{moneda(comisionEstimada)}</span>
                 </div>
-                <button type="button" onClick={registrarPedido} disabled={enviando} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">
-                  <Plus size={18} /> {enviando ? 'Registrando…' : 'Registrar pedido'}
+                <button type="button" onClick={registrarPedido} disabled={enviando || !compatible} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">
+                  <Plus size={18} /> {enviando ? 'Enviando…' : 'Enviar pedido a caja'}
                 </button>
               </div>
             )}
+            </fieldset>
           </section>
 
           <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
@@ -243,12 +264,12 @@ export default function DistribuidorPage() {
                       <td className="py-2 text-right">{moneda(Number(p.total))}</td>
                       <td className="py-2 text-right text-orange-400">{moneda(Number(p.comisionMonto))}</td>
                       <td className="py-2 text-center text-xs">
-                        {p.estado === 'ANULADO' ? 'ANULADO' : p.liquidacionId ? 'LIQUIDADO' : 'PENDIENTE'}
+                        {p.estadoGestion?.replaceAll('_',' ') || p.estado}{p.saldoPendiente!=null && <p className="mt-1 text-amber-200">Por entregar a caja: {moneda(p.saldoPendiente)}</p>}
                       </td>
                       <td className="py-2 text-right">
                         <span className="inline-flex gap-2">
                           <button type="button" title="Ver productos" onClick={() => verDetalle(p)} className="text-gray-500 hover:text-blue-400"><List size={14} /></button>
-                          {p.estado !== 'ANULADO' && !p.liquidacionId && (
+                          {p.estado !== 'ANULADO' && !p.liquidacionId && !p.entregado && (
                             <button type="button" title="Anular" disabled={anulandoId === p.id} onClick={() => anular(p)} className="text-gray-500 hover:text-red-400 disabled:opacity-40"><Ban size={14} /></button>
                           )}
                         </span>

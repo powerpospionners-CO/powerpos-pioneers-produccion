@@ -11,6 +11,7 @@ import ClienteCredito from '@/components/ClienteCredito';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import VentasTurno from '@/components/VentasTurno';
 import OperacionesVenta from '@/components/OperacionesVenta';
+import PedidosDistribuidorCaja from '@/components/PedidosDistribuidorCaja';
 import VentasPendientes from '@/components/VentasPendientes';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
@@ -524,6 +525,7 @@ export default function RetailPOS() {
           </ul>
         </div>
       )}
+      <PedidosDistribuidorCaja onCambio={()=>{void cargar();}} />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div className="lg:col-span-2"><VentasPendientes
           clave={usuario ? `pos-pendientes:comercio:${usuario.empresaId}:${usuario.sucursalId}:${usuario.id}` : null}
@@ -597,18 +599,19 @@ export default function RetailPOS() {
         <aside className="flex h-fit flex-col rounded-2xl border border-gray-800 bg-gray-900 p-4 lg:sticky lg:top-4">
           <div className="flex items-center justify-between border-b border-gray-800 pb-4"><div className="flex items-center gap-2"><ShoppingBasket className="text-orange-500" size={21} /><h2 className="text-lg font-bold">Venta actual</h2></div><span className="text-sm text-gray-400">{carrito.reduce((s,l) => s+l.cantidad, 0)} artículos</span></div>
           <div className="mt-4 space-y-4">
-            {carrito.length > 0 && (
               <div className="space-y-2 rounded-xl border border-gray-800 p-3">
                 <label className="flex items-center justify-between gap-3 text-sm text-gray-300">
-                  Descuento {esEnchilaMarket ? '($)' : '(%)'}
+                  Descuento manual {esEnchilaMarket ? '($)' : '(%)'}
                   <input
-                    type="number" min={0} max={esEnchilaMarket ? subtotal : 100} step={esEnchilaMarket ? 1000 : 1}
+                    type="number" min={0} max={esEnchilaMarket ? subtotal : 100} step={esEnchilaMarket ? 1 : 0.01}
+                    disabled={!carrito.length || procesando || !!borrador.datos.intento}
                     value={descuentoInput}
                     onChange={(e) => setDescuentoInput(e.target.value)}
                     placeholder="0"
-                    className="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-right text-white"
+                    className="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-right text-white disabled:opacity-50"
                   />
                 </label>
+                <p className="text-xs text-gray-400">{!carrito.length ? 'Agrega productos para aplicar un descuento.' : esEnchilaMarket ? 'Escribe el valor en pesos; por ejemplo, 5000 descuenta $5.000 del total.' : 'Escribe el porcentaje que se descontará del total.'}</p>
                 {descuento > 0 && (
                   <div className="flex items-center justify-between text-sm text-gray-400">
                     <span>Subtotal</span><span>{moneda(subtotal)}</span>
@@ -620,7 +623,6 @@ export default function RetailPOS() {
                   </div>
                 )}
               </div>
-            )}
             <ClienteCredito id={clienteCreditoId} onChange={setClienteCreditoId} /><div className="flex items-center justify-between text-xl font-bold"><span>Total</span><span className="text-orange-500">{moneda(total)}</span></div>
             <button disabled={!carrito.length || !caja || cajaDeOtro || procesando} onClick={() => setModalCobroAbierto(true)} className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Cobrar</button>
           </div>

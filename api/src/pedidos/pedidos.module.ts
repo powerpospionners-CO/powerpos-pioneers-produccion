@@ -10,6 +10,6 @@ import { OperacionesVentaService } from './operaciones-venta.service';
   imports: [NotificacionesModule],
   controllers: [PedidosController],
   providers: [PedidosService, PedidosEventosService, OperacionesVentaService, RolesGuard],
-  exports: [PedidosService],
+  exports: [PedidosService, OperacionesVentaService],
 })
 export class PedidosModule {}

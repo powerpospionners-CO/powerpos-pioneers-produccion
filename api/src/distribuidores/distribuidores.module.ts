@@ -3,8 +3,10 @@ import { DistribuidoresService } from './distribuidores.service';
 import { DistribuidoresController } from './distribuidores.controller';
 import { PedidosDistribuidorService } from './pedidos-distribuidor.service';
 import { PedidosDistribuidorController } from './pedidos-distribuidor.controller';
+import { PedidosModule } from '../pedidos/pedidos.module';
 
 @Module({
+  imports: [PedidosModule],
   controllers: [DistribuidoresController, PedidosDistribuidorController],
   providers: [DistribuidoresService, PedidosDistribuidorService],
 })
