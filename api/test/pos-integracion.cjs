@@ -258,6 +258,23 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(Number(comisionDist.totalComision),5000);assert.equal(comisionDist.cantidadPedidos,2);
     console.log('PASS distribuidor: ambas modalidades, cajera recibe pedidos, precios conservados, stock solo al retirar, abonos únicos, cierre y comisión únicamente pagada');
 
+    const historicoDist=await db.pedidoDistribuidor.create({data:{numero:`DIST-HIST-${sufijo}`,empresaId:empresa.id,sucursalId:sede.id,distribuidorId:distribuidorCaja.id,total:10000,comisionPorcentaje:10,comisionMonto:1000,detalles:{create:[{productoId:mercanciaDist.id,cantidad:1,precioUnitario:10000,subtotal:10000,factorUnidades:1}]}}});
+    await db.movimientoFinanciero.create({data:{empresaId:empresa.id,sucursalId:sede.id,usuarioId:usuarioDist.id,tipo:'INGRESO',categoria:'VENTA',monto:10000,descripcion:`Venta distribuidor PRUEBA-DIST — ${historicoDist.numero}`}});
+    await db.movimientoFinanciero.create({data:{empresaId:empresa.id,sucursalId:sede.id,usuarioId:usuarioDist.id,tipo:'EGRESO',categoria:'COSTO_VENTA',monto:4000,descripcion:`Costo de venta distribuidor ${historicoDist.numero}`}});
+    const conciliarDist={clave:randomUUID(),confirmarSalidaSinPago:true,totalEsperado:10000};
+    await http.post(`/pedidos-distribuidor/${historicoDist.id}/conciliar-credito-historico`).set('Authorization',sesionDist).send(conciliarDist).expect(403);
+    await http.post(`/pedidos-distribuidor/${historicoDist.id}/conciliar-credito-historico`).set('Authorization',sesionPaula).send(conciliarDist).expect(403);
+    const conciliadoDist=(await http.post(`/pedidos-distribuidor/${historicoDist.id}/conciliar-credito-historico`).set('Authorization',token).send(conciliarDist).expect(201)).body;
+    assert.equal(conciliadoDist.estadoGestion,'PENDIENTE_PAGO');assert.equal(conciliadoDist.saldoPendiente,10000);assert.equal(conciliadoDist.comisionDisponible,false);
+    assert.equal((await http.post(`/pedidos-distribuidor/${historicoDist.id}/conciliar-credito-historico`).set('Authorization',token).send(conciliarDist).expect(201)).body.pedidoCajaId,conciliadoDist.pedidoCajaId);
+    assert.equal((await db.producto.findUnique({where:{id:mercanciaDist.id}})).stockActual,5);
+    assert.equal(await db.pedido.count({where:{numero:`HIST-${historicoDist.numero}`}}),1);
+    assert.equal(await db.operacionVentaCaja.count({where:{pedidoId:conciliadoDist.pedidoCajaId}}),0);
+    const movsConciliados=await db.movimientoFinanciero.findMany({where:{pedidoId:conciliadoDist.pedidoCajaId}});
+    assert.equal(movsConciliados.filter(m=>m.categoria==='VENTA').reduce((s,m)=>s+(m.tipo==='INGRESO'?1:-1)*Number(m.monto),0),0);
+    assert.equal(movsConciliados.filter(m=>m.categoria==='COSTO_VENTA').length,1);
+    console.log('PASS conciliación histórica: saldo recuperado, sin nuevo stock, cobro, costo ni duplicados');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);

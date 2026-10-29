@@ -19,6 +19,10 @@ export class PedidosDistribuidorController {
   @Roles('CAJERO','ADMIN_EMPRESA','GERENTE')
   entregar(@Param('id') id:string,@Body() body:any,@Request() req:any) { return this.service.entregar(+id,body,req.user); }
 
+  @Post(':id/conciliar-credito-historico')
+  @Roles('ADMIN_EMPRESA','GERENTE')
+  conciliarCreditoHistorico(@Param('id') id:string,@Body() body:any,@Request() req:any) { return this.service.conciliarCreditoHistorico(+id,body,req.user); }
+
   @Post(':id/cobrar')
   @Roles('CAJERO','ADMIN_EMPRESA','GERENTE')
   async cobrar(@Param('id') id:string,@Body() body:CobroCredito,@Request() req:any) {

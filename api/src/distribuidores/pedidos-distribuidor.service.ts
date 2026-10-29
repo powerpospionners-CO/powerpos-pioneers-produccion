@@ -165,6 +165,45 @@ export class PedidosDistribuidorService {
     },{timeout:20000});
   }
 
+  async conciliarCreditoHistorico(id: number, datos: any, actor: { id: number; empresaId: number; rol: string }) {
+    if (!['ADMIN_EMPRESA','GERENTE'].includes(actor.rol)) throw new BadRequestException('La conciliación requiere administración.');
+    if (datos.confirmarSalidaSinPago !== true || typeof datos.clave !== 'string' || !/^[a-zA-Z0-9-]{8,100}$/.test(datos.clave)) throw new BadRequestException('Confirma que la mercancía salió y no se recibió ningún pago.');
+    return this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73111, ${actor.empresaId}::integer)`;
+      const p = await tx.pedidoDistribuidor.findFirst({ where: { id, empresaId: actor.empresaId }, include: { detalles: true, distribuidor: true } });
+      if (!p || p.estado !== 'ENTREGADO' || p.liquidacionId) throw new BadRequestException('El pedido no admite conciliación de saldo completo.');
+      if (Number(datos.totalEsperado) !== Number(p.total) || Number(p.total) <= 0) throw new BadRequestException('El total no coincide con el pedido revisado.');
+      await bloquearCajaSucursal(tx, p.sucursalId);
+      const control = (await controlesDistribuidor(tx,actor.empresaId,[id])).get(id);
+      if (control) {
+        if (control.origen !== 'HISTORICO_SIN_PAGO' || control.claveConciliacion !== datos.clave) throw new BadRequestException('Este pedido ya tiene control de caja.');
+        return (await gestionPedidos(tx,actor.empresaId,[p]))[0];
+      }
+      // Require the exact legacy records: never infer a cash receipt from the order status.
+      const movimientos = await tx.movimientoFinanciero.findMany({ where: { empresaId: actor.empresaId, sucursalId: p.sucursalId, descripcion: { in: [`Venta distribuidor ${p.distribuidor.codigo} — ${p.numero}`,`Costo de venta distribuidor ${p.numero}`] } } });
+      const ingresos = movimientos.filter(m=>m.tipo==='INGRESO' && m.categoria==='VENTA');
+      const costos = movimientos.filter(m=>m.tipo==='EGRESO' && m.categoria==='COSTO_VENTA');
+      if (ingresos.length!==1 || Number(ingresos[0].monto)!==Number(p.total) || movimientos.some(m=>m.pedidoId!==null) || costos.length>1) throw new BadRequestException('Los movimientos anteriores requieren revisión individual.');
+      if (!p.detalles.length || Math.round(p.detalles.reduce((s,d)=>s+Number(d.subtotal),0)*100)!==Math.round(Number(p.total)*100)) throw new BadRequestException('El detalle histórico no coincide con el total.');
+      const cliente = await tx.cliente.upsert({ where: { empresaId_documento: { empresaId: actor.empresaId, documento: `DISTRIBUIDOR-${p.distribuidorId}` } }, create: { empresaId: actor.empresaId, documento: `DISTRIBUIDOR-${p.distribuidorId}`, nombre: `Distribuidor ${p.distribuidor.codigo} · ${p.distribuidor.nombre}` }, update: {} });
+      if (!cliente.activo) throw new BadRequestException('La cuenta del distribuidor está inactiva.');
+      // Import snapshots directly, without calling the stock/cash registration of a new sale.
+      const venta = await tx.pedido.create({ data: {
+        numero: `HIST-${p.numero}`, sucursalId: p.sucursalId, usuarioId: actor.id, clienteId: cliente.id,
+        estado: 'ENTREGADO', metodoPago: 'CREDITO', subtotal: p.total, total: p.total, creadoEn: p.creadoEn,
+        claveIdempotencia: createHash('sha256').update(`historico-distribuidor:${actor.empresaId}:${id}`).digest('hex'),
+        observacion: `Conciliación ${p.numero}: mercancía retirada, sin pagos recibidos. No genera otra salida de almacén.`,
+        detalles: { create: p.detalles.map(d=>({ productoId:d.productoId,cantidad:d.cantidad,precioUnitario:d.precioUnitario,subtotal:d.subtotal,presentacionId:d.presentacionId,presentacionNombre:d.presentacionNombre,factorUnidades:d.factorUnidades,exclusiones:[] })) },
+      } });
+      await tx.cuentaAdministrativa.create({ data: { empresaId:actor.empresaId,sucursalId:p.sucursalId,usuarioId:actor.id,pedidoId:venta.id,tipo:'COBRAR',categoria:'VENTA',documento:`POS-${venta.numero}`,tercero:cliente.nombre,descripcion:`Saldo completo ${p.numero}, retirado sin pagar; sin plazo pactado, exigible al conciliar.`,monto:p.total,saldo:p.total,vencimiento:new Date() } });
+      // Neutralize the old assumed receipt on its original date; preserve it and its audit trail.
+      const ajuste = await tx.movimientoFinanciero.create({ data: { empresaId:actor.empresaId,sucursalId:p.sucursalId,usuarioId:actor.id,pedidoId:venta.id,tipo:'EGRESO',categoria:'VENTA',monto:p.total,fecha:ingresos[0].fecha,descripcion:`Reclasificación a cuenta por cobrar ${p.numero}: ingreso anterior no recibido; sin salida de efectivo.` } });
+      for (const m of movimientos) await tx.movimientoFinanciero.update({ where: { id:m.id },data:{pedidoId:venta.id} });
+      await tx.auditoria.create({data:{empresaId:actor.empresaId,usuarioId:actor.id,entidad:CONTROL_DISTRIBUIDOR,entidadId:id,accion:'CONCILIAR',detalle:{modalidad:'COBRO_POSTERIOR',pedidoCajaId:venta.id,origen:'HISTORICO_SIN_PAGO',claveConciliacion:datos.clave,entregadoEn:p.creadoEn.toISOString(),movimientosOriginales:movimientos.map(m=>({id:m.id,tipo:m.tipo,categoria:m.categoria,monto:String(m.monto)})),ajusteMovimientoId:ajuste.id,confirmacion:'Mercancía retirada; ningún pago recibido',conciliadoEn:new Date().toISOString()}}});
+      return (await gestionPedidos(tx,actor.empresaId,[p]))[0];
+    },{timeout:20000});
+  }
+
   async anular(id: number, empresaId: number, usuarioId: number, distribuidorId?: number) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(73111, ${empresaId}::integer)`;
