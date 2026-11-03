@@ -476,7 +476,9 @@ export default function RetailPOS() {
       : Array.isArray(pedido.pagos) && pedido.pagos.length > 1
       ? pedido.pagos.map((p: any) => `PAGO ${p.metodoPago}  ${moneda(Number(p.monto))}`)
       : [pedido.metodoPago === 'CREDITO' ? 'A CREDITO - PENDIENTE DE COBRO' : `PAGO  ${pedido.metodoPago}`];
-    const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${pedido.numero}`, new Date().toLocaleString('es-CO'), '--------------------------------',
+    const lineas = [usuario?.empresa || 'PowerPOS', `VENTA ${pedido.numero}`, new Date().toLocaleString('es-CO'),
+      ...(pedido.cliente?.nombre ? [`CLIENTE: ${pedido.cliente.nombre}`] : []),
+      '--------------------------------',
       ...(pedido.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.varianteSabor ? ` — ${d.varianteSabor}` : ''}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
       '--------------------------------', `TOTAL  ${moneda(Number(pedido.total))}`, ...pagos, 'Gracias por su compra'];
     const pre = ventana.document.createElement('pre');
