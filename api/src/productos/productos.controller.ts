@@ -106,6 +106,18 @@ export class ProductosController {
     return this.productosService.guardarComandas(datos?.cambios, req.user.empresaId, req.user.id);
   }
 
+  @Get('historial-ventas')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  buscarHistorialVentas(@Request() req: any, @Query('nombre') nombre: string) {
+    return this.productosService.buscarHistorialVentas(req.user.empresaId, nombre);
+  }
+
+  @Get(':id/historial-ventas')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  historialVentas(@Request() req: any, @Param('id') id: string) {
+    return this.productosService.historialVentas(req.user.empresaId, +id);
+  }
+
   @Get(':id')
   obtener(@Param('id') id: string, @Request() req: any) {
     return this.productosService.obtener(+id, req.user.empresaId);

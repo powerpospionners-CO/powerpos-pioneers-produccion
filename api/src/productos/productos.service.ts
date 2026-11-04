@@ -582,6 +582,55 @@ export class ProductosService {
     return resultado;
   }
 
+  async buscarHistorialVentas(empresaId: number, nombre: string) {
+    if (typeof nombre !== 'string' || !nombre.trim() || nombre.length > 150) {
+      throw new BadRequestException('Escribe un nombre de producto de hasta 150 caracteres');
+    }
+    return this.prisma.producto.findMany({
+      where: { empresaId, nombre: { contains: nombre.trim(), mode: 'insensitive' } },
+      select: { id: true, nombre: true, activo: true },
+      orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
+      take: 50,
+    });
+  }
+
+  async historialVentas(empresaId: number, id: number) {
+    if (!Number.isSafeInteger(id) || id < 1) throw new BadRequestException('Producto inválido');
+    const producto = await this.prisma.producto.findFirst({
+      where: { id, empresaId },
+      select: { nombre: true, creadoEn: true, ventaGranel: true, unidadGranel: true },
+    });
+    if (!producto) throw new NotFoundException('Producto no encontrado');
+    const pedidos = await this.prisma.pedido.findMany({
+      where: {
+        sucursal: { empresaId },
+        creadoEn: { gte: producto.creadoEn },
+        estado: 'ENTREGADO',
+        devueltoTotal: false,
+        detalles: { some: { productoId: id } },
+      },
+      select: {
+        numero: true, creadoEn: true,
+        detalles: { where: { productoId: id }, select: { id: true, cantidad: true, factorUnidades: true } },
+        operacionesCaja: { where: { tipo: 'DEVOLUCION' }, select: { detalle: true } },
+      },
+      orderBy: [{ creadoEn: 'desc' }, { id: 'desc' }],
+    });
+    const ventas = pedidos.map(pedido => {
+      const devueltas = new Map<number, number>();
+      for (const operacion of pedido.operacionesCaja) {
+        const detalle = operacion.detalle as { lineas?: { detalleId: number; cantidad: number }[] } | null;
+        for (const linea of detalle?.lineas ?? []) {
+          devueltas.set(linea.detalleId, (devueltas.get(linea.detalleId) ?? 0) + linea.cantidad);
+        }
+      }
+      const cantidad = pedido.detalles.reduce((total, linea) =>
+        total + Math.max(0, linea.cantidad - (devueltas.get(linea.id) ?? 0)) * linea.factorUnidades, 0);
+      return { numero: pedido.numero, fecha: pedido.creadoEn, cantidad };
+    }).filter(venta => venta.cantidad > 0);
+    return { producto, ventas, total: ventas.reduce((total, venta) => total + venta.cantidad, 0) };
+  }
+
   async obtenerHistorialStock(id: number, empresaId: number) {
     const producto = await this.prisma.producto.findFirst({ where: { id, empresaId } });
     if (!producto) throw new NotFoundException('Producto no encontrado');

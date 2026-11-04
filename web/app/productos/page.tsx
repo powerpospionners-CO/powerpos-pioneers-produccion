@@ -1,5 +1,6 @@
 ﻿'use client';
 import { useNotificar } from '@/components/Notificaciones';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff } from 'lucide-react';
@@ -871,6 +872,7 @@ export default function ProductosPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-white text-xl font-bold">Gestión de productos</h2>
+            <Link href="/productos/historial-ventas" className="mt-2 inline-block text-sm font-medium text-orange-300 hover:underline">Historial de ventas por producto</Link>
             <p className="text-gray-500 text-sm mt-1">{productos.length} productos registrados · {categorias.length} categorías</p>
           </div>
           <div className="flex items-center gap-3">
