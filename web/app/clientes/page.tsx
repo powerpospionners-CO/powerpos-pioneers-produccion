@@ -10,6 +10,8 @@ const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([]);
+  const [mostrarInactivos, setMostrarInactivos] = useState(false);
+  const clientesVisibles = mostrarInactivos ? clientes : clientes.filter(cliente => cliente.activo);
   const [busqueda, setBusqueda] = useState('');
   const [modalNuevo, setModalNuevo] = useState(false);
   const [modalEditar, setModalEditar] = useState<any>(null);
@@ -36,7 +38,7 @@ export default function ClientesPage() {
   }, [busqueda]);
 
   const cargarClientes = async () => {
-    const { data } = await api.get(`/clientes${busqueda ? `?busqueda=${busqueda}` : ''}`);
+    const { data } = await api.get('/clientes', { params: { busqueda, incluirInactivos: true } });
     setClientes(data);
   };
 
@@ -175,11 +177,15 @@ export default function ClientesPage() {
               </div>
             </div>
 
-            {clientes.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No hay clientes registrados</div>
+            <label className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300">
+              <input type="checkbox" checked={mostrarInactivos} onChange={e => setMostrarInactivos(e.target.checked)} className="accent-orange-500" />
+              Mostrar clientes inactivos
+            </label>
+            {clientesVisibles.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No se encontraron clientes</div>
             ) : (
               <div className="divide-y divide-gray-800">
-                {clientes.map((cliente) => (
+                {clientesVisibles.map((cliente) => (
                   <div key={cliente.id} className={`p-4 flex items-center justify-between hover:bg-gray-800/50 transition-colors ${!cliente.activo ? 'opacity-50' : ''}`}>
                     <button onClick={() => verDetalle(cliente)} className="flex-1 text-left">
                       <div className="text-white font-medium text-sm flex items-center gap-2">

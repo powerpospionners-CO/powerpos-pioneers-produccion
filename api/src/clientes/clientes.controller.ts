@@ -11,8 +11,8 @@ export class ClientesController {
   constructor(private readonly clientesService: ClientesService) {}
 
   @Get()
-  listar(@Request() req: any, @Query('busqueda') busqueda?: string) {
-    return this.clientesService.listar(req.user.empresaId, busqueda);
+  listar(@Request() req: any, @Query('busqueda') busqueda?: string, @Query('incluirInactivos') incluirInactivos?: string) {
+    return this.clientesService.listar(req.user.empresaId, busqueda, incluirInactivos === 'true');
   }
 
   @Post()

@@ -16,14 +16,14 @@ function textoPublico(valor: unknown, campo: string, max: number, requerido = fa
 export class ClientesService {
   constructor(private prisma: PrismaService) {}
 
-  async listar(empresaId: number, busqueda?: string) {
+  async listar(empresaId: number, busqueda?: string, incluirInactivos = false) {
     if (busqueda !== undefined && (typeof busqueda !== 'string' || busqueda.length > 150))
       throw new BadRequestException('La búsqueda debe ser un nombre, documento o teléfono de hasta 150 caracteres');
     const termino = busqueda?.trim();
     return this.prisma.cliente.findMany({
       where: {
         empresaId,
-        activo: true,
+        ...(!incluirInactivos && { activo: true }),
         ...(termino && {
           OR: [
             { nombre: { contains: termino, mode: 'insensitive' } },
