@@ -8,7 +8,7 @@ import api from '@/lib/api';
 import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 import { moneda } from '@/lib/formato';
-import { Ban, List, Plus, Search, Trash2, Truck, X } from 'lucide-react';
+import { Ban, List, Minus, Plus, Search, Trash2, Truck, X } from 'lucide-react';
 
 type Presentacion = { id: number; nombre: string; precio: string; factorUnidades: number };
 type Producto = {
@@ -31,6 +31,9 @@ export default function DistribuidorPage() {
   const permitido = usuario?.rol === 'DISTRIBUIDOR';
 
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [clientes, setClientes] = useState<{ id: number; nombre: string; documento: string | null }[]>([]);
+  const [errorClientes, setErrorClientes] = useState('');
+  const [cantidadesEditadas, setCantidadesEditadas] = useState<Record<string, string>>({});
   const [busqueda, setBusqueda] = useState('');
   const borrador = useBorradorVenta('distribuidor', { carrito: [] as ItemCarrito[], clienteReferencia: '', modalidad: 'PAGO_ANTES', solicitud: null as Record<string, any> | null });
   const [carrito, setCarrito] = useCampoBorrador(borrador, 'carrito');
@@ -48,11 +51,22 @@ export default function DistribuidorPage() {
   useEffect(() => {
     if (!permitido) return;
     api.get('/productos').then((r) => setProductos(r.data)).catch(() => undefined);
+    void cargarClientes();
     api.get('/pedidos-distribuidor/modalidades').then(r=>setCompatible(r.data.flujoCaja===true)).catch(()=>setCompatible(false));
     void cargarPedidos();
     const timer=setInterval(()=>{void cargarPedidos();api.get('/pedidos-distribuidor/modalidades').then(r=>setCompatible(r.data.flujoCaja===true)).catch(()=>setCompatible(false));},5000);
     return ()=>clearInterval(timer);
   }, [permitido]);
+
+  const cargarClientes = async () => {
+    setErrorClientes('');
+    try {
+      const { data } = await api.get('/clientes/para-distribuidor');
+      setClientes(data);
+    } catch {
+      setErrorClientes('No se pudieron cargar los clientes.');
+    }
+  };
 
   const cargarPedidos = async () => {
     try {
@@ -88,7 +102,8 @@ export default function DistribuidorPage() {
   };
 
   const cambiarCantidad = (key: string, cantidad: number) => {
-    setCarrito((actual) => actual.map((l) => (l.key === key ? { ...l, cantidad: Math.max(1, Math.floor(cantidad) || 1) } : l)).filter((l) => l.cantidad > 0));
+    setCantidadesEditadas(actual => { const nuevo = { ...actual }; delete nuevo[key]; return nuevo; });
+    setCarrito((actual) => actual.map((l) => (l.key === key ? { ...l, cantidad: Math.max(1, Math.min(9999, Math.floor(cantidad) || 1)) } : l)));
   };
 
   const quitar = (key: string) => setCarrito((actual) => actual.filter((l) => l.key !== key));
@@ -111,6 +126,7 @@ export default function DistribuidorPage() {
       await api.post('/pedidos-distribuidor',datos);
       borrador.almacen.reiniciar();
       setCarrito([]);
+      setCantidadesEditadas({});
       setClienteReferencia('');
       aviso('Pedido enviado a la cajera. La mercancía queda pendiente de retiro.', 'exito');
       await cargarPedidos();
@@ -221,12 +237,19 @@ export default function DistribuidorPage() {
             <div className="mt-4 space-y-2">
               {!carrito.length && <p className="py-4 text-center text-sm text-gray-500">Busca productos arriba para armar el pedido.</p>}
               {carrito.map((l) => (
-                <div key={l.key} className="flex items-center justify-between gap-3 rounded-lg border border-gray-800 p-3">
+                <div key={l.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 p-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-white">{l.nombre}</p>
                     <p className="text-xs text-gray-500">{moneda(l.precio)} c/u</p>
                   </div>
-                  <input type="number" min={1} value={l.cantidad} onChange={(e) => cambiarCantidad(l.key, Number(e.target.value))} className="h-9 w-16 rounded-lg border border-gray-700 bg-gray-800 text-center text-white" />
+                  <div className="flex items-center gap-1">
+                    <button type="button" aria-label={`Reducir cantidad de ${l.nombre}`} disabled={l.cantidad <= 1} onClick={() => cambiarCantidad(l.key, l.cantidad - 1)} className="h-10 w-10 rounded-lg bg-gray-800 disabled:opacity-40"><Minus size={18} className="mx-auto" /></button>
+                    <input aria-label={`Cantidad de ${l.nombre}`} type="number" inputMode="numeric" min={1} max={9999} step={1} value={cantidadesEditadas[l.key] ?? l.cantidad} onFocus={e => e.target.select()} onChange={e => {
+                      if (e.target.value === '') { setCantidadesEditadas(actual => ({ ...actual, [l.key]: '' })); return; }
+                      cambiarCantidad(l.key, Number(e.target.value));
+                    }} onBlur={() => cambiarCantidad(l.key, l.cantidad)} className="h-10 w-16 rounded-lg border border-gray-700 bg-gray-800 text-center text-white" />
+                    <button type="button" aria-label={`Aumentar cantidad de ${l.nombre}`} disabled={l.cantidad >= 9999} onClick={() => cambiarCantidad(l.key, l.cantidad + 1)} className="h-10 w-10 rounded-lg bg-gray-800 disabled:opacity-40"><Plus size={18} className="mx-auto" /></button>
+                  </div>
                   <span className="w-24 shrink-0 text-right font-semibold text-white">{moneda(l.precio * l.cantidad)}</span>
                   <button type="button" onClick={() => quitar(l.key)} className="text-gray-500 hover:text-red-400"><Trash2 size={16} /></button>
                 </div>
@@ -236,7 +259,17 @@ export default function DistribuidorPage() {
             {carrito.length > 0 && (
               <div className="mt-4 space-y-3 border-t border-gray-800 pt-4">
                 <label className="block text-sm text-gray-300">Modalidad de retiro<select aria-label="Modalidad de retiro" value={modalidad} onChange={e=>setModalidad(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 p-3"><option value="PAGO_ANTES">Pagar antes de retirar la mercancía</option><option value="COBRO_POSTERIOR">Retirar y entregar el dinero después</option></select></label><p className="text-xs text-gray-400">La cajera confirmará la salida de la mercancía. La disponibilidad se verifica al retirar. La comisión se liquida aparte cuando el pedido esté pagado.</p>
-                <input maxLength={180} value={clienteReferencia} onChange={(e) => setClienteReferencia(e.target.value)} placeholder="Cliente o referencia (opcional)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                <label className="block text-sm text-gray-300">Cliente registrado
+                  <select aria-label="Cliente registrado" value={clientes.find(c => `${c.nombre}${c.documento ? ` · ${c.documento}` : ''}`.slice(0,180) === clienteReferencia)?.id ?? ''} onChange={e => {
+                    const cliente = clientes.find(c => c.id === Number(e.target.value));
+                    setClienteReferencia(cliente ? `${cliente.nombre}${cliente.documento ? ` · ${cliente.documento}` : ''}`.slice(0,180) : '');
+                  }} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 p-3">
+                    <option value="">Seleccionar cliente (opcional)</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.documento ? ` · ${c.documento}` : ''}</option>)}
+                  </select>
+                </label>
+                {errorClientes && <p role="alert" className="text-sm text-red-300">{errorClientes} <button type="button" onClick={() => void cargarClientes()} className="underline">Reintentar</button></p>}
+                <input aria-label="Cliente o referencia" maxLength={180} value={clienteReferencia} onChange={(e) => setClienteReferencia(e.target.value)} placeholder="Cliente o referencia (opcional)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <div className="flex items-center justify-between text-sm text-gray-400">
                   <span>Total del pedido</span><span className="text-lg font-bold text-white">{moneda(total)}</span>
                 </div>

@@ -20,6 +20,12 @@ export class ClientesController {
     return this.clientesService.crear(body, req.user.empresaId);
   }
 
+  @Get('para-distribuidor')
+  @Roles('DISTRIBUIDOR')
+  paraDistribuidor(@Request() req: any) {
+    return this.clientesService.paraDistribuidor(req.user.empresaId);
+  }
+
   @Get(':id')
   detalle(@Param('id') id: string, @Request() req: any) {
     return this.clientesService.obtenerDetalle(+id, req.user.empresaId);

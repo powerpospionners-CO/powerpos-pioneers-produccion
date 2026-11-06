@@ -36,6 +36,14 @@ export class ClientesService {
     });
   }
 
+  async paraDistribuidor(empresaId: number) {
+    return this.prisma.cliente.findMany({
+      where: { empresaId, activo: true },
+      select: { id: true, nombre: true, documento: true },
+      orderBy: { nombre: 'asc' },
+    });
+  }
+
   async crear(datos: any, empresaId: number) {
     return this.prisma.cliente.create({
       data: {
