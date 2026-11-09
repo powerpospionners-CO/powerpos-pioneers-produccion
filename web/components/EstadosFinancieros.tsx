@@ -3,7 +3,25 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 
 const cop = (n: number | null) => n === null ? 'Sin saldo inicial' : new Intl.NumberFormat('es-CO', { style:'currency', currency:'COP' }).format(n);
-function Filas({ filas }: { filas: [string, number | null][] }) {
+function Filas({ filas, ventasNetas }: { filas: [string, number | null][]; ventasNetas?: number }) {
+  if (ventasNetas !== undefined) {
+    const porcentaje = new Intl.NumberFormat('es-CO', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return <div className="overflow-x-auto">
+      <table className="w-full text-sm sm:text-base">
+        <thead className="text-xs text-gray-400">
+          <tr><th scope="col" className="py-2 text-left">Concepto</th><th scope="col" className="px-3 py-2 text-right">Valor</th><th scope="col" className="py-2 text-right">% sobre ventas netas</th></tr>
+        </thead>
+        <tbody className="divide-y divide-gray-800">{filas.map(([nombre, valor]) => (
+          <tr key={nombre}>
+            <th scope="row" className="py-3 text-left font-normal text-gray-300">{nombre}</th>
+            <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums ${valor !== null && valor < 0 ? 'text-red-300' : 'text-white'}`}>{cop(valor)}</td>
+            <td className="whitespace-nowrap py-3 text-right font-semibold tabular-nums text-gray-300">{valor === null || ventasNetas === 0 ? '—' : porcentaje.format(valor / ventasNetas)}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+      {ventasNetas === 0 && <p className="mt-2 text-xs text-gray-400">El porcentaje no se puede calcular cuando las ventas netas son cero.</p>}
+    </div>;
+  }
   return <dl className="divide-y divide-gray-800">{filas.map(([nombre,valor])=><div key={nombre} className="flex justify-between gap-4 py-3"><dt className="text-gray-300">{nombre}</dt><dd className={`text-right font-semibold tabular-nums ${valor!==null&&valor<0?'text-red-300':'text-white'}`}>{cop(valor)}</dd></div>)}</dl>;
 }
 export default function EstadosFinancieros({ desde, hasta }: { desde?: string; hasta?: string }) {
@@ -58,7 +76,7 @@ export default function EstadosFinancieros({ desde, hasta }: { desde?: string; h
       {vista==='resultado'&&<div role="tabpanel">
         <h3 className="mb-2 font-semibold">Estado de resultados · periodo seleccionado</h3>
         {!r.completo&&<div role="alert" className="mb-3 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">Resultado parcial: {r.ventasSinCosto.length} venta(s) contienen productos sin costo histórico. No se ha estimado su costo; este resultado no es una utilidad definitiva.<details className="mt-2"><summary className="cursor-pointer">Ver ventas pendientes de costo</summary><p className="mt-2">{r.ventasSinCosto.join(', ')}</p></details></div>}
-        <Filas filas={[["Ventas netas",r.ventasNetas],["Costo de ventas registrado",r.costoVentas],["Utilidad bruta registrada",r.utilidadBruta],["Otros ingresos registrados",r.otrosIngresos],["Gastos del periodo",r.gastos],[r.completo?'Resultado neto registrado':'Resultado parcial · faltan costos',r.resultadoNeto]]}/>
+        <Filas ventasNetas={r.ventasNetas} filas={[["Ventas netas",r.ventasNetas],["Costo de ventas registrado",r.costoVentas],["Utilidad bruta registrada",r.utilidadBruta],["Otros ingresos registrados",r.otrosIngresos],["Gastos del periodo",r.gastos],[r.completo?'Resultado neto registrado':'Resultado parcial · faltan costos',r.resultadoNeto]]}/>
         <p className="mt-3 text-xs text-gray-400">Las compras aumentan el inventario; su costo se reconoce al vender. Los cobros de créditos no se cuentan de nuevo como ventas.</p>
       </div>}
       {vista==='balance'&&<div role="tabpanel">
