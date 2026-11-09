@@ -18,3 +18,29 @@ describe('Financiero con cartera y devoluciones',()=>{
     expect(d).toMatchObject({totalIngresos:100,ingresosDevengados:0,utilidad:0,totalVentasRango:0});
   });
 });
+
+describe('Ventas de hoy en horario colombiano', () => {
+  afterEach(() => jest.useRealTimers());
+  it('excluye la noche anterior y el inicio del día siguiente aunque el servidor use UTC', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-09T18:00:00Z'));
+    const ventas = [
+      { total: 17500, creadoEn: new Date('2026-11-09T00:24:28Z'), metodoPago: 'EFECTIVO', pagos: [] },
+      { total: 71200, creadoEn: new Date('2026-11-09T16:50:00Z'), metodoPago: 'EFECTIVO', pagos: [] },
+      { total: 2000, creadoEn: new Date('2026-11-10T05:00:00Z'), metodoPago: 'EFECTIVO', pagos: [] },
+    ];
+    const pedido = { findMany: jest.fn(async ({ where }) => where.creadoEn
+      ? ventas.filter(v => v.creadoEn >= where.creadoEn.gte && v.creadoEn < where.creadoEn.lt)
+      : ventas) };
+    const db: any = { pedido, movimientoFinanciero: { findMany: jest.fn().mockResolvedValue([]) }, operacionVentaCaja: { findMany: jest.fn().mockResolvedValue([]) } };
+    const resultado = await new FinancieroService(db).resumenFinanciero(2);
+    expect(resultado).toMatchObject({ totalVentasHoy: 71200, cantidadPedidosHoy: 1 });
+    expect(pedido.findMany).toHaveBeenNthCalledWith(1, { where: { sucursal: { empresaId: 2 }, estado: { not: 'ANULADO' }, creadoEn: { gte: new Date('2026-11-09T05:00:00Z'), lt: new Date('2026-11-10T05:00:00Z') } } });
+  });
+  it('antes de las cinco UTC conserva la fecha anterior de Colombia', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-09T03:00:00Z'));
+    const pedido = { findMany: jest.fn().mockResolvedValue([]) };
+    const db: any = { pedido, movimientoFinanciero: { findMany: jest.fn().mockResolvedValue([]) }, operacionVentaCaja: { findMany: jest.fn().mockResolvedValue([]) } };
+    await new FinancieroService(db).resumenFinanciero(2);
+    expect(pedido.findMany).toHaveBeenNthCalledWith(1, { where: { sucursal: { empresaId: 2 }, estado: { not: 'ANULADO' }, creadoEn: { gte: new Date('2026-11-08T05:00:00Z'), lt: new Date('2026-11-09T05:00:00Z') } } });
+  });
+});

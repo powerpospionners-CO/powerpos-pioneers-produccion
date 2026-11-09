@@ -270,14 +270,15 @@ export class FinancieroService {
       return acc;
     }, {});
 
-    // Ventas del día
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    // Día comercial de Colombia, independiente de la zona horaria del servidor.
+    const fechaHoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+    const hoy = new Date(`${fechaHoy}T00:00:00-05:00`);
+    const manana = new Date(hoy.getTime() + 86400000);
     const ventasHoy = await this.prisma.pedido.findMany({
       where: {
         sucursal: { empresaId },
         estado: { not: 'ANULADO' },
-        creadoEn: { gte: hoy },
+        creadoEn: { gte: hoy, lt: manana },
       },
     });
     const totalVentasHoy = ventasHoy.reduce((acc, p) => acc + Number(p.total), 0);
