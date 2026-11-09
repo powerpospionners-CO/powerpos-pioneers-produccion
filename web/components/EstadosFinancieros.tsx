@@ -7,6 +7,12 @@ function Filas({ filas }: { filas: [string, number | null][] }) {
   return <dl className="divide-y divide-gray-800">{filas.map(([nombre,valor])=><div key={nombre} className="flex justify-between gap-4 py-3"><dt className="text-gray-300">{nombre}</dt><dd className={`text-right font-semibold tabular-nums ${valor!==null&&valor<0?'text-red-300':'text-white'}`}>{cop(valor)}</dd></div>)}</dl>;
 }
 export default function EstadosFinancieros({ desde, hasta }: { desde?: string; hasta?: string }) {
+  const fechaColombia = (valor?: string) => valor ? new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Bogota' }).format(new Date(valor)) : '';
+  const [fechaInicial, setFechaInicial] = useState(() => fechaColombia(desde));
+  const [fechaFinal, setFechaFinal] = useState(() => fechaColombia(hasta));
+  const [rangoPropio, setRangoPropio] = useState<{ desde: string; hasta: string } | null>(null);
+  const desdeConsulta = rangoPropio?.desde ?? desde;
+  const hastaConsulta = rangoPropio?.hasta ?? hasta;
   const [datos,setDatos] = useState<any>(null);
   const [error,setError] = useState('');
   const [actualizando,setActualizando] = useState(true);
@@ -16,9 +22,9 @@ export default function EstadosFinancieros({ desde, hasta }: { desde?: string; h
     const controller=new AbortController();
     // El refresco no desmonta el informe: conserva scroll, pestaña y detalles abiertos.
     setActualizando(true);setError('');
-    api.get('/financiero/estados',{params:{fechaDesde:desde,fechaHasta:hasta},signal:controller.signal}).then(r=>{if(!controller.signal.aborted)setDatos(r.data);}).catch(e=>{if(!controller.signal.aborted)setError(e?.response?.data?.message||'No se pudieron cargar los estados financieros.');}).finally(()=>{if(!controller.signal.aborted)setActualizando(false);});
+    api.get('/financiero/estados',{params:{fechaDesde:desdeConsulta,fechaHasta:hastaConsulta},signal:controller.signal}).then(r=>{if(!controller.signal.aborted)setDatos(r.data);}).catch(e=>{if(!controller.signal.aborted)setError(e?.response?.data?.message||'No se pudieron cargar los estados financieros.');}).finally(()=>{if(!controller.signal.aborted)setActualizando(false);});
     return ()=>controller.abort();
-  },[desde,hasta,reintento]);
+  },[desdeConsulta,hastaConsulta,reintento]);
   const r=datos?.resultado,b=datos?.balance,f=datos?.flujo;
   return <section aria-label="Estados financieros" aria-busy={actualizando} className="rounded-xl border border-gray-800 bg-gray-900 p-5">
     <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
@@ -26,6 +32,28 @@ export default function EstadosFinancieros({ desde, hasta }: { desde?: string; h
       <span role="status" className="text-right text-xs text-gray-400">{error&&datos?<button title={error} className="text-amber-300 underline" onClick={()=>setReintento(v=>v+1)}>Datos anteriores · reintentar</button>:actualizando?'Actualizando…':''}</span>
     </div>
     <div className="no-imprimir mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Informes financieros">{[['resultado','Estado de resultados'],['balance','Balance general'],['flujo','Estado de flujo de caja']].map(([id,nombre])=><button key={id} role="tab" aria-selected={vista===id} onClick={()=>setVista(id)} className={`rounded-lg px-4 py-2 text-sm ${vista===id?'bg-orange-500 text-white':'bg-gray-800 text-gray-300'}`}>{nombre}</button>)}</div>
+    {vista !== 'balance' && <form className="no-imprimir mb-4 flex flex-wrap items-end gap-3" onSubmit={evento => {
+      evento.preventDefault();
+      if (!fechaInicial || !fechaFinal || fechaInicial > fechaFinal) return;
+      setRangoPropio({
+        desde: new Date(`${fechaInicial}T00:00:00.000-05:00`).toISOString(),
+        hasta: new Date(`${fechaFinal}T23:59:59.999-05:00`).toISOString(),
+      });
+    }}>
+      <label className="text-sm text-gray-300">Fecha inicial
+        <input type="date" required max={fechaFinal || undefined} value={fechaInicial} onChange={e => setFechaInicial(e.target.value)} className="mt-1 block rounded-lg border border-gray-700 bg-gray-800 p-2 text-white" />
+      </label>
+      <label className="text-sm text-gray-300">Fecha final
+        <input type="date" required min={fechaInicial || undefined} value={fechaFinal} onChange={e => setFechaFinal(e.target.value)} className="mt-1 block rounded-lg border border-gray-700 bg-gray-800 p-2 text-white" />
+      </label>
+      <button type="submit" className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold">Filtrar por fechas</button>
+      {rangoPropio && <button type="button" onClick={() => {
+        setRangoPropio(null);
+        setFechaInicial(fechaColombia(desde));
+        setFechaFinal(fechaColombia(hasta));
+      }} className="rounded-lg bg-gray-800 px-4 py-2 text-sm">Usar periodo general</button>}
+    </form>}
+    {datos && vista !== 'balance' && <p className="mb-3 text-sm text-gray-300">Periodo del informe: {fechaColombia(datos.periodo.desde)} al {fechaColombia(datos.periodo.hasta)}</p>}
     {error&&!datos?<div role="alert" className="text-red-300">{error}<button className="ml-4 underline" onClick={()=>setReintento(v=>v+1)}>Reintentar</button></div>:!datos?<p role="status" className="text-gray-400">Calculando los estados financieros…</p>:<>
       {vista==='resultado'&&<div role="tabpanel">
         <h3 className="mb-2 font-semibold">Estado de resultados · periodo seleccionado</h3>
