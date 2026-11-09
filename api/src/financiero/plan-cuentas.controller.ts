@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -17,13 +17,18 @@ export class PlanCuentasController {
   cuentas(@Request() req: any) { return this.plan.catalogo(req.user.empresaId); }
 
   @Post('cuentas')
-  guardar(@Request() req: any, @Body() datos: { codigo?: unknown; nombre?: unknown; activo?: unknown }) {
+  guardar(@Request() req: any, @Body() datos: { codigo?: unknown; nombre?: unknown; activo?: unknown; crear?: unknown }) {
     return this.plan.guardar(req.user.empresaId, req.user.id, datos);
   }
 
   @Post('asignar')
   asignar(@Request() req: any, @Body() datos: { origen?: unknown; registroId?: unknown; codigo?: unknown }) {
     return this.plan.asignar(req.user.empresaId, req.user.id, datos);
+  }
+
+  @Delete('cuentas/:codigo')
+  eliminar(@Request() req: any, @Param('codigo') codigo: string) {
+    return this.plan.eliminar(req.user.empresaId, req.user.id, codigo);
   }
 
   @Get('informe')

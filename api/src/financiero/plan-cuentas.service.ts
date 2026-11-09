@@ -1,7 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { CUENTAS_INICIALES, codigoSuperior, validarCodigoPuc } from './plan-cuentas.catalogo';
+import { CUENTAS_INICIALES, codigoSuperior, validarCodigoPuc, motivoProteccionPuc } from './plan-cuentas.catalogo';
 import { motorBase } from '../prisma/mysql-adapter';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -40,16 +40,42 @@ export class PlanCuentasService implements OnModuleInit {
   }
 
   async catalogo(empresaId: number) {
-    // Inicialización idempotente. Editar o desactivar una cuenta conserva la personalización.
-    await this.prisma.cuentaPuc.createMany({
-      data: CUENTAS_INICIALES.map(([codigo, nombre]) => ({ empresaId, codigo, nombre })),
-      skipDuplicates: true,
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM empresas WHERE id = ${empresaId} FOR UPDATE`;
+      // Las cuentas eliminadas explícitamente no se recrean al volver a consultar el catálogo.
+      const bajas = await tx.auditoria.findMany({ where: { empresaId, entidad: 'CUENTA_PUC', accion: 'ELIMINAR' }, select: { detalle: true } });
+      const eliminadas = new Set(bajas.map(b => (b.detalle as { codigo?: string } | null)?.codigo));
+      const iniciales = CUENTAS_INICIALES.filter(([codigo]) => !eliminadas.has(codigo));
+      await tx.cuentaPuc.createMany({
+        data: iniciales.map(([codigo, nombre]) => ({ empresaId, codigo, nombre })),
+        skipDuplicates: true,
+      });
+      const cuentas = await tx.cuentaPuc.findMany({ where: { empresaId }, include: { _count: { select: { asignaciones: true } } }, orderBy: { codigo: 'asc' } });
+      return cuentas.map(({ _count, ...c }) => {
+        const hijos = cuentas.filter(h => codigoSuperior(h.codigo) === c.codigo).length;
+        const bloqueoEliminar = motivoProteccionPuc(c.codigo) || (hijos ? 'Tiene subcuentas o auxiliares dependientes.' : _count.asignaciones ? 'Tiene registros clasificados. Puedes desactivarla para conservar el historial.' : null);
+        return { ...c, superior: codigoSuperior(c.codigo), nivel: c.codigo.length === 1 ? 'Clase' : c.codigo.length === 2 ? 'Grupo' : c.codigo.length === 4 ? 'Cuenta' : c.codigo.length === 6 ? 'Subcuenta' : 'Auxiliar', hijos, registros: _count.asignaciones, bloqueoEliminar };
+      });
     });
-    const cuentas = await this.prisma.cuentaPuc.findMany({ where: { empresaId }, orderBy: { codigo: 'asc' } });
-    return cuentas.map(c => ({ ...c, superior: codigoSuperior(c.codigo), nivel: c.codigo.length === 1 ? 'Clase' : c.codigo.length === 2 ? 'Grupo' : c.codigo.length === 4 ? 'Cuenta' : c.codigo.length === 6 ? 'Subcuenta' : 'Auxiliar' }));
   }
 
-  async guardar(empresaId: number, usuarioId: number, datos: { codigo?: unknown; nombre?: unknown; activo?: unknown }) {
+  async eliminar(empresaId: number, usuarioId: number, codigo: string) {
+    if (!validarCodigoPuc(codigo)) throw new BadRequestException('Código de cuenta inválido');
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM empresas WHERE id = ${empresaId} FOR UPDATE`;
+      const cuenta = await tx.cuentaPuc.findUnique({ where: { empresaId_codigo: { empresaId, codigo } } });
+      if (!cuenta) throw new NotFoundException('Cuenta no encontrada');
+      const proteccion = motivoProteccionPuc(codigo);
+      if (proteccion) throw new BadRequestException(proteccion);
+      if (await tx.cuentaPuc.count({ where: { empresaId, codigo: { startsWith: codigo, not: codigo } } })) throw new BadRequestException('Elimina primero las subcuentas y auxiliares dependientes');
+      if (await tx.asignacionPuc.count({ where: { empresaId, codigo } })) throw new BadRequestException('La cuenta tiene registros clasificados. Puedes desactivarla para conservar su historial');
+      await tx.auditoria.create({ data: { empresaId, usuarioId, accion: 'ELIMINAR', entidad: 'CUENTA_PUC', entidadId: cuenta.id, detalle: { codigo, nombre: cuenta.nombre, activo: cuenta.activo } } });
+      await tx.cuentaPuc.delete({ where: { empresaId_codigo: { empresaId, codigo } } });
+      return { eliminado: true };
+    });
+  }
+
+  async guardar(empresaId: number, usuarioId: number, datos: { codigo?: unknown; nombre?: unknown; activo?: unknown; crear?: unknown }) {
     if (!validarCodigoPuc(datos.codigo)) throw new BadRequestException('Usa un código PUC de 1, 2, 4, 6, 8 o 10 dígitos, de las clases 1 a 6');
     const codigo = datos.codigo;
     if (typeof datos.nombre !== 'string' || !datos.nombre.trim() || datos.nombre.trim().length > 150) throw new BadRequestException('El nombre debe tener entre 1 y 150 caracteres');
@@ -68,6 +94,7 @@ export class PlanCuentasService implements OnModuleInit {
         throw new BadRequestException('Desactiva primero las subcuentas y auxiliares');
       }
       const anterior = await tx.cuentaPuc.findUnique({ where: { empresaId_codigo: { empresaId, codigo } } });
+      if (datos.crear === true && anterior) throw new ConflictException('Ese código ya existe. Elige otro código para la nueva cuenta');
       const cuenta = await tx.cuentaPuc.upsert({
         where: { empresaId_codigo: { empresaId, codigo } },
         create: { empresaId, codigo, nombre, activo }, update: { nombre, activo },

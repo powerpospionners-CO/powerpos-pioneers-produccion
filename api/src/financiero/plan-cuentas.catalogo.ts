@@ -46,3 +46,12 @@ export function codigoSuperior(codigo: string) {
 export function validarCodigoPuc(codigo: unknown): codigo is string {
   return typeof codigo === 'string' && /^(?:[1-6]|[1-6]\d|[1-6]\d{3}|[1-6]\d{5}|[1-6]\d{7}|[1-6]\d{9})$/.test(codigo);
 }
+
+// Cuentas de agrupación utilizadas por los informes generados desde ventas y saldos.
+export const CUENTAS_AUTOMATICAS = ['11', '1305', '1435', '22', '23', '3', '4135', '4140', '6135', '6140'];
+
+export function motivoProteccionPuc(codigo: string) {
+  return CUENTAS_AUTOMATICAS.some(c => c.startsWith(codigo))
+    ? 'Esta cuenta forma parte de la estructura utilizada por los informes automáticos.'
+    : null;
+}
