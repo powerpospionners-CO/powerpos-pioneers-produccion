@@ -69,6 +69,16 @@ export class SuperadminController {
     return this.superadminService.listarAdministradores(+id);
   }
 
+  @Get('empresas/:id/sedes-administradores')
+  sedesAdministradores(@Param('id') id: string) {
+    return this.superadminService.sedesAdministradores(+id);
+  }
+
+  @Post('empresas/:id/administradores')
+  crearAdministrador(@Param('id') id: string, @Body() body: { nombre?: unknown; email?: unknown; password?: unknown; sucursalId?: unknown }, @Request() req: any) {
+    return this.superadminService.crearAdministrador(+id, body, req.user.id);
+  }
+
   @Post('empresas/:id/preparar-sedes')
   prepararSedes(@Param('id') id:string) {
     return this.superadminService.prepararSedesEmpresa(+id);

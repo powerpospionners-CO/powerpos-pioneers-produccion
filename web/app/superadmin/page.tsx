@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Building2, CheckCircle2, Clock3, LogOut, Moon, Pencil, Plus, RefreshCw, Save, ShieldCheck, Sun, Trash2, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
@@ -10,7 +10,8 @@ import { irALoginGenerico } from '@/lib/navegacion';
 import { useNotificar } from '@/components/Notificaciones';
 import PagosSuscripcion from '@/components/PagosSuscripcion';
 
-type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number };
+type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number; pendienteActivacion?: boolean };
+type SedeAdministrador = { id: number; nombre: string; activo: boolean; pendienteActivacion: boolean };
 
 const MODULOS = [
   { id: 'pos', label: 'POS y caja' },
@@ -88,7 +89,7 @@ const permisosPorPlan: Record<Plan, string[]> = {
 
 export default function SuperadminPage() {
   const router = useRouter();
-  const { usuario, logout } = useAuthStore();
+  const { usuario, logout, hydrated } = useAuthStore();
   const { tema, cambiarTema } = useTema();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [auditoria, setAuditoria] = useState<RegistroAuditoria[]>([]);
@@ -128,6 +129,12 @@ export default function SuperadminPage() {
   const [editandoAdminId, setEditandoAdminId] = useState<string | null>(null);
   const [formAdmin, setFormAdmin] = useState({ nombre: '', email: '', password: '', activo: true });
   const [guardandoAdmin, setGuardandoAdmin] = useState(false);
+  const [sedesAdmin, setSedesAdmin] = useState<SedeAdministrador[]>([]);
+  const [mostrarNuevoAdmin, setMostrarNuevoAdmin] = useState(false);
+  const [nuevoAdmin, setNuevoAdmin] = useState({ nombre: '', email: '', password: '', sucursalId: '' });
+  const [cargandoAdmins, setCargandoAdmins] = useState(false);
+  const [errorAdmins, setErrorAdmins] = useState('');
+  const solicitudAdmins = useRef(0);
   const [pagoExonerado, setPagoExonerado] = useState(false);
   const [motivoExoneracion, setMotivoExoneracion] = useState('');
   const [vencimiento, setVencimiento] = useState('');
@@ -136,12 +143,29 @@ export default function SuperadminPage() {
   const [guardandoSuscripcion, setGuardandoSuscripcion] = useState(false);
 
   const cargarAdministradores = async (empresaId: number) => {
+    const solicitud = ++solicitudAdmins.current;
+    setCargandoAdmins(true); setErrorAdmins('');
     try {
-      const { data } = await api.get(`/superadmin/empresas/${empresaId}/administradores`);
-      setAdminsEmpresa(data);
+      const [admins, sedes] = await Promise.all([api.get(`/superadmin/empresas/${empresaId}/administradores`), api.get(`/superadmin/empresas/${empresaId}/sedes-administradores`)]);
+      if (solicitud !== solicitudAdmins.current) return;
+      setAdminsEmpresa(admins.data); setSedesAdmin(sedes.data);
     } catch {
-      setAdminsEmpresa([]);
-    }
+      if (solicitud === solicitudAdmins.current) setErrorAdmins('No se pudieron consultar los administradores y sus sedes.');
+    } finally { if (solicitud === solicitudAdmins.current) setCargandoAdmins(false); }
+  };
+
+  const agregarAdminEmpresa = async (evento: React.FormEvent) => {
+    evento.preventDefault();
+    if (!seleccionada || guardandoAdmin) return;
+    setGuardandoAdmin(true);
+    try {
+      const { data } = await api.post(`/superadmin/empresas/${seleccionada.id}/administradores`, { ...nuevoAdmin, sucursalId: Number(nuevoAdmin.sucursalId) });
+      setMostrarNuevoAdmin(false);
+      setNuevoAdmin({ nombre: '', email: '', password: '', sucursalId: '' });
+      aviso(data.pendienteActivacion ? 'Administrador guardado. La sede está pendiente de activación para permitir el ingreso.' : 'Administrador agregado. Ya tiene su cuenta de acceso.', 'exito');
+      await cargarAdministradores(seleccionada.id);
+    } catch (e: any) { aviso(e?.response?.data?.message || 'No se pudo agregar el administrador.', 'error'); }
+    finally { setGuardandoAdmin(false); }
   };
 
   const abrirEdicionAdmin = (admin: AdministradorEmpresa) => {
@@ -174,7 +198,9 @@ export default function SuperadminPage() {
   };
 
   const seleccionarEmpresa = (empresa: Empresa) => {
+    if (guardandoAdmin) return;
     setSeleccionada(empresa);
+    setAdminsEmpresa([]); setSedesAdmin([]); setMostrarNuevoAdmin(false);
     setEditandoAdminId(null);
     void cargarAdministradores(empresa.id);
     setPlan(empresa.plan);
@@ -227,6 +253,7 @@ export default function SuperadminPage() {
   };
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!usuario) {
       irALoginGenerico(router);
       return;
@@ -236,7 +263,7 @@ export default function SuperadminPage() {
       return;
     }
     cargarDatos();
-  }, [usuario, router]);
+  }, [usuario, router, hydrated]);
 
   const aplicarPlan = (nuevoPlan: Plan) => {
     setPlan(nuevoPlan);
@@ -523,8 +550,24 @@ export default function SuperadminPage() {
                 <button type="button" onClick={guardarSuscripcion} disabled={guardandoSuscripcion} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5">{guardandoSuscripcion ? 'Guardando...' : 'Guardar ajustes y exoneración'}</button>
               </div>
               <div className="mt-6 border-t border-slate-800 pt-5">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Administradores de la empresa</p>
-                {adminsEmpresa.length === 0 ? (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Administradores de la empresa</p>
+                  <button type="button" disabled={guardandoAdmin || cargandoAdmins || !sedesAdmin.length} onClick={() => { setEditandoAdminId(null); setNuevoAdmin({ nombre: '', email: '', password: '', sucursalId: sedesAdmin.length === 1 ? String(sedesAdmin[0].id) : '' }); setMostrarNuevoAdmin(true); }} className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"><Plus size={14} /> Agregar administrador</button>
+                </div>
+                {cargandoAdmins && <p role="status" className="mb-3 text-sm text-slate-400">Consultando administradores…</p>}
+                {errorAdmins && <p role="alert" className="mb-3 text-sm text-red-300">{errorAdmins} <button type="button" onClick={() => void cargarAdministradores(seleccionada.id)} className="underline">Reintentar</button></p>}
+                {mostrarNuevoAdmin && <form onSubmit={agregarAdminEmpresa} className="mb-4 space-y-3 rounded-xl border border-orange-500/30 bg-slate-950 p-4">
+                  <h3 className="text-sm font-semibold">Nuevo administrador</h3>
+                  <label className="block text-xs text-slate-400">Nombre<input required maxLength={150} disabled={guardandoAdmin} value={nuevoAdmin.nombre} onChange={e => setNuevoAdmin({ ...nuevoAdmin, nombre: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
+                  <label className="block text-xs text-slate-400">Correo de acceso<input required type="email" maxLength={150} autoComplete="off" disabled={guardandoAdmin} value={nuevoAdmin.email} onChange={e => setNuevoAdmin({ ...nuevoAdmin, email: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
+                  <label className="block text-xs text-slate-400">Contraseña<input required type="password" minLength={6} maxLength={72} autoComplete="new-password" disabled={guardandoAdmin} value={nuevoAdmin.password} onChange={e => setNuevoAdmin({ ...nuevoAdmin, password: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
+                  <label className="block text-xs text-slate-400">Sede<select required disabled={guardandoAdmin} value={nuevoAdmin.sucursalId} onChange={e => setNuevoAdmin({ ...nuevoAdmin, sucursalId: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+                    <option value="">Seleccionar sede</option>{sedesAdmin.map(s => <option key={s.id} value={s.id}>{s.nombre}{s.pendienteActivacion ? ' · Pendiente de activación' : ''}</option>)}
+                  </select></label>
+                  <p className="text-xs text-slate-500">Hasta 3 administradores por sede.</p>
+                  <div className="flex gap-2"><button type="button" disabled={guardandoAdmin} onClick={() => setMostrarNuevoAdmin(false)} className="flex-1 rounded-lg border border-slate-700 py-2 text-sm">Cancelar</button><button type="submit" disabled={guardandoAdmin} className="flex-1 rounded-lg bg-orange-500 py-2 text-sm font-semibold text-white disabled:opacity-50">{guardandoAdmin ? 'Guardando…' : 'Crear administrador'}</button></div>
+                </form>}
+                {!cargandoAdmins && !errorAdmins && adminsEmpresa.length === 0 ? (
                   <p className="text-sm text-slate-500">Esta empresa no tiene administradores.</p>
                 ) : (
                   <div className="space-y-3">
@@ -553,7 +596,7 @@ export default function SuperadminPage() {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <div className="font-semibold text-sm">{admin.nombre}</div>
-                              <div className="text-xs text-slate-500 mt-1">{admin.email} · <span className={admin.activo ? 'text-emerald-400' : 'text-red-400'}>{admin.activo ? 'Puede entrar' : 'Bloqueado'}</span></div>
+                              <div className="text-xs text-slate-500 mt-1">{admin.email} · <span className={admin.pendienteActivacion ? 'text-amber-300' : admin.activo ? 'text-emerald-400' : 'text-red-400'}>{admin.pendienteActivacion ? 'Sede pendiente de activación' : admin.activo ? 'Puede entrar' : 'Bloqueado'}</span></div>
                             </div>
                             <button type="button" onClick={() => abrirEdicionAdmin(admin)} className="text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 hover:border-orange-500">Editar</button>
                           </div>

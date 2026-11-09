@@ -59,46 +59,49 @@ export class SuperadminService {
       emailsUsados.add(emailNormalizado);
     }
 
-    const creada = await this.prisma.empresa.create({
-      data: {
-        nombre: empresa.nombre,
-        nit: empresa.nit,
-        email: empresa.email,
-        telefono: empresa.telefono || null,
-        direccion: empresa.direccion || null,
-        tipoNegocio,
-        plan,
-        permisos,
-        suscripcionVenceEn: new Date(),
-        soporteIncluidoHasta: sumarMeses(new Date(), 3),
-        sucursales: { create: { nombre: 'Sucursal Principal', activo: !this.prisma.aislamientoActivo, direccion: empresa.direccion || null, telefono: empresa.telefono || null } },
-      },
-      include: { sucursales: true },
-    });
-
-    const administradoresCreados = [] as Array<{ id: number; nombre: string; email: string; rol: string }>;
-
-    for (const administrador of listaAdministradores) {
-      const password = await bcrypt.hash(administrador.password, 10);
-      const usuarioCreado = await this.prisma.usuario.create({
+    const hashes = await Promise.all(listaAdministradores.map(administrador => bcrypt.hash(administrador.password, 10)));
+    const { creada, administradoresCreados } = await this.prisma.$transaction(async tx => {
+      const creada = await tx.empresa.create({
         data: {
-          nombre: administrador.nombre,
-          email: administrador.email.trim().toLowerCase(),
-          password,
-          rol: 'ADMIN_EMPRESA',
-          empresaId: creada.id,
-          sucursalId: creada.sucursales[0].id,
-          permisos: { global: true },
+          nombre: empresa.nombre,
+          nit: empresa.nit,
+          email: empresa.email,
+          telefono: empresa.telefono || null,
+          direccion: empresa.direccion || null,
+          tipoNegocio,
+          plan,
+          permisos,
+          suscripcionVenceEn: new Date(),
+          soporteIncluidoHasta: sumarMeses(new Date(), 3),
+          sucursales: { create: { nombre: 'Sucursal Principal', activo: !this.prisma.aislamientoActivo, direccion: empresa.direccion || null, telefono: empresa.telefono || null } },
         },
+        include: { sucursales: true },
       });
 
-      administradoresCreados.push({
-        id: usuarioCreado.id,
-        nombre: usuarioCreado.nombre,
-        email: usuarioCreado.email,
-        rol: usuarioCreado.rol,
-      });
-    }
+      const administradoresCreados = [] as Array<{ id: number; nombre: string; email: string; rol: string }>;
+
+      for (const [indice, administrador] of listaAdministradores.entries()) {
+        const usuarioCreado = await tx.usuario.create({
+          data: {
+            nombre: administrador.nombre,
+            email: administrador.email.trim().toLowerCase(),
+            password: hashes[indice],
+            rol: 'ADMIN_EMPRESA',
+            empresaId: creada.id,
+            sucursalId: creada.sucursales[0].id,
+            permisos: { global: true },
+          },
+        });
+
+        administradoresCreados.push({
+          id: usuarioCreado.id,
+          nombre: usuarioCreado.nombre,
+          email: usuarioCreado.email,
+          rol: usuarioCreado.rol,
+        });
+      }
+      return { creada, administradoresCreados };
+    });
 
     await this.auditoria.registrar({
       accion: 'CREAR',
@@ -175,6 +178,13 @@ export class SuperadminService {
       const scope=await this.prisma.contexto(sede.empresaId,sede.sucursalId,true);
       total+=await scope.cliente.usuario.count({where:{empresaId:sede.empresaId,...(empresaId ? {} : {activo:true})}});
     }
+    total += await this.prisma.control.usuario.count({
+      where: {
+        rol: { not: 'SUPERADMIN' },
+        ...(empresaId ? { empresaId } : { empresaId: { not: null }, activo: true }),
+        ...(sedes.length ? { OR: [{ sucursalId: null }, { sucursalId: { notIn: sedes.map(s => s.sucursalId) } }] } : {}),
+      },
+    });
     return total;
   }
 
@@ -304,8 +314,13 @@ export class SuperadminService {
       for (const sede of sedes) {
         const scope=await this.prisma.contexto(empresaId,sede.sucursalId,true);
         const usuarios=await scope.cliente.usuario.findMany({where:{empresaId,rol:'ADMIN_EMPRESA'},select:{id:true,nombre:true,email:true,activo:true},orderBy:{id:'asc'}});
-        admins.push(...usuarios.map(u=>({...u,empresaId,sucursalId:sede.sucursalId})));
+        admins.push(...usuarios.map(u=>({...u,empresaId,sucursalId:sede.sucursalId,pendienteActivacion:false})));
       }
+      const pendientes = await this.prisma.control.usuario.findMany({
+        where: { empresaId, rol: 'ADMIN_EMPRESA', ...(sedes.length ? { OR: [{ sucursalId: null }, { sucursalId: { notIn: sedes.map(s => s.sucursalId) } }] } : {}) },
+        select: { id: true, nombre: true, email: true, activo: true, sucursalId: true }, orderBy: { id: 'asc' },
+      });
+      admins.push(...pendientes.map(u => ({ ...u, empresaId, pendienteActivacion: true })));
       return admins;
     }
     return this.prisma.usuario.findMany({
@@ -313,6 +328,49 @@ export class SuperadminService {
       select: { id: true, nombre: true, email: true, activo: true },
       orderBy: { id: 'asc' },
     });
+  }
+
+  async sedesAdministradores(empresaId: number) {
+    const root = this.prisma.control || this.prisma;
+    const empresa = await root.empresa.findUnique({ where: { id: empresaId }, select: { id: true } });
+    if (!empresa) throw new NotFoundException('Empresa no encontrada');
+    const sedes = await root.sucursal.findMany({ where: { empresaId }, select: { id: true, nombre: true, activo: true }, orderBy: { id: 'asc' } });
+    const bases = this.prisma.aislamientoActivo ? await root.baseSede.findMany({ where: { empresaId, estado: 'ACTIVA' }, select: { sucursalId: true } }) : [];
+    return sedes.map(s => ({ ...s, pendienteActivacion: this.prisma.aislamientoActivo && !bases.some(b => b.sucursalId === s.id) }));
+  }
+
+  async crearAdministrador(empresaId: number, datos: { nombre?: unknown; email?: unknown; password?: unknown; sucursalId?: unknown }, superadminId?: number) {
+    if (!Number.isSafeInteger(empresaId) || empresaId < 1 || !Number.isSafeInteger(datos.sucursalId) || Number(datos.sucursalId) < 1) throw new BadRequestException('Selecciona la empresa y la sede');
+    if (typeof datos.nombre !== 'string' || !datos.nombre.trim() || datos.nombre.trim().length > 150) throw new BadRequestException('El nombre debe tener entre 1 y 150 caracteres');
+    if (typeof datos.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email.trim()) || datos.email.trim().length > 150) throw new BadRequestException('El correo no es válido');
+    if (typeof datos.password !== 'string' || datos.password.length < 6 || Buffer.byteLength(datos.password, 'utf8') > 72) throw new BadRequestException('La contraseña debe tener al menos 6 caracteres y máximo 72 bytes');
+    const root = this.prisma.control || this.prisma;
+    const sucursalId = Number(datos.sucursalId), nombre = datos.nombre.trim(), email = datos.email.trim().toLowerCase();
+    const sede = await root.sucursal.findFirst({ where: { id: sucursalId, empresaId }, select: { id: true } });
+    if (!sede) throw new NotFoundException('La sede no pertenece a esta empresa');
+    const base = this.prisma.aislamientoActivo ? await root.baseSede.findUnique({ where: { empresaId_sucursalId: { empresaId, sucursalId } } }) : null;
+    const pendienteActivacion = this.prisma.aislamientoActivo && base?.estado !== 'ACTIVA';
+    const db = this.prisma.aislamientoActivo && !pendienteActivacion ? (await this.prisma.contexto(empresaId, sucursalId, true)).cliente : root;
+    const password = await bcrypt.hash(datos.password, 10);
+    const resultado = await db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM empresas WHERE id = ${empresaId} FOR UPDATE`;
+      const existente = await tx.usuario.findUnique({ where: { email } });
+      if (existente) {
+        if (existente.rol === 'ADMIN_EMPRESA' && existente.empresaId === empresaId && existente.sucursalId === sucursalId && existente.nombre === nombre && await bcrypt.compare(datos.password as string, existente.password)) {
+          return { usuario: { id: existente.id, nombre: existente.nombre, email: existente.email, activo: existente.activo }, creado: false };
+        }
+        throw new ConflictException('Ya existe una cuenta con ese correo');
+      }
+      const cantidad = await tx.usuario.count({ where: { empresaId, sucursalId, rol: 'ADMIN_EMPRESA' } });
+      if (cantidad >= 3) throw new ConflictException('La sede puede tener máximo 3 administradores');
+      const usuario = await tx.usuario.create({
+        data: { empresaId, sucursalId, nombre, email, password, rol: 'ADMIN_EMPRESA', permisos: { global: true } },
+        select: { id: true, nombre: true, email: true, activo: true },
+      });
+      return { usuario, creado: true };
+    });
+    if (resultado.creado) await this.auditoria.registrar({ accion: 'CREAR', entidad: 'USUARIO', entidadId: resultado.usuario.id, empresaId, usuarioId: superadminId, detalle: { rol: 'ADMIN_EMPRESA', sucursalId, nombre, email } });
+    return { ...resultado.usuario, empresaId, sucursalId, pendienteActivacion, creado: resultado.creado };
   }
 
   async editarAdministrador(
@@ -323,9 +381,10 @@ export class SuperadminService {
     let db = this.prisma.control || this.prisma;
     if (this.prisma.aislamientoActivo) {
       if (!Number.isSafeInteger(datos.empresaId)||!Number.isSafeInteger(datos.sucursalId)) throw new BadRequestException('Selecciona la empresa y sede del administrador');
-      db=(await this.prisma.contexto(datos.empresaId!,datos.sucursalId!,true)).cliente;
+      const base = await this.prisma.control.baseSede.findUnique({ where: { empresaId_sucursalId: { empresaId: datos.empresaId!, sucursalId: datos.sucursalId! } } });
+      if (base?.estado === 'ACTIVA') db=(await this.prisma.contexto(datos.empresaId!,datos.sucursalId!,true)).cliente;
     }
-    const usuario = await db.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, rol: true, empresaId: true } });
+    const usuario = await db.usuario.findFirst({ where: { id: usuarioId, ...(datos.empresaId ? { empresaId: datos.empresaId } : {}), ...(datos.sucursalId ? { sucursalId: datos.sucursalId } : {}) }, select: { id: true, rol: true, empresaId: true } });
     if (!usuario || usuario.rol !== 'ADMIN_EMPRESA' || !usuario.empresaId) throw new NotFoundException('Administrador no encontrado');
 
     const data: Record<string, unknown> = {};

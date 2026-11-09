@@ -312,9 +312,9 @@ export default function DistribuidorPage() {
 
           <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
             <h2 className="mb-3 text-lg font-bold">Mis pedidos</h2>
-            <div className="max-h-96 overflow-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-gray-800 text-gray-400"><tr><th className="pb-2">Pedido</th><th className="pb-2">Fecha</th><th className="pb-2 text-right">Total</th><th className="pb-2 text-right">Comisión</th><th className="pb-2 text-center">Estado</th><th className="pb-2 text-right">Acciones</th></tr></thead>
+            <div className="max-h-96 overflow-auto pr-2 [scrollbar-gutter:stable]">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="border-b border-gray-800 text-gray-400"><tr><th className="pb-2">Pedido</th><th className="pb-2">Fecha</th><th className="pb-2 text-right">Total</th><th className="pb-2 text-right">Comisión</th><th className="pb-2 text-center">Estado</th><th className="w-28 px-2 pb-2 text-center">Acciones</th></tr></thead>
                 <tbody>
                   {pedidos.map((p) => (
                     <tr key={p.id} className={`border-b border-gray-800 ${p.estado === 'ANULADO' ? 'opacity-40' : ''}`}>
@@ -323,15 +323,15 @@ export default function DistribuidorPage() {
                       <td className="py-2 text-right">{moneda(Number(p.total))}</td>
                       <td className="py-2 text-right text-orange-400">{moneda(Number(p.comisionMonto))}</td>
                       <td className="py-2 text-center text-xs">
-                        {p.estadoGestion?.replaceAll('_',' ') || p.estado}{p.saldoPendiente!=null && <p className="mt-1 text-amber-200">Por entregar a caja: {moneda(p.saldoPendiente)}</p>}
+                        {p.estadoGestion?.replaceAll('_',' ') || p.estado}{p.saldoPendiente!=null && p.saldoPendiente > 0 && <p className="mt-1 text-amber-200">Por entregar a caja: {moneda(p.saldoPendiente)}</p>}
                       </td>
-                      <td className="py-2 text-right">
-                        <span className="inline-flex gap-2">
-                          <button type="button" title="Ver productos" onClick={() => verDetalle(p)} className="text-gray-500 hover:text-blue-400"><List size={14} /></button>
+                      <td className="whitespace-nowrap px-2 py-2 text-center">
+                        <span className="inline-flex items-center justify-center gap-1">
+                          <button type="button" title="Ver productos" aria-label={`Ver productos del pedido ${p.numero}`} onClick={() => verDetalle(p)} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-sky-500/20 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"><List size={14} /></button>
                           {p.estadoGestion === 'PENDIENTE_RETIRO' && !p.liquidacionId && (
                             <>
-                              <button type="button" title="Editar pedido" aria-label={`Editar pedido ${p.numero}`} disabled={enviando || !!borrador.datos.solicitud || anulandoId !== null} onClick={() => void editarPedido(p)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-300 disabled:opacity-40"><Pencil size={17} /></button>
-                              <button type="button" title="Cancelar pedido" aria-label={`Cancelar pedido ${p.numero}`} disabled={enviando || !!borrador.datos.solicitud || anulandoId !== null} onClick={() => anular(p)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 disabled:opacity-40"><Ban size={17} /></button>
+                              <button type="button" title="Editar pedido" aria-label={`Editar pedido ${p.numero}`} disabled={enviando || !!borrador.datos.solicitud || anulandoId !== null} onClick={() => void editarPedido(p)} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:opacity-40"><Pencil size={14} /></button>
+                              <button type="button" title="Cancelar pedido" aria-label={`Cancelar pedido ${p.numero}`} disabled={enviando || !!borrador.datos.solicitud || anulandoId !== null} onClick={() => anular(p)} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-40"><Ban size={14} /></button>
                             </>
                           )}
                         </span>
