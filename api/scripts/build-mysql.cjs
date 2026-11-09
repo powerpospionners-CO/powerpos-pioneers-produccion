@@ -14,5 +14,8 @@ try {
   ejecutar(require.resolve('prisma/build/index.js'), ['generate', '--schema', 'prisma/mysql/schema.prisma']);
   ejecutar(require.resolve('@nestjs/cli/bin/nest.js'), ['build']);
   fs.cpSync(path.join(root, 'generated/prisma-mysql'), path.join(root, 'dist/generated/prisma-mysql'), { recursive: true });
+  const carpetaPuc = path.join(root, 'dist/prisma/mysql');
+  fs.mkdirSync(carpetaPuc, { recursive: true });
+  fs.copyFileSync(path.join(root, 'prisma/mysql/plan-cuentas-puc.sql'), path.join(carpetaPuc, 'plan-cuentas-puc.sql'));
   console.log('Cliente MySQL incluido en dist; no se modificaron bases de datos');
 } catch (e) { console.error(e.message); process.exitCode = 1; }
