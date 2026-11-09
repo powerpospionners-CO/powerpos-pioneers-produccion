@@ -11,6 +11,15 @@ export class PedidosDistribuidorService {
   constructor(private prisma: PrismaService, private readonly pedidos: PedidosService) {}
 
   async crearPedido(datos: any, distribuidorId: number, sucursalId: number, empresaId: number, usuarioId: number) {
+    return this.guardarPedido(datos, distribuidorId, sucursalId, empresaId, usuarioId);
+  }
+
+  async editarPedido(id: number, datos: any, distribuidorId: number, sucursalId: number, empresaId: number, usuarioId: number) {
+    if (!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(datos.revision) || datos.revision < 0) throw new BadRequestException('Actualiza el pedido antes de editarlo');
+    return this.guardarPedido(datos, distribuidorId, sucursalId, empresaId, usuarioId, id);
+  }
+
+  private async guardarPedido(datos: any, distribuidorId: number, sucursalId: number, empresaId: number, usuarioId: number, editarId?: number) {
     const { items, clienteReferencia } = datos;
     if (!['PAGO_ANTES','COBRO_POSTERIOR'].includes(datos.modalidad) || typeof datos.clave !== 'string' || !/^[a-zA-Z0-9-]{8,100}$/.test(datos.clave)) throw new BadRequestException('Actualiza la aplicación y selecciona la modalidad de retiro.');
     if (!Array.isArray(items) || items.length < 1 || items.length > 100 || items.some((i: any) => !i || !Number.isInteger(i.cantidad) || i.cantidad < 1 || i.cantidad > 999999 || !Number.isInteger(i.productoId) || (i.presentacionId != null && (!Number.isInteger(i.presentacionId) || i.presentacionId < 1)))) {
@@ -27,8 +36,19 @@ export class PedidosDistribuidorService {
       if (clienteReferencia !== undefined && (typeof clienteReferencia !== 'string' || clienteReferencia.length > 180)) throw new BadRequestException('La referencia del cliente admite máximo 180 caracteres.');
 
       const solicitud = JSON.stringify({ items, clienteReferencia: clienteReferencia || null, modalidad: datos.modalidad, sucursalId });
+      const original = editarId ? await tx.pedidoDistribuidor.findFirst({ where: { id: editarId, empresaId, distribuidorId, sucursalId }, include: { detalles: true } }) : null;
+      if (editarId && !original) throw new NotFoundException('Pedido no encontrado');
+      const control = editarId ? (await controlesDistribuidor(tx, empresaId, [editarId])).get(editarId) : null;
+      if (original) {
+        if (control?.claveEdicion === datos.clave) {
+          if (control.solicitudEdicion !== solicitud) throw new BadRequestException('Esta clave ya corresponde a otra corrección del pedido');
+          return (await gestionPedidos(tx, empresaId, [original]))[0];
+        }
+        if (original.estado === 'ANULADO' || original.liquidacionId || !control || control.pedidoCajaId) throw new BadRequestException('Solo puedes editar pedidos pendientes de retiro. Las entregas se corrigen desde caja');
+        if ((control.revision ?? 0) !== datos.revision) throw new BadRequestException('El pedido cambió. Ábrelo de nuevo antes de editarlo');
+      }
       const anteriores = await tx.auditoria.findMany({ where: { empresaId, entidad: 'SOLICITUD_DISTRIBUIDOR', entidadId: distribuidorId }, orderBy: { id: 'desc' } });
-      const repetida = anteriores.find(a=>(a.detalle as any)?.clave === datos.clave);
+      const repetida = !editarId && anteriores.find(a=>(a.detalle as any)?.clave === datos.clave);
       if (repetida) {
         if ((repetida.detalle as any).solicitud !== solicitud) throw new BadRequestException('Esta clave pertenece a otro pedido.');
         const anterior = await tx.pedidoDistribuidor.findFirst({ where: { id: (repetida.detalle as any).pedidoId, empresaId, distribuidorId }, include: { detalles: { include: { producto: true } } } });
@@ -48,8 +68,9 @@ export class PedidosDistribuidorService {
           presentacion = await tx.productoPresentacion.findFirst({ where: { id: Number(item.presentacionId), productoId: producto.id, activo: true } });
           if (!presentacion) throw new NotFoundException('La presentación seleccionada no está disponible');
         }
-        const precioUnitario = presentacion ? Number(presentacion.precio) : Number(producto.precio);
-        const factorUnidades = presentacion ? presentacion.factorUnidades : 1;
+        const detalleAnterior = original?.detalles.find(d => d.productoId === producto.id && d.presentacionId === (presentacion?.id ?? null));
+        const precioUnitario = detalleAnterior ? Number(detalleAnterior.precioUnitario) : presentacion ? Number(presentacion.precio) : Number(producto.precio);
+        const factorUnidades = detalleAnterior?.factorUnidades ?? (presentacion ? presentacion.factorUnidades : 1);
         const itemSubtotal = precioUnitario * item.cantidad;
         subtotal += itemSubtotal;
 
@@ -60,14 +81,31 @@ export class PedidosDistribuidorService {
         });
       }
 
+      const unidadesPorProducto = new Map<number, number>();
       for (const item of itemsValidados) {
-        if (item.producto.controlaStock && item.producto.stockActual < item.cantidad * item.factorUnidades) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}`);
+        const unidades = (unidadesPorProducto.get(item.producto.id) ?? 0) + item.cantidad * item.factorUnidades;
+        unidadesPorProducto.set(item.producto.id, unidades);
+        if (item.producto.controlaStock && item.producto.stockActual < unidades) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}`);
       }
 
       const total = Math.round(subtotal * 100) / 100;
       if (!Number.isFinite(total) || total <= 0 || total > 99999999.99) throw new BadRequestException('El total del pedido no es válido.');
-      const comisionPorcentaje = Number(distribuidor.porcentajeComision);
+      const comisionPorcentaje = Number(original?.comisionPorcentaje ?? distribuidor.porcentajeComision);
       const comisionMonto = Math.round(total * comisionPorcentaje) / 100;
+      const detalles = itemsValidados.map(item => ({
+        productoId: item.producto.id, cantidad: item.cantidad, precioUnitario: item.precioUnitario, subtotal: item.subtotal,
+        presentacionId: item.presentacionId, presentacionNombre: item.presentacionNombre, factorUnidades: item.factorUnidades,
+      }));
+      if (original) {
+        const actualizado = await tx.pedidoDistribuidor.update({
+          where: { id: original.id },
+          data: { clienteReferencia: clienteReferencia || null, total, comisionMonto, detalles: { deleteMany: {}, create: detalles } },
+          include: { detalles: { include: { producto: true } } },
+        });
+        await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: 'PEDIDO_DISTRIBUIDOR', entidadId: original.id, accion: 'EDITAR', detalle: { anterior: { clienteReferencia: original.clienteReferencia, total: Number(original.total), items: original.detalles.map(d => ({ productoId: d.productoId, presentacionId: d.presentacionId, cantidad: d.cantidad })) }, nuevo: { items, clienteReferencia: clienteReferencia || null, total } } } });
+        await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: CONTROL_DISTRIBUIDOR, entidadId: original.id, accion: 'EDITAR', detalle: { ...control, modalidad: datos.modalidad, revision: datos.revision + 1, claveEdicion: datos.clave, solicitudEdicion: solicitud } } });
+        return { ...actualizado, modalidad: datos.modalidad, revision: datos.revision + 1, estadoGestion: 'PENDIENTE_RETIRO', entregado: false, saldoPendiente: total, comisionDisponible: false };
+      }
       const numero = await this.generarNumero(sucursalId, tx);
 
       const pedido = await tx.pedidoDistribuidor.create({
@@ -90,7 +128,7 @@ export class PedidosDistribuidorService {
       await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: 'SOLICITUD_DISTRIBUIDOR', entidadId: distribuidorId, accion: 'CREAR', detalle: { clave: datos.clave, solicitud, pedidoId: pedido.id } } });
       await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: CONTROL_DISTRIBUIDOR, entidadId: pedido.id, accion: 'CREAR', detalle: { modalidad: datos.modalidad, pedidoCajaId: null } } });
 
-      return {...pedido,modalidad:datos.modalidad,estadoGestion:'PENDIENTE_RETIRO',entregado:false,saldoPendiente:total,comisionDisponible:false};
+      return {...pedido,modalidad:datos.modalidad,revision:0,estadoGestion:'PENDIENTE_RETIRO',entregado:false,saldoPendiente:total,comisionDisponible:false};
     }, { timeout: 15000 });
   }
 
@@ -144,6 +182,7 @@ export class PedidosDistribuidorService {
         const venta = await tx.pedido.findFirst({ where:{id:control.pedidoCajaId,sucursal:{empresaId:actor.empresaId}},include:{cuentaCredito:true} });
         return {pedidoCajaId:venta!.id,numero:venta!.numero,saldoPendiente:Number(venta!.cuentaCredito?.saldo || 0)};
       }
+      if ((datos.revision ?? 0) !== (control.revision ?? 0)) throw new BadRequestException('El distribuidor modificó este pedido. Cierra el cobro y revisa el pedido actualizado');
       if (!p.distribuidor.activo || p.distribuidor.sucursalId!==p.sucursalId) throw new BadRequestException('El distribuidor no está activo en esta sede.');
       if (control.modalidad==='PAGO_ANTES' && datos.condicionPago==='CREDITO') throw new BadRequestException('Esta modalidad exige el pago completo antes de retirar.');
       const aCredito = datos.condicionPago==='CREDITO';
@@ -219,6 +258,7 @@ export class PedidosDistribuidorService {
       const control = (await controlesDistribuidor(tx, empresaId, [id])).get(id);
       if (control) {
         if (control.pedidoCajaId) throw new BadRequestException('La mercancía ya fue entregada. La devolución debe gestionarse por la venta de caja vinculada.');
+        await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: 'PEDIDO_DISTRIBUIDOR', entidadId: id, accion: 'ANULAR', detalle: { numero: pedido.numero, total: Number(pedido.total), motivo: 'Cancelado antes de retirar la mercancía' } } });
         return tx.pedidoDistribuidor.update({ where: { id }, data: { estado: 'ANULADO' } });
       }
       if (distribuidorId) throw new BadRequestException('Los pedidos históricos requieren revisión administrativa antes de anular.');

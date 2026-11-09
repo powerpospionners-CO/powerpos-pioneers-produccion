@@ -72,3 +72,49 @@ describe('Anular pedido de distribuidor', () => {
     expect(tx.pedidoDistribuidor.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { estado: 'ANULADO' } });
   });
 });
+
+describe('Corrección de pedidos pendientes', () => {
+  function pendiente() {
+    const caso = escenario();
+    const pedido: any = { id: 1, numero: 'DIST-2-1', empresaId: 2, sucursalId: 2, distribuidorId: 7, estado: 'ENTREGADO', liquidacionId: null, total: 30000, comisionPorcentaje: 10, clienteReferencia: 'Cliente', detalles: [{ productoId: 5, presentacionId: null, cantidad: 3, precioUnitario: 10000, factorUnidades: 1 }] };
+    const control: any = { modalidad: 'PAGO_ANTES', pedidoCajaId: null, revision: 0 };
+    caso.tx.pedidoDistribuidor.findFirst.mockResolvedValue(pedido);
+    caso.tx.auditoria.findMany.mockImplementation(async ({ where }) => where.entidad === 'CONTROL_PEDIDO_DISTRIBUIDOR' ? [{ entidadId: 1, detalle: control }] : []);
+    caso.tx.auditoria.create.mockImplementation(async ({ data }) => { if (data.entidad === 'CONTROL_PEDIDO_DISTRIBUIDOR') Object.assign(control, data.detalle); });
+    caso.tx.pedidoDistribuidor.update.mockImplementation(async ({ data }) => { pedido.total = data.total; return { ...pedido, ...data }; });
+    return { ...caso, control, pedido };
+  }
+  const datos = { modalidad: 'PAGO_ANTES', clave: 'editar-prueba-1', revision: 0, items: [{ productoId: 5, cantidad: 2 }] };
+  it('corrige cantidades conservando precios y reintenta sin crear otro pedido', async () => {
+    const { service, tx } = pendiente();
+    tx.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Arroz', precio: 12000, disponible: true, controlaStock: true, stockActual: 100 });
+    const resultado = await service.editarPedido(1, datos, 7, 2, 2, 9);
+    expect(resultado).toMatchObject({ total: 20000, comisionMonto: 2000, revision: 1 });
+    await service.editarPedido(1, datos, 7, 2, 2, 9);
+    expect(tx.pedidoDistribuidor.update).toHaveBeenCalledTimes(1);
+    expect(tx.pedidoDistribuidor.create).not.toHaveBeenCalled();
+    expect(tx.producto.update).not.toHaveBeenCalled();
+    expect(tx.movimientoFinanciero.create).not.toHaveBeenCalled();
+  });
+  it('impide sobrescribir una revisión nueva o una entrega confirmada', async () => {
+    const { service, tx, control } = pendiente();
+    control.revision = 1;
+    await expect(service.editarPedido(1, datos, 7, 2, 2, 9)).rejects.toThrow('cambió');
+    control.pedidoCajaId = 10;
+    await expect(service.editarPedido(1, datos, 7, 2, 2, 9)).rejects.toThrow('pendientes de retiro');
+    expect(tx.pedidoDistribuidor.update).not.toHaveBeenCalled();
+  });
+  it('la búsqueda de edición restringe empresa, sede y dueño', async () => {
+    const { service, tx } = pendiente();
+    tx.pedidoDistribuidor.findFirst.mockResolvedValue(null);
+    await expect(service.editarPedido(1, datos, 7, 2, 2, 9)).rejects.toThrow('no encontrado');
+    expect(tx.pedidoDistribuidor.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 1, empresaId: 2, distribuidorId: 7, sucursalId: 2 } }));
+  });
+  it('cancelar antes del retiro deja auditoría sin reponer mercancía que aún no salió', async () => {
+    const { service, tx } = pendiente();
+    await service.anular(1, 2, 9, 7);
+    expect(tx.producto.update).not.toHaveBeenCalled();
+    expect(tx.movimientoFinanciero.create).not.toHaveBeenCalled();
+    expect(tx.auditoria.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ accion: 'ANULAR', entidadId: 1 }) }));
+  });
+});

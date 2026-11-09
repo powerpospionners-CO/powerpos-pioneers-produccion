@@ -16,8 +16,8 @@ export async function gestionPedidos(db: any, empresaId: number, pedidos: any[])
     if (!control) return { ...p, modalidad: 'HISTORICO', estadoGestion: p.estado === 'ANULADO' ? 'ANULADO' : 'HISTORICO', saldoPendiente: null, entregado: true, comisionDisponible: false };
     const venta = porId.get(control.pedidoCajaId);
     const revision = !!control.pedidoCajaId && (!venta || venta.estado === 'ANULADO' || venta.devueltoTotal || venta.operacionesCaja.length > 0);
-    const saldo = venta ? Number(venta.cuentaCredito?.saldo ?? 0) : Number(p.total);
+    const saldo = p.estado === 'ANULADO' ? 0 : venta ? Number(venta.cuentaCredito?.saldo ?? 0) : Number(p.total);
     const estado = p.estado === 'ANULADO' ? 'ANULADO' : revision ? 'EN_REVISION' : !control.pedidoCajaId ? 'PENDIENTE_RETIRO' : saldo > 0 ? 'PENDIENTE_PAGO' : 'PAGADO';
-    return { ...p, modalidad: control.modalidad, estadoGestion: estado, saldoPendiente: saldo, entregado: !!control.pedidoCajaId, pedidoCajaId: control.pedidoCajaId || null, numeroCaja: venta?.numero || null, comisionDisponible: estado === 'PAGADO' };
+    return { ...p, modalidad: control.modalidad, revision: control.revision ?? 0, estadoGestion: estado, saldoPendiente: saldo, entregado: !!control.pedidoCajaId, pedidoCajaId: control.pedidoCajaId || null, numeroCaja: venta?.numero || null, comisionDisponible: estado === 'PAGADO' };
   });
 }

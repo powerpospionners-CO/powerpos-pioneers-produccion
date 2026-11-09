@@ -48,3 +48,38 @@ describe('Liquidación de distribuidores', () => {
     await expect(service.liquidar(7, 1, 9, '2026-10-01', '2026-10-10')).rejects.toThrow(BadRequestException);
   });
 });
+
+describe('Editar y activar perfiles de distribuidor', () => {
+  function perfil() {
+    const original = { id: 7, empresaId: 2, codigo: 'D7', nombre: 'Distribuidor', zona: 'Centro', activo: true, porcentajeComision: 10 };
+    const tx: any = {
+      $executeRaw: jest.fn(),
+      distribuidor: {
+        findFirst: jest.fn(async ({ where }) => where.id === 7 ? original : null),
+        update: jest.fn(async ({ data }) => ({ ...original, ...data })),
+      },
+      usuario: { findUnique: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      auditoria: { create: jest.fn() },
+    };
+    return { tx, service: new DistribuidoresService({ $transaction: fn => fn(tx) } as any) };
+  }
+  it('desactiva y reactiva tanto el perfil como su cuenta de acceso', async () => {
+    const { service, tx } = perfil();
+    await service.actualizar(7, { activo: false }, 2, 9);
+    expect(tx.usuario.updateMany).toHaveBeenCalledWith({ where: { distribuidorId: 7, empresaId: 2 }, data: { activo: false } });
+    await service.actualizar(7, { activo: true }, 2, 9);
+    expect(tx.usuario.updateMany).toHaveBeenLastCalledWith({ where: { distribuidorId: 7, empresaId: 2 }, data: { activo: true } });
+  });
+  it('actualiza los datos del perfil y sincroniza el correo y nombre de acceso', async () => {
+    const { service, tx } = perfil();
+    await service.actualizar(7, { codigo: 'D8', nombre: 'Nuevo nombre', zona: 'Norte', porcentajeComision: 12, email: 'NUEVO@example.com' }, 2, 9);
+    expect(tx.distribuidor.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { codigo: 'D8', nombre: 'Nuevo nombre', zona: 'Norte', porcentajeComision: 12 } });
+    expect(tx.usuario.updateMany).toHaveBeenCalledWith({ where: { distribuidorId: 7, empresaId: 2 }, data: { nombre: 'Nuevo nombre', email: 'nuevo@example.com' } });
+  });
+  it('rechaza usar el correo de otra cuenta antes de modificar el perfil', async () => {
+    const { service, tx } = perfil();
+    tx.usuario.findUnique.mockResolvedValue({ distribuidorId: null, empresaId: 2 });
+    await expect(service.actualizar(7, { email: 'admin@example.com' }, 2, 9)).rejects.toThrow('ese correo');
+    expect(tx.distribuidor.update).not.toHaveBeenCalled();
+  });
+});

@@ -60,23 +60,45 @@ export class DistribuidoresService {
     return distribuidor;
   }
 
-  async actualizar(id: number, datos: any, empresaId: number) {
-    const distribuidor = await this.obtener(id, empresaId);
+  async actualizar(id: number, datos: any, empresaId: number, usuarioId?: number) {
     const data: any = {};
-    if (datos.nombre !== undefined) data.nombre = String(datos.nombre).trim();
+    if (datos.nombre !== undefined) {
+      if (typeof datos.nombre !== 'string' || !datos.nombre.trim() || datos.nombre.trim().length > 150) throw new BadRequestException('El nombre debe tener entre 1 y 150 caracteres');
+      data.nombre = datos.nombre.trim();
+    }
+    if (datos.codigo !== undefined) {
+      if (typeof datos.codigo !== 'string' || !datos.codigo.trim() || datos.codigo.trim().length > 50) throw new BadRequestException('El código debe tener entre 1 y 50 caracteres');
+      data.codigo = datos.codigo.trim();
+    }
     if (datos.zona !== undefined) data.zona = datos.zona || null;
     if (datos.porcentajeComision !== undefined) data.porcentajeComision = monto(Number(datos.porcentajeComision), 'El % de comisión', 0, 100);
-    if (datos.activo !== undefined) data.activo = !!datos.activo;
+    if (datos.activo !== undefined) {
+      if (typeof datos.activo !== 'boolean') throw new BadRequestException('El estado debe ser activo o inactivo');
+      data.activo = datos.activo;
+    }
+    const email = datos.email === undefined ? undefined : String(datos.email).trim().toLowerCase();
+    if (email !== undefined && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 150)) throw new BadRequestException('El correo no es válido');
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73111, ${empresaId}::integer)`;
+      const distribuidor = await tx.distribuidor.findFirst({ where: { id, empresaId } });
+      if (!distribuidor) throw new NotFoundException('Distribuidor no encontrado');
+      if (data.codigo && await tx.distribuidor.findFirst({ where: { empresaId, codigo: data.codigo, id: { not: id } } })) throw new ConflictException('Ya existe un distribuidor con ese código');
+      if (email) {
+        const otraCuenta = await tx.usuario.findUnique({ where: { email }, select: { distribuidorId: true, empresaId: true } });
+        if (otraCuenta && (otraCuenta.distribuidorId !== id || otraCuenta.empresaId !== empresaId)) throw new ConflictException('Ya existe una cuenta con ese correo');
+      }
       const actualizado = await tx.distribuidor.update({ where: { id }, data });
-      if (datos.nombre !== undefined || datos.activo !== undefined || datos.password) {
+      if (datos.nombre !== undefined || datos.activo !== undefined || datos.password || email !== undefined) {
         const usuarioData: any = {};
         if (datos.nombre !== undefined) usuarioData.nombre = data.nombre;
         if (datos.activo !== undefined) usuarioData.activo = data.activo;
         if (datos.password) usuarioData.password = await bcrypt.hash(String(datos.password), 10);
-        await tx.usuario.updateMany({ where: { distribuidorId: id }, data: usuarioData });
+        if (email !== undefined) usuarioData.email = email;
+        const acceso = await tx.usuario.updateMany({ where: { distribuidorId: id, empresaId }, data: usuarioData });
+        if (email !== undefined && acceso.count === 0) throw new BadRequestException('Este perfil no tiene una cuenta de acceso vinculada');
       }
+      if (usuarioId) await tx.auditoria.create({ data: { empresaId, usuarioId, accion: 'EDITAR', entidad: 'DISTRIBUIDOR', entidadId: id, detalle: { anterior: { codigo: distribuidor.codigo, nombre: distribuidor.nombre, zona: distribuidor.zona, activo: distribuidor.activo, porcentajeComision: Number(distribuidor.porcentajeComision) }, nuevo: { codigo: actualizado.codigo, nombre: actualizado.nombre, zona: actualizado.zona, activo: actualizado.activo, porcentajeComision: Number(actualizado.porcentajeComision) } } } });
       return actualizado;
     });
   }

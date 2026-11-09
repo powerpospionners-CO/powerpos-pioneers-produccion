@@ -8,6 +8,12 @@ function escenario(modalidad:string){
 }
 const actor={id:3,empresaId:2,sucursalId:2,rol:'CAJERO'};
 describe('Entrega de distribuidor a cargo de caja',()=>{
+  it('exige revisar una corrección posterior a la apertura del cobro', async () => {
+    const { service, pos, control } = escenario('PAGO_ANTES');
+    control.revision = 1;
+    await expect(service.entregar(1, { clave: 'entrega-vieja', revision: 0, pagos: [{ metodoPago: 'EFECTIVO', monto: 30000 }] }, actor)).rejects.toThrow('modificó');
+    expect(pos.crearEnTransaccion).not.toHaveBeenCalled();
+  });
   it('no permite retirar con deuda en la modalidad de pago anticipado',async()=>{
     const {service,pos}=escenario('PAGO_ANTES');await expect(service.entregar(1,{clave:'entrega-1',condicionPago:'CREDITO'},actor)).rejects.toThrow('pago completo');expect(pos.crearEnTransaccion).not.toHaveBeenCalled();
   });

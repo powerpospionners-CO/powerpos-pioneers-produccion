@@ -34,7 +34,7 @@ export class DistribuidoresController {
 
   @Patch(':id')
   actualizar(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.service.actualizar(+id, body, req.user.empresaId);
+    return this.service.actualizar(+id, body, req.user.empresaId, req.user.id);
   }
 
   @Get(':id/pendientes-liquidar')

@@ -46,6 +46,13 @@ export class PedidosDistribuidorController {
     return this.service.listar(req.user.empresaId, filtro, req.user.rol==='CAJERO'?(req.user.sucursalId || -1):undefined);
   }
 
+  @Patch(':id')
+  @Roles('DISTRIBUIDOR')
+  editar(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    if (!req.user.distribuidorId) throw new ForbiddenException('No tienes un perfil de distribuidor');
+    return this.service.editarPedido(+id, body, req.user.distribuidorId, req.user.sucursalId, req.user.empresaId, req.user.id);
+  }
+
   @Get(':id')
   obtener(@Param('id') id: string, @Request() req: any) {
     if(req.user.rol==='DISTRIBUIDOR'&&!req.user.distribuidorId) throw new ForbiddenException('No tienes un perfil de distribuidor.');

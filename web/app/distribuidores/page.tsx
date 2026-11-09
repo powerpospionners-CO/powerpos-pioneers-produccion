@@ -5,10 +5,10 @@ import Navbar from '@/components/Navbar';
 import { useNotificar } from '@/components/Notificaciones';
 import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
-import { Plus, Truck, X } from 'lucide-react';
+import { Banknote, Pencil, Plus, Power, Truck, X } from 'lucide-react';
 
 type Distribuidor = {
-  id: number; codigo: string; nombre: string; zona: string | null; porcentajeComision: string; activo: boolean;
+  id: number; codigo: string; nombre: string; zona: string | null; porcentajeComision: string; activo: boolean; sucursalId: number;
   sucursal: { nombre: string }; usuario: { email: string; activo: boolean } | null;
 };
 type Sucursal = { id: number; nombre: string };
@@ -23,6 +23,7 @@ export default function DistribuidoresPage() {
   const [distribuidores, setDistribuidores] = useState<Distribuidor[]>([]);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [modalCrear, setModalCrear] = useState(false);
+  const [editando, setEditando] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' });
@@ -51,11 +52,13 @@ export default function DistribuidoresPage() {
     setGuardando(true);
     setError('');
     try {
-      await api.post('/distribuidores', { ...form, porcentajeComision: Number(form.porcentajeComision) });
+      if (editando) await api.patch(`/distribuidores/${editando}`, { codigo: form.codigo, nombre: form.nombre, zona: form.zona, email: form.email, porcentajeComision: Number(form.porcentajeComision) });
+      else await api.post('/distribuidores', { ...form, porcentajeComision: Number(form.porcentajeComision) });
       setModalCrear(false);
       setForm({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' });
       await cargar();
-      aviso('Distribuidor creado.', 'exito');
+      aviso(editando ? 'Distribuidor actualizado.' : 'Distribuidor creado.', 'exito');
+      setEditando(null);
     } catch (e: any) {
       setError(e?.response?.data?.message || 'No se pudo crear el distribuidor.');
     } finally {
@@ -64,12 +67,21 @@ export default function DistribuidoresPage() {
   };
 
   const toggleActivo = async (d: Distribuidor) => {
+    if (guardando) return;
+    if (d.activo && !await confirmar(`¿Desactivar el acceso de ${d.nombre}?`, { titulo: 'Desactivar distribuidor', textoConfirmar: 'Desactivar', peligroso: true })) return;
+    setGuardando(true);
     try {
       await api.patch(`/distribuidores/${d.id}`, { activo: !d.activo });
       await cargar();
     } catch (e: any) {
       aviso(e?.response?.data?.message || 'No se pudo actualizar.', 'error');
-    }
+    } finally { setGuardando(false); }
+  };
+
+  const editarPerfil = (d: Distribuidor) => {
+    setEditando(d.id); setError('');
+    setForm({ codigo: d.codigo, nombre: d.nombre, zona: d.zona || '', sucursalId: String(d.sucursalId), email: d.usuario?.email || '', password: '', porcentajeComision: String(d.porcentajeComision) });
+    setModalCrear(true);
   };
 
   const abrirLiquidacion = async (d: Distribuidor) => {
@@ -117,7 +129,7 @@ export default function DistribuidoresPage() {
               <h1 className="mt-1 text-3xl font-bold">Distribuidores</h1>
               <p className="mt-1 text-sm text-gray-400">Cada uno tiene su propio código y acceso para registrar sus pedidos.</p>
             </div>
-            <button type="button" onClick={() => setModalCrear(true)} className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600">
+            <button type="button" disabled={guardando} onClick={() => { setEditando(null); setError(''); setForm({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' }); setModalCrear(true); }} className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600">
               <Plus size={18} /> Nuevo distribuidor
             </button>
           </div>
@@ -136,8 +148,9 @@ export default function DistribuidoresPage() {
                     <td className="py-2 text-center text-xs">{d.activo ? 'Activo' : 'Inactivo'}</td>
                     <td className="py-2 text-right">
                       <span className="inline-flex gap-2">
-                        <button type="button" onClick={() => abrirLiquidacion(d)} className="rounded border border-gray-700 px-2 py-1 text-xs hover:border-orange-500 hover:text-orange-400">Liquidar</button>
-                        <button type="button" onClick={() => toggleActivo(d)} className="rounded border border-gray-700 px-2 py-1 text-xs hover:border-gray-500">{d.activo ? 'Desactivar' : 'Activar'}</button>
+                        <button type="button" title="Liquidar comisión" aria-label={`Liquidar comisión de ${d.nombre}`} disabled={guardando} onClick={() => abrirLiquidacion(d)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"><Banknote size={18} /></button>
+                        <button type="button" title="Editar distribuidor" aria-label={`Editar distribuidor ${d.nombre}`} disabled={guardando} onClick={() => editarPerfil(d)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"><Pencil size={18} /></button>
+                        <button type="button" title={d.activo ? 'Desactivar distribuidor' : 'Activar distribuidor'} aria-label={`${d.activo ? 'Desactivar' : 'Activar'} distribuidor ${d.nombre}`} disabled={guardando} onClick={() => toggleActivo(d)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700"><Power size={18} /></button>
                       </span>
                     </td>
                   </tr>
@@ -152,7 +165,7 @@ export default function DistribuidoresPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
             <form onSubmit={crear} className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-5">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-lg font-bold text-white"><Truck size={18} className="text-orange-500" /> Nuevo distribuidor</h3>
+                <h3 className="flex items-center gap-2 text-lg font-bold text-white"><Truck size={18} className="text-orange-500" /> {editando ? 'Editar distribuidor' : 'Nuevo distribuidor'}</h3>
                 <button type="button" onClick={() => setModalCrear(false)} className="text-gray-500 hover:text-white"><X size={20} /></button>
               </div>
               {error && <div role="alert" className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
@@ -160,15 +173,15 @@ export default function DistribuidoresPage() {
                 <input required value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="Código (ej. DIST-001)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <input value={form.zona} onChange={(e) => setForm({ ...form, zona: e.target.value })} placeholder="Zona (opcional)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
-                <select required value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })} className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white">
+                <select required disabled={!!editando} value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })} className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white disabled:opacity-60">
                   <option value="">Sucursal que lo abastece…</option>
                   {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                 </select>
                 <input required type="number" min={0} max={100} step="0.01" value={form.porcentajeComision} onChange={(e) => setForm({ ...form, porcentajeComision: e.target.value })} placeholder="% de comisión" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email de acceso" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
-                <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Contraseña" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                {!editando && <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Contraseña" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />}
               </div>
-              <button type="submit" disabled={guardando} className="mt-4 w-full rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">{guardando ? 'Creando…' : 'Crear distribuidor'}</button>
+              <button type="submit" disabled={guardando} className="mt-4 w-full rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">{guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear distribuidor'}</button>
             </form>
           </div>
         )}

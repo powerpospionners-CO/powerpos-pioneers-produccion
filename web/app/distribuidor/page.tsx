@@ -8,7 +8,7 @@ import api from '@/lib/api';
 import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 import { moneda } from '@/lib/formato';
-import { Ban, List, Minus, Plus, Search, Trash2, Truck, X } from 'lucide-react';
+import { Ban, List, Minus, Pencil, Plus, Search, Trash2, Truck, X } from 'lucide-react';
 
 type Presentacion = { id: number; nombre: string; precio: string; factorUnidades: number };
 type Producto = {
@@ -20,10 +20,10 @@ type Producto = {
 type ItemCarrito = { key: string; productoId: number; presentacionId: number | null; nombre: string; precio: number; cantidad: number };
 type Pedido = {
   id: number; numero: string; estado: string; total: string; comisionMonto: string; comisionPorcentaje: string;
-  modalidad?: string; estadoGestion?: string; saldoPendiente?: number; entregado?: boolean; comisionDisponible?: boolean;
+  modalidad?: string; revision?: number; estadoGestion?: string; saldoPendiente?: number; entregado?: boolean; comisionDisponible?: boolean;
   liquidacionId: number | null; clienteReferencia: string | null; creadoEn: string;
 };
-type DetallePedido = Pedido & { detalles: { id: number; cantidad: number; precioUnitario: string; subtotal: string; presentacionNombre: string | null; producto: { nombre: string } }[] };
+type DetallePedido = Pedido & { detalles: { id: number; productoId: number; presentacionId: number | null; cantidad: number; precioUnitario: string; subtotal: string; presentacionNombre: string | null; producto: { nombre: string } }[] };
 
 export default function DistribuidorPage() {
   const { usuario } = useAuthStore();
@@ -35,7 +35,8 @@ export default function DistribuidorPage() {
   const [errorClientes, setErrorClientes] = useState('');
   const [cantidadesEditadas, setCantidadesEditadas] = useState<Record<string, string>>({});
   const [busqueda, setBusqueda] = useState('');
-  const borrador = useBorradorVenta('distribuidor', { carrito: [] as ItemCarrito[], clienteReferencia: '', modalidad: 'PAGO_ANTES', solicitud: null as Record<string, any> | null });
+  const borrador = useBorradorVenta('distribuidor', { carrito: [] as ItemCarrito[], clienteReferencia: '', modalidad: 'PAGO_ANTES', solicitud: null as Record<string, any> | null, edicion: null as { id: number; numero: string; revision: number; precios?: Record<string, number>; comisionPorcentaje?: number } | null });
+  const [edicion, setEdicion] = useCampoBorrador(borrador, 'edicion');
   const [carrito, setCarrito] = useCampoBorrador(borrador, 'carrito');
   const [modalidad, setModalidad] = useCampoBorrador(borrador, 'modalidad');
   const [compatible, setCompatible] = useState(false);
@@ -95,7 +96,7 @@ export default function DistribuidorPage() {
       return [...actual, {
         key, productoId: producto.id, presentacionId: presentacion?.id ?? null,
         nombre: presentacion ? `${producto.nombre} — ${presentacion.nombre}` : producto.nombre,
-        precio: Number(presentacion ? presentacion.precio : producto.precio),
+        precio: edicion?.precios?.[key] ?? Number(presentacion ? presentacion.precio : producto.precio),
         cantidad: 1,
       }];
     });
@@ -109,7 +110,7 @@ export default function DistribuidorPage() {
   const quitar = (key: string) => setCarrito((actual) => actual.filter((l) => l.key !== key));
 
   const total = carrito.reduce((acc, l) => acc + l.precio * l.cantidad, 0);
-  const comisionEstimada = usuario?.distribuidorComision ? (total * usuario.distribuidorComision) / 100 : 0;
+  const comisionEstimada = total * (edicion?.comisionPorcentaje ?? usuario?.distribuidorComision ?? 0) / 100;
 
   const registrarPedido = async () => {
     if (!carrito.length || !compatible || enviando) return;
@@ -119,16 +120,18 @@ export default function DistribuidorPage() {
       const datos = borrador.almacen.getSnapshot().datos.solicitud ?? {
         items: carrito.map((l) => ({ productoId: l.productoId, presentacionId: l.presentacionId, cantidad: l.cantidad })),
         clienteReferencia: clienteReferencia || undefined,
+        ...(edicion ? { revision: edicion.revision, pedidoEdicionId: edicion.id } : {}),
         modalidad, clave: generarClaveVenta(),
       };
       borrador.almacen.set('solicitud', datos);
       if(borrador.almacen.getSnapshot().error)throw new Error(borrador.almacen.getSnapshot().error);
-      await api.post('/pedidos-distribuidor',datos);
+      if (datos.pedidoEdicionId) await api.patch(`/pedidos-distribuidor/${datos.pedidoEdicionId}`, datos);
+      else await api.post('/pedidos-distribuidor',datos);
       borrador.almacen.reiniciar();
       setCarrito([]);
       setCantidadesEditadas({});
       setClienteReferencia('');
-      aviso('Pedido enviado a la cajera. La mercancía queda pendiente de retiro.', 'exito');
+      aviso(datos.pedidoEdicionId ? 'Pedido actualizado. La cajera verá la corrección.' : 'Pedido enviado a la cajera. La mercancía queda pendiente de retiro.', 'exito');
       await cargarPedidos();
     } catch (e: any) {
       if(e?.response?.status>=400 && e?.response?.status<500)borrador.almacen.set('solicitud',null);
@@ -151,17 +154,36 @@ export default function DistribuidorPage() {
   };
 
   const anular = async (pedido: Pedido) => {
-    if (!(await confirmar(`Se va a anular el pedido ${pedido.numero}. Se repone el inventario.`, { titulo: 'Anular pedido', textoConfirmar: 'Sí, anular', peligroso: true }))) return;
+    if (!(await confirmar(`¿Cancelar el pedido ${pedido.numero} que está pendiente de retiro?`, { titulo: 'Cancelar pedido', textoConfirmar: 'Cancelar pedido', peligroso: true }))) return;
     setAnulandoId(pedido.id);
     try {
       await api.patch(`/pedidos-distribuidor/${pedido.id}/anular`);
-      aviso('Pedido anulado.', 'exito');
+      if (edicion?.id === pedido.id) { borrador.almacen.reiniciar(); setCantidadesEditadas({}); }
+      aviso('Pedido cancelado.', 'exito');
       await cargarPedidos();
     } catch (e: any) {
       aviso(e?.response?.data?.message || 'No se pudo anular el pedido.', 'error');
     } finally {
       setAnulandoId(null);
     }
+  };
+
+  const editarPedido = async (pedido: Pedido) => {
+    if (enviando || borrador.datos.solicitud) return;
+    if (carrito.length && !await confirmar('¿Reemplazar los productos que estás preparando por los de este pedido?', { titulo: 'Editar pedido', textoConfirmar: 'Abrir pedido' })) return;
+    setEnviando(true);
+    try {
+      const { data } = await api.get<DetallePedido>(`/pedidos-distribuidor/${pedido.id}`);
+      if (data.estadoGestion !== 'PENDIENTE_RETIRO') { aviso('Este pedido ya no está pendiente de retiro. Actualiza la lista.', 'error'); await cargarPedidos(); return; }
+      borrador.almacen.reiniciar();
+      setCarrito(data.detalles.map(d => ({ key: `${d.productoId}:${d.presentacionId ?? 'base'}`, productoId: d.productoId, presentacionId: d.presentacionId, cantidad: d.cantidad, precio: Number(d.precioUnitario), nombre: d.producto.nombre + (d.presentacionNombre ? ` — ${d.presentacionNombre}` : '') })));
+      setClienteReferencia(data.clienteReferencia || '');
+      setModalidad(data.modalidad || 'PAGO_ANTES');
+      setEdicion({ id: data.id, numero: data.numero, revision: data.revision ?? 0, precios: Object.fromEntries(data.detalles.map(d => [`${d.productoId}:${d.presentacionId ?? 'base'}`, Number(d.precioUnitario)])), comisionPorcentaje: Number(data.comisionPorcentaje) });
+      setCantidadesEditadas({}); setError(''); setBusqueda('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch { aviso('No se pudo abrir el pedido para editar.', 'error'); }
+    finally { setEnviando(false); }
   };
 
   if (!permitido) {
@@ -194,7 +216,11 @@ export default function DistribuidorPage() {
           </div>
 
           <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><Truck size={18} className="text-orange-500" /> Registrar pedido</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><Truck size={18} className="text-orange-500" /> {edicion ? `Editar pedido ${edicion.numero}` : 'Registrar pedido'}</h2>
+            {edicion && <div className="mb-3 rounded-lg border border-amber-500/30 p-3 text-sm text-amber-200">
+              Puedes corregir productos, cantidades, cliente y modalidad antes del retiro. Los productos existentes conservan su precio; los nuevos usan el precio del catálogo.
+              <button type="button" disabled={enviando || !!borrador.datos.solicitud} onClick={() => { borrador.almacen.reiniciar(); setCantidadesEditadas({}); setError(''); }} className="mt-2 block underline">Salir de edición</button>
+            </div>}
             {error && <div role="alert" className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
 
             {borrador.error && <p role="alert" className="mb-3 text-red-300">{borrador.error}</p>}
@@ -277,7 +303,7 @@ export default function DistribuidorPage() {
                   <span>Tu comisión estimada</span><span className="font-semibold text-orange-400">{moneda(comisionEstimada)}</span>
                 </div>
                 <button type="button" onClick={registrarPedido} disabled={enviando || !compatible} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">
-                  <Plus size={18} /> {enviando ? 'Enviando…' : 'Enviar pedido a caja'}
+                  <Plus size={18} /> {enviando ? 'Guardando…' : edicion ? 'Guardar cambios del pedido' : 'Enviar pedido a caja'}
                 </button>
               </div>
             )}
@@ -302,8 +328,11 @@ export default function DistribuidorPage() {
                       <td className="py-2 text-right">
                         <span className="inline-flex gap-2">
                           <button type="button" title="Ver productos" onClick={() => verDetalle(p)} className="text-gray-500 hover:text-blue-400"><List size={14} /></button>
-                          {p.estado !== 'ANULADO' && !p.liquidacionId && !p.entregado && (
-                            <button type="button" title="Anular" disabled={anulandoId === p.id} onClick={() => anular(p)} className="text-gray-500 hover:text-red-400 disabled:opacity-40"><Ban size={14} /></button>
+                          {p.estadoGestion === 'PENDIENTE_RETIRO' && !p.liquidacionId && (
+                            <>
+                              <button type="button" title="Editar pedido" aria-label={`Editar pedido ${p.numero}`} disabled={enviando || !!borrador.datos.solicitud || anulandoId !== null} onClick={() => void editarPedido(p)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-300 disabled:opacity-40"><Pencil size={17} /></button>
+                              <button type="button" title="Cancelar pedido" aria-label={`Cancelar pedido ${p.numero}`} disabled={enviando || !!borrador.datos.solicitud || anulandoId !== null} onClick={() => anular(p)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 disabled:opacity-40"><Ban size={17} /></button>
+                            </>
                           )}
                         </span>
                       </td>
