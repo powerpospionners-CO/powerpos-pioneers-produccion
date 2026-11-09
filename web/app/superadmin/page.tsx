@@ -134,6 +134,8 @@ export default function SuperadminPage() {
   const [nuevoAdmin, setNuevoAdmin] = useState({ nombre: '', email: '', password: '', sucursalId: '' });
   const [cargandoAdmins, setCargandoAdmins] = useState(false);
   const [errorAdmins, setErrorAdmins] = useState('');
+  const [mostrarConexionSede, setMostrarConexionSede] = useState(false);
+  const [conexionSede, setConexionSede] = useState({ sucursalId: '', base: '', usuario: '', password: '' });
   const solicitudAdmins = useRef(0);
   const [pagoExonerado, setPagoExonerado] = useState(false);
   const [motivoExoneracion, setMotivoExoneracion] = useState('');
@@ -192,8 +194,22 @@ export default function SuperadminPage() {
   const prepararSedes = async () => {
     if (!seleccionada) return;
     setGuardandoAdmin(true);
-    try { await api.post(`/superadmin/empresas/${seleccionada.id}/preparar-sedes`); aviso('Las sedes pendientes quedaron preparadas.', 'exito'); await cargarDatos(); }
+    try { await api.post(`/superadmin/empresas/${seleccionada.id}/preparar-sedes`); aviso('Las sedes pendientes quedaron preparadas.', 'exito'); await Promise.all([cargarDatos(), cargarAdministradores(seleccionada.id)]); }
     catch (e:any) { aviso(e?.response?.data?.message || 'No se pudo completar la preparación.', 'error'); }
+    finally { setGuardandoAdmin(false); }
+  };
+
+  const conectarBaseSede = async (evento: React.FormEvent) => {
+    evento.preventDefault();
+    if (!seleccionada || guardandoAdmin || !conexionSede.sucursalId) return;
+    setGuardandoAdmin(true);
+    try {
+      await api.post(`/superadmin/empresas/${seleccionada.id}/sedes/${conexionSede.sucursalId}/conexion-mysql`, { base: conexionSede.base.trim(), usuario: conexionSede.usuario.trim(), password: conexionSede.password }, { timeout: 150000 });
+      setConexionSede({ sucursalId: '', base: '', usuario: '', password: '' });
+      setMostrarConexionSede(false);
+      aviso('Sede activada. Sus administradores ya pueden ingresar.', 'exito');
+      await Promise.all([cargarDatos(), cargarAdministradores(seleccionada.id)]);
+    } catch (e: any) { aviso(e?.response?.data?.message || 'No se pudo conectar y activar la sede.', 'error'); }
     finally { setGuardandoAdmin(false); }
   };
 
@@ -201,6 +217,7 @@ export default function SuperadminPage() {
     if (guardandoAdmin) return;
     setSeleccionada(empresa);
     setAdminsEmpresa([]); setSedesAdmin([]); setMostrarNuevoAdmin(false);
+    setMostrarConexionSede(false); setConexionSede({ sucursalId: '', base: '', usuario: '', password: '' });
     setEditandoAdminId(null);
     void cargarAdministradores(empresa.id);
     setPlan(empresa.plan);
@@ -503,6 +520,17 @@ export default function SuperadminPage() {
               <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-slate-500 uppercase tracking-wider">Configuracion</p><h3 className="text-xl font-black mt-1">{seleccionada.nombre}</h3><p className="text-xs text-slate-500 mt-1">NIT {seleccionada.nit}</p></div><button onClick={() => cambiarEstado(seleccionada)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 hover:border-orange-500">{seleccionada.activo ? 'Desactivar' : 'Activar'}</button></div>
               <div className="flex gap-2 mt-4"><button type="button" onClick={abrirEdicion} className="flex-1 flex items-center justify-center gap-2 text-sm border border-slate-700 rounded-lg px-3 py-2 hover:border-orange-500"><Pencil size={14} /> Editar datos</button><button type="button" onClick={() => setConfirmarEliminar(true)} className="flex items-center justify-center gap-2 text-sm border border-red-900 text-red-300 rounded-lg px-3 py-2 hover:bg-red-950"><Trash2 size={14} /> Eliminar</button></div>
               {seleccionada.aislamientoFisico && <button type="button" disabled={guardandoAdmin} onClick={prepararSedes} className="mt-3 w-full rounded-lg border border-orange-700 p-2 text-sm text-orange-300 disabled:opacity-50">{guardandoAdmin ? 'Preparando...' : 'Preparar sedes pendientes'}</button>}
+              {seleccionada.aislamientoFisico && sedesAdmin.some(s => s.pendienteActivacion) && <div className="mt-3 rounded-lg border border-slate-700 p-3">
+                <button type="button" disabled={guardandoAdmin} onClick={() => { setMostrarConexionSede(!mostrarConexionSede); setConexionSede({ sucursalId: String(sedesAdmin.find(s => s.pendienteActivacion)?.id || ''), base: '', usuario: '', password: '' }); }} className="text-sm text-orange-300 disabled:opacity-50">{mostrarConexionSede ? 'Cerrar conexión' : 'Conectar base de la sede'}</button>
+                {mostrarConexionSede && <form onSubmit={conectarBaseSede} className="mt-3 space-y-3">
+                  <p className="text-xs text-slate-400">En Hostinger, crea una base MySQL vacía y su usuario. Ingresa aquí los nombres completos con su prefijo. La contraseña se guarda cifrada y no se muestra después.</p>
+                  <label className="block text-sm">Sede<select required disabled={guardandoAdmin} value={conexionSede.sucursalId} onChange={e => setConexionSede({ ...conexionSede, sucursalId: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 p-2">{sedesAdmin.filter(s => s.pendienteActivacion).map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select></label>
+                  <label className="block text-sm">Nombre completo de la base<input required disabled={guardandoAdmin} autoComplete="off" value={conexionSede.base} onChange={e => setConexionSede({ ...conexionSede, base: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 p-2" /></label>
+                  <label className="block text-sm">Usuario MySQL<input required disabled={guardandoAdmin} autoComplete="off" value={conexionSede.usuario} onChange={e => setConexionSede({ ...conexionSede, usuario: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 p-2" /></label>
+                  <label className="block text-sm">Contraseña MySQL<input type="password" required disabled={guardandoAdmin} autoComplete="new-password" value={conexionSede.password} onChange={e => setConexionSede({ ...conexionSede, password: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 p-2" /></label>
+                  <button disabled={guardandoAdmin} className="w-full rounded-lg bg-orange-600 px-3 py-2 text-sm text-white disabled:opacity-50">{guardandoAdmin ? 'Conectando y activando...' : 'Conectar y activar sede'}</button>
+                </form>}
+              </div>}
               <label className="block text-sm text-slate-400 mt-6 mb-2">Tipo de negocio</label>
               <select value={tipoNegocio} onChange={(event) => setTipoNegocio(event.target.value as TipoNegocio)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white">{TIPOS_NEGOCIO.map((tipo) => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select>
               <p className="text-slate-500 text-xs mt-2">Restaurante conserva cocina, recetas y comandas. Los demás tipos usan el POS comercial y existencias por producto. Si cambias una empresa existente, revisa sus productos y existencias antes de vender.</p>

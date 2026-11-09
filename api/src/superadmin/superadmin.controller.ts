@@ -84,6 +84,11 @@ export class SuperadminController {
     return this.superadminService.prepararSedesEmpresa(+id);
   }
 
+  @Post('empresas/:id/sedes/:sucursalId/conexion-mysql')
+  conectarSedeMysql(@Param('id') id: string, @Param('sucursalId') sucursalId: string, @Body() body: { base?: unknown; usuario?: unknown; password?: unknown }) {
+    return this.superadminService.conectarSedeMysql(+id, +sucursalId, body);
+  }
+
   @Patch('administradores/:id')
   editarAdministrador(
     @Param('id') id: string,

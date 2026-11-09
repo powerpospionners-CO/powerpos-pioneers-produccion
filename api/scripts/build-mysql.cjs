@@ -17,5 +17,9 @@ try {
   const carpetaPuc = path.join(root, 'dist/prisma/mysql');
   fs.mkdirSync(carpetaPuc, { recursive: true });
   fs.copyFileSync(path.join(root, 'prisma/mysql/plan-cuentas-puc.sql'), path.join(carpetaPuc, 'plan-cuentas-puc.sql'));
+  // Esquema completo de la versión compilada, destinado únicamente a bases de sede vacías.
+  const esquema = spawnSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'diff', '--from-empty', '--to-schema-datamodel', 'prisma/mysql/schema.prisma', '--script'], { cwd: root, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+  if (esquema.error || esquema.status !== 0 || !esquema.stdout.includes('CREATE TABLE')) throw new Error('No se pudo preparar el esquema inicial de sedes MySQL');
+  fs.writeFileSync(path.join(carpetaPuc, 'sede-inicial.sql'), esquema.stdout);
   console.log('Cliente MySQL incluido en dist; no se modificaron bases de datos');
 } catch (e) { console.error(e.message); process.exitCode = 1; }

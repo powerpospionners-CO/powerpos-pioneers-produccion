@@ -171,6 +171,11 @@ export class SuperadminService {
     return {empresaId,preparadas};
   }
 
+  async conectarSedeMysql(empresaId: number, sucursalId: number, datos: { base?: unknown; usuario?: unknown; password?: unknown }) {
+    if (!this.sedes) throw new ServiceUnavailableException('El servicio de activación no está disponible');
+    return this.sedes.configurarMysql(empresaId, sucursalId, datos);
+  }
+
   private async contarUsuariosSedes(empresaId?: number) {
     const sedes=await this.prisma.control.baseSede.findMany({where:{estado:'ACTIVA',...(empresaId ? {empresaId} : {})}});
     let total=0;

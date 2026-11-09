@@ -1,12 +1,20 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import { PrismaService } from './prisma.service';
+import { motorBase, claseCliente } from './mysql-adapter';
+import { provisionarMysql, registrarConexionMysql } from './sedes-provision.mysql';
 
 @Injectable()
 export class SedesProvisionService {
   private readonly pendientes = new Map<number, Promise<void>>();
   constructor(private readonly prisma: PrismaService) {}
+  async configurarMysql(empresaId: number, sucursalId: number, datos: { base?: unknown; usuario?: unknown; password?: unknown }) {
+    if (motorBase() !== 'mysql' || !this.prisma.aislamientoActivo) throw new BadRequestException('Esta opción requiere sedes aisladas MySQL');
+    await registrarConexionMysql(this.prisma.control, claseCliente(), empresaId, sucursalId, datos);
+    await this.preparar(empresaId, sucursalId);
+    return { empresaId, sucursalId, activa: true };
+  }
   async preparar(
     empresaId: number,
     sucursalId: number,
@@ -27,6 +35,10 @@ export class SedesProvisionService {
     sucursalId: number,
     sucursalOrigen?: number,
   ) {
+    if (motorBase() === 'mysql') {
+      await provisionarMysql(this.prisma.control, claseCliente(), empresaId, sucursalId, sucursalOrigen ? (await this.prisma.contexto(empresaId, sucursalOrigen)).cliente : undefined);
+      return;
+    }
     const { modelos, leerModelo } = require(
       path.join(process.cwd(), 'scripts/lib/sede-copy.cjs'),
     );
