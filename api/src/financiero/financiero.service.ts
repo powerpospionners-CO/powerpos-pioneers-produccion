@@ -4,10 +4,11 @@ import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { guardarMarcaRecaudo, idsGastosRecaudo, validarMarcaRecaudo } from '../caja/gastos-recaudo';
 import { Prisma } from '@prisma/client';
+import { PlanCuentasService } from './plan-cuentas.service';
 
 @Injectable()
 export class FinancieroService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private readonly plan?: PlanCuentasService) {}
 
   async registrarMovimiento(datos: any, usuarioId: number, empresaId: number, sucursalId: number, transaccion?: Prisma.TransactionClient) {
     const consulta = transaccion || this.prisma;
@@ -54,6 +55,10 @@ export class FinancieroService {
         },
       });
       await guardarMarcaRecaudo(tx, empresaId, usuarioId, movimiento.id, datos.pagadoConRecaudo === true ? true : undefined);
+      if (datos.codigoPuc) {
+        if (!this.plan) throw new BadRequestException('El plan de cuentas no está disponible');
+        await this.plan.asignar(empresaId, usuarioId, { origen: 'MOVIMIENTO', registroId: movimiento.id, codigo: datos.codigoPuc }, tx);
+      }
       return { ...movimiento, pagadoConRecaudo: datos.pagadoConRecaudo === true };
     };
     return transaccion ? operar(transaccion) : this.prisma.$transaction(operar);
@@ -120,6 +125,10 @@ export class FinancieroService {
         },
       });
       await guardarMarcaRecaudo(tx, empresaId, usuarioId, id, datos.pagadoConRecaudo);
+      if (datos.codigoPuc) {
+        if (!this.plan) throw new BadRequestException('El plan de cuentas no está disponible');
+        await this.plan.asignar(empresaId, usuarioId, { origen: 'MOVIMIENTO', registroId: id, codigo: datos.codigoPuc }, tx);
+      }
       return actualizado;
     });
   }

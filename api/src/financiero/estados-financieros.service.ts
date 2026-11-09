@@ -20,7 +20,7 @@ export function flujoMovimientos(movimientos: Movimiento[]) {
 @Injectable()
 export class EstadosFinancierosService {
   constructor(private readonly prisma: PrismaService) {}
-  async obtener(empresaId: number, fechaDesde?: string, fechaHasta?: string) {
+  async obtener(empresaId: number, fechaDesde?: string, fechaHasta?: string, incluirDetalle = false) {
     const desde = fechaDesde ? new Date(fechaDesde) : new Date('2000-01-01T00:00:00Z');
     const hasta = fechaHasta ? new Date(fechaHasta) : new Date();
     if (!Number.isFinite(desde.getTime()) || !Number.isFinite(hasta.getTime()) || desde > hasta) throw new BadRequestException('El rango de fechas no es válido');
@@ -53,6 +53,14 @@ export class EstadosFinancierosService {
     const activos = cajaActual === null ? null : redondear(cajaActual+inventario+cobrar);
     return {
       periodo: { desde, hasta },
+      detallePuc: incluirDetalle ? {
+        ingresos: gastoPagado.filter(m => m.tipo === 'INGRESO').map(m => ({ origen: 'MOVIMIENTO', id: m.id, fecha: m.fecha, descripcion: m.descripcion, categoria: m.categoria, monto: Number(m.monto), clase: '4' })),
+        gastos: [
+          ...gastoPagado.filter(m => m.tipo === 'EGRESO').map(m => ({ origen: 'MOVIMIENTO', id: m.id, fecha: m.fecha, descripcion: m.descripcion, categoria: m.categoria, monto: Number(m.monto), clase: '5' })),
+          ...cuentas.filter(c => c.tipo === 'PAGAR' && !c.anulada && !compras.includes(c.categoria) && c.creadoEn >= desde && c.creadoEn <= hasta).map(c => ({ origen: 'CUENTA', id: c.id, fecha: c.creadoEn, descripcion: c.descripcion, categoria: c.categoria, monto: Number(c.monto), clase: '5' })),
+        ],
+        proveedores: redondear(cuentas.filter(c => !c.anulada && c.tipo === 'PAGAR' && compras.includes(c.categoria)).reduce((s,c) => s + Number(c.saldo), 0)),
+      } : undefined,
       resultado: { ventasNetas, costoVentas, utilidadBruta: redondear(ventasNetas-costoVentas), otrosIngresos, gastos, resultadoNeto: redondear(ventasNetas-costoVentas+otrosIngresos-gastos), completo: !ventasSinCosto.length, ventasSinCosto },
       balance: { fecha: ahora, efectivo: cajaActual, inventario, cuentasPorCobrar: cobrar, totalActivos: activos, cuentasPorPagar: pagar, patrimonioRegistrado: activos===null?null:redondear(activos-pagar), productosSinCosto: activosSinCosto, completo: cajaActual!==null&&!activosSinCosto.length, alcance: 'Balance a la fecha de consulta con efectivo, inventario y cuentas registradas. El patrimonio es el activo neto registrado; no desglosa capital y utilidades. Activos fijos, préstamos u otras obligaciones sin registrar no están incluidos.' },
       flujo: { ...flujo, saldoInicial: disponible(desde, false), saldoFinal: disponible(hasta), saldoConfiguradoDesde: saldo?.desde || null, alcance: 'Método directo de los movimientos registrados. Los costos de venta no son pagos y se excluyen. Las ventas a crédito entran cuando se cobran. Los movimientos OTROS requieren clasificación si corresponden a inversión o financiación.' },

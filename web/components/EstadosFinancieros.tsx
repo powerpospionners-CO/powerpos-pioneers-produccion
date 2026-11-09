@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import Link from 'next/link';
 
 const cop = (n: number | null) => n === null ? 'Sin saldo inicial' : new Intl.NumberFormat('es-CO', { style:'currency', currency:'COP' }).format(n);
 function Filas({ filas, ventasNetas }: { filas: [string, number | null][]; ventasNetas?: number }) {
@@ -50,6 +51,7 @@ export default function EstadosFinancieros({ desde, hasta }: { desde?: string; h
       <span role="status" className="text-right text-xs text-gray-400">{error&&datos?<button title={error} className="text-amber-300 underline" onClick={()=>setReintento(v=>v+1)}>Datos anteriores · reintentar</button>:actualizando?'Actualizando…':''}</span>
     </div>
     <div className="no-imprimir mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Informes financieros">{[['resultado','Estado de resultados'],['balance','Balance general'],['flujo','Estado de flujo de caja']].map(([id,nombre])=><button key={id} role="tab" aria-selected={vista===id} onClick={()=>setVista(id)} className={`rounded-lg px-4 py-2 text-sm ${vista===id?'bg-orange-500 text-white':'bg-gray-800 text-gray-300'}`}>{nombre}</button>)}</div>
+    {vista !== 'flujo' && <Link href={`/financiero/puc?${new URLSearchParams({ vista, ...(desdeConsulta ? { desde: desdeConsulta } : {}), ...(hastaConsulta ? { hasta: hastaConsulta } : {}) })}`} className="no-imprimir mb-4 inline-block text-sm text-orange-300 underline">Ver detalle por cuentas PUC</Link>}
     {vista !== 'balance' && <form className="no-imprimir mb-4 flex flex-wrap items-end gap-3" onSubmit={evento => {
       evento.preventDefault();
       if (!fechaInicial || !fechaFinal || fechaInicial > fechaFinal) return;

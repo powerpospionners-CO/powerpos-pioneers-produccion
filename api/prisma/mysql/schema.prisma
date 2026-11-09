@@ -130,6 +130,8 @@ model Empresa {
   tiendaConfig Json @default("{}")
   fidelizacionConfig Json @default("{}")
   anunciosPantalla Json @default("[]")
+  cuentasPuc CuentaPuc[]
+  asignacionesPuc AsignacionPuc[]
   pedidosWeb PedidoWeb[]
   creadoEn      DateTime  @default(now())
   actualizadoEn DateTime  @updatedAt
@@ -1184,6 +1186,33 @@ enum CategoriaMovimiento {
   IMPUESTOS
   COMISION_DISTRIBUIDOR
   OTROS
+}
+
+model CuentaPuc {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  codigo String @db.VarChar(16)
+  nombre String @db.VarChar(150)
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  asignaciones AsignacionPuc[]
+  @@unique([empresaId, codigo])
+  @@map("cuentas_puc")
+}
+
+model AsignacionPuc {
+  id Int @id @default(autoincrement())
+  empresaId Int
+  origen String @db.VarChar(16)
+  registroId Int
+  codigo String @db.VarChar(16)
+  usuarioId Int
+  actualizadoEn DateTime @updatedAt
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  cuenta CuentaPuc @relation(fields: [empresaId, codigo], references: [empresaId, codigo], onDelete: Restrict)
+  @@unique([empresaId, origen, registroId])
+  @@map("asignaciones_puc")
 }
 
 model MovimientoFinanciero {

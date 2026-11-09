@@ -7,6 +7,8 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import ExcelDownload from '@/components/ExcelDownload';
 import EstadosFinancieros from '@/components/EstadosFinancieros';
+import CuentaPucSelector from '@/components/CuentaPucSelector';
+import Link from 'next/link';
 
 type Periodo = 'hoy' | 'semana' | 'mes' | 'anio' | 'personalizado';
 
@@ -50,6 +52,7 @@ export default function FinancieroPage() {
   const [editando, setEditando] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorForm, setErrorForm] = useState('');
+  const [codigoPuc, setCodigoPuc] = useState('');
   const [pagadoConRecaudo, setPagadoConRecaudo] = useState(false);
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [desdePersonalizado, setDesdePersonalizado] = useState('');
@@ -122,6 +125,7 @@ export default function FinancieroPage() {
 
 
   const abrirModalNuevo = () => {
+    setCodigoPuc('');
     setPagadoConRecaudo(false);
     setEditando(null);
     setForm({ tipo: 'EGRESO', categoria: 'OTROS', descripcion: '', monto: '', fecha: '' });
@@ -130,6 +134,7 @@ export default function FinancieroPage() {
   };
 
   const abrirModalEditar = (mov: any) => {
+    setCodigoPuc('');
     setPagadoConRecaudo(mov.pagadoConRecaudo === true);
     setEditando(mov);
     setForm({ tipo: mov.tipo, categoria: mov.categoria, descripcion: mov.descripcion, monto: String(mov.monto), fecha: fechaLocal(mov.fecha) });
@@ -144,6 +149,7 @@ export default function FinancieroPage() {
     try {
       if (editando) {
         await api.patch(`/financiero/movimiento/${editando.id}`, {
+          ...(codigoPuc ? { codigoPuc } : {}),
           pagadoConRecaudo,
           categoria: form.categoria,
           descripcion: form.descripcion,
@@ -152,6 +158,7 @@ export default function FinancieroPage() {
         });
       } else {
         await api.post('/financiero/movimiento', {
+          ...(codigoPuc ? { codigoPuc } : {}),
           pagadoConRecaudo: form.tipo === 'EGRESO' && pagadoConRecaudo,
           tipo: form.tipo,
           categoria: form.categoria,
@@ -301,6 +308,17 @@ export default function FinancieroPage() {
             </div>
           </div>
 
+          <section aria-label="Panel contable" className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+            <h2 className="mb-3 text-lg font-semibold">Panel contable</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Link href="/financiero/puc" className="rounded-lg border border-gray-700 p-3 text-orange-300">Plan de cuentas PUC · crear y editar cuentas</Link>
+              <Link href="/financiero/puc?vista=resultado" className="rounded-lg border border-gray-700 p-3">Estado de resultados por cuenta</Link>
+              <Link href="/financiero/puc?vista=balance" className="rounded-lg border border-gray-700 p-3">Balance general por cuenta</Link>
+              <Link href="/financiero/puc?vista=clasificar" className="rounded-lg border border-gray-700 p-3">Clasificar ingresos y gastos</Link>
+              <Link href="/administracion" className="rounded-lg border border-gray-700 p-3">Cartera, saldos iniciales y conciliación</Link>
+              <button type="button" onClick={abrirModalNuevo} className="rounded-lg border border-gray-700 p-3 text-left">Registrar movimiento · ingresos, egresos y nómina</button>
+            </div>
+          </section>
           <EstadosFinancieros desde={rango.desde} hasta={rango.hasta} />
 
           {/* Ventas por forma de pago */}
@@ -465,7 +483,7 @@ export default function FinancieroPage() {
                   <select
                     value={form.tipo}
                     disabled={!!editando}
-                    onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+                    onChange={(e) => { setCodigoPuc(''); setForm({ ...form, tipo: e.target.value }); }}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500 disabled:opacity-50"
                   >
                     <option value="INGRESO">Ingreso</option>
@@ -486,7 +504,8 @@ export default function FinancieroPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Descripción</label>
+                  <CuentaPucSelector tipo={form.tipo} value={codigoPuc} onChange={setCodigoPuc} />
+                  <label className="mt-3 block text-sm text-gray-400 mb-1">Descripción</label>
                   <input
                     type="text"
                     value={form.descripcion}
