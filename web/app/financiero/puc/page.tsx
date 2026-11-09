@@ -6,6 +6,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import api from '@/lib/api';
 import { useNotificar } from '@/components/Notificaciones';
+import { Eye, GitBranchPlus, Pencil, Power, Trash2 } from 'lucide-react';
 
 type Cuenta = { codigo: string; nombre: string; activo: boolean; superior: string | null; nivel: string; hijos?: number; registros?: number; bloqueoEliminar?: string | null };
 type Fila = { codigo: string; nombre: string; monto: number | null };
@@ -23,6 +24,7 @@ const hoy = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Bogota' 
 const clase = (codigo: string) => ({ '1': 'Activo', '2': 'Pasivo', '3': 'Patrimonio', '4': 'Ingresos', '5': 'Gastos', '6': 'Costos' }[codigo[0]]);
 const campo = 'w-full rounded-lg border border-gray-700 bg-gray-900 p-2 text-white';
 const boton = 'rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold disabled:opacity-50';
+const accion = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950 disabled:cursor-not-allowed disabled:border-gray-800 disabled:bg-gray-900 disabled:text-gray-600';
 const accionHija = (codigo: string) => codigo.length === 1 ? 'Agregar grupo' : codigo.length === 2 ? 'Agregar cuenta' : codigo.length === 4 ? 'Agregar subcuenta' : 'Agregar auxiliar';
 
 function TablaInforme({ filas, base }: { filas: Fila[]; base?: number }) {
@@ -189,12 +191,12 @@ export default function PlanCuentasPage() {
           <thead><tr>{['Código', 'Nombre', 'Superior', 'Nivel', 'Clase', 'Estado', 'Acciones'].map(t => <th key={t} className="p-2">{t}</th>)}</tr></thead>
           <tbody>{visibles.map(c => <tr key={c.codigo} className="border-t border-gray-800">
             <td className="p-2">{c.codigo}</td><td className="p-2">{c.nombre}</td><td className="p-2">{c.superior ?? '—'}</td><td className="p-2">{c.nivel}</td><td className="p-2">{clase(c.codigo)}</td><td className="p-2">{c.activo ? 'Activa' : 'Inactiva'}</td>
-            <td className="p-2"><div className="flex min-w-64 flex-wrap gap-x-3 gap-y-2">
-              <button type="button" disabled={ocupado} className="text-blue-300 underline" onClick={() => { setDetalleCuenta(c); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Consultar</button>
-              <button type="button" disabled={ocupado} className="text-orange-300 underline" onClick={() => editarCuenta(c)}>Editar</button>
-              {c.codigo.length < 10 && <button type="button" disabled={ocupado || !c.activo} className="text-green-300 underline disabled:opacity-40" onClick={() => agregarHija(c)}>{accionHija(c.codigo)}</button>}
-              <button type="button" disabled={ocupado} className="text-gray-300 underline" onClick={() => void cambiarEstado(c)}>{c.activo ? 'Desactivar' : 'Activar'}</button>
-              <button type="button" title={c.bloqueoEliminar ?? 'Eliminar cuenta sin registros ni dependencias'} disabled={ocupado || !!c.bloqueoEliminar} className="text-red-300 underline disabled:opacity-40" onClick={() => void eliminarCuenta(c)}>Eliminar</button>
+            <td className="p-2"><div role="group" aria-label={`Acciones de la cuenta ${c.codigo}`} className="inline-flex items-center gap-1.5">
+              <button type="button" title="Consultar cuenta" aria-label={`Consultar cuenta ${c.codigo}`} disabled={ocupado} className={`${accion} border-sky-400/20 bg-sky-400/10 text-sky-300 enabled:hover:bg-sky-400/20`} onClick={() => { setDetalleCuenta(c); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><Eye size={18} aria-hidden="true" /><span className="sr-only">Consultar</span></button>
+              <button type="button" title="Editar cuenta" aria-label={`Editar cuenta ${c.codigo}`} disabled={ocupado} className={`${accion} border-amber-400/20 bg-amber-400/10 text-amber-300 enabled:hover:bg-amber-400/20`} onClick={() => editarCuenta(c)}><Pencil size={18} aria-hidden="true" /><span className="sr-only">Editar</span></button>
+              {c.codigo.length < 10 && <button type="button" title={accionHija(c.codigo)} aria-label={`${accionHija(c.codigo)} en ${c.codigo}`} disabled={ocupado || !c.activo} className={`${accion} border-emerald-400/20 bg-emerald-400/10 text-emerald-300 enabled:hover:bg-emerald-400/20`} onClick={() => agregarHija(c)}><GitBranchPlus size={18} aria-hidden="true" /><span className="sr-only">{accionHija(c.codigo)}</span></button>}
+              <button type="button" title={c.activo ? 'Desactivar cuenta' : 'Activar cuenta'} aria-label={`${c.activo ? 'Desactivar' : 'Activar'} cuenta ${c.codigo}`} disabled={ocupado} className={`${accion} border-gray-600 bg-gray-800 text-gray-300 enabled:hover:bg-gray-700`} onClick={() => void cambiarEstado(c)}><Power size={18} aria-hidden="true" /><span className="sr-only">{c.activo ? 'Desactivar' : 'Activar'}</span></button>
+              <button type="button" title={c.bloqueoEliminar ?? 'Eliminar cuenta'} aria-label={`Eliminar cuenta ${c.codigo}`} disabled={ocupado || !!c.bloqueoEliminar} className={`${accion} border-rose-400/20 bg-rose-400/10 text-rose-300 enabled:hover:bg-rose-400/20`} onClick={() => void eliminarCuenta(c)}><Trash2 size={18} aria-hidden="true" /><span className="sr-only">Eliminar</span></button>
             </div></td>
           </tr>)}</tbody>
         </table></div>
