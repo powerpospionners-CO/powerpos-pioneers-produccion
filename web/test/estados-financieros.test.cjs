@@ -10,12 +10,12 @@ function pantalla() {
   const valores = [], peticiones = [];
   let indice = 0, previas, pendiente, limpiar;
   const hooks = {
-    useState(inicial) { const i=indice++; if (!(i in valores)) valores[i]=inicial; return [valores[i], valor=>{ valores[i]=typeof valor==='function'?valor(valores[i]):valor; }]; },
+    useState(inicial) { const i=indice++; if (!(i in valores)) valores[i]=typeof inicial==='function'?inicial():inicial; return [valores[i], valor=>{ valores[i]=typeof valor==='function'?valor(valores[i]):valor; }]; },
     useEffect(fn,deps) { if (!previas || deps.some((d,i)=>!Object.is(d,previas[i]))) { previas=deps; pendiente=fn; } },
   };
   const modulo = { exports:{} };
   const codigo = ts.transpileModule(fs.readFileSync(path.join(__dirname,'../components/EstadosFinancieros.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-  vm.runInNewContext(codigo,{module:modulo,exports:modulo.exports,AbortController,Intl,Date,require:nombre=>nombre==='react'?hooks:nombre==='@/lib/api'?{default:{get:()=>new Promise((resolve,reject)=>peticiones.push({resolve,reject}))}}:require(nombre)});
+  vm.runInNewContext(codigo,{module:modulo,exports:modulo.exports,AbortController,Intl,Date,URLSearchParams,require:nombre=>nombre==='react'?hooks:nombre==='@/lib/api'?{default:{get:()=>new Promise((resolve,reject)=>peticiones.push({resolve,reject}))}}:require(nombre)});
   return {
     peticiones,
     render(hasta='2026-10-26T12:00:00Z') {
@@ -26,7 +26,7 @@ function pantalla() {
     },
   };
 }
-const datos={resultado:{completo:true,ventasNetas:100000,costoVentas:40000,utilidadBruta:60000,otrosIngresos:0,gastos:10000,resultadoNeto:50000},balance:{},flujo:{}};
+const datos={periodo:{desde:'2026-10-01T05:00:00Z',hasta:'2026-10-26T12:00:00Z'},resultado:{completo:true,ventasNetas:100000,costoVentas:40000,utilidadBruta:60000,otrosIngresos:0,gastos:10000,resultadoNeto:50000},balance:{},flujo:{}};
 const completar=()=>new Promise(resolve=>setImmediate(resolve));
 
 test('el refresco mantiene el informe y sus secciones mientras llega la siguiente respuesta',async()=>{

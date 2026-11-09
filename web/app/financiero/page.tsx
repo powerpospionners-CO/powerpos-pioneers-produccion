@@ -495,7 +495,7 @@ export default function FinancieroPage() {
                   <label className="block text-sm text-gray-400 mb-1">Categoría</label>
                   <select
                     value={form.categoria}
-                    onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+                    onChange={(e) => { setCodigoPuc(''); setForm({ ...form, categoria: e.target.value }); }}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
                   >
                     {categorias.map(cat => (
@@ -504,7 +504,7 @@ export default function FinancieroPage() {
                   </select>
                 </div>
                 <div>
-                  <CuentaPucSelector tipo={form.tipo} value={codigoPuc} onChange={setCodigoPuc} />
+                  {!['VENTA', 'COSTO_VENTA', 'COMPRA_INSUMOS', 'COMPRA_MERCANCIA'].includes(form.categoria) && <CuentaPucSelector tipo={form.tipo} value={codigoPuc} onChange={setCodigoPuc} />}
                   <label className="mt-3 block text-sm text-gray-400 mb-1">Descripción</label>
                   <input
                     type="text"
