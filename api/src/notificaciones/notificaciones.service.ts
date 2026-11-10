@@ -280,7 +280,7 @@ export class NotificacionesService {
       return;
     this.revisandoStock = true;
     try {
-      await this.prisma.enCadaSede(() => this.revisarStockSede());
+      await this.prisma.enCadaSede(() => this.revisarStockSede(), 'ALERTAS_STOCK');
     } catch {
       this.logger.warn('No se completó la revisión de alertas de inventario');
     } finally {

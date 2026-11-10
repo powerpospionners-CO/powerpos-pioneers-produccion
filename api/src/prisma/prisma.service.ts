@@ -10,6 +10,7 @@ import { descifrarConexion } from './conexion-cifrada';
 import { identidadBase } from './sede-databases';
 import { createHash } from 'node:crypto';
 import { adaptarMysql, claseCliente, motorBase } from './mysql-adapter';
+import { codigoErrorOperacion } from './error-operacion';
 
 const ClienteRuntime = claseCliente();
 
@@ -168,11 +169,11 @@ export class PrismaService
     }
     try {
       await entrada.verificacion;
-    } catch {
+    } catch (cause) {
       this.clientesSede.delete(sucursalId);
       void entrada.cliente.$disconnect().catch(() => undefined);
       throw new ServiceUnavailableException(
-        'No se pudo verificar la base de esta sede',
+        'No se pudo verificar la base de esta sede', { cause },
       );
     }
     await this.sincronizarPolitica(entrada.cliente, empresaId, sede.slug);
@@ -310,7 +311,7 @@ export class PrismaService
       await this.control.escrituraEnCurso.delete({ where: { id: lease.id } });
     }
   }
-  async enCadaSede<T>(trabajo: () => Promise<T>) {
+  async enCadaSede<T>(trabajo: () => Promise<T>, proceso = 'GENERAL') {
     const state = await this.estadoAislamiento();
     if (state?.escriturasSuspendidas) return [];
     if (!this.aislamientoActivo)
@@ -330,16 +331,18 @@ export class PrismaService
         select: { id: true },
       });
       if (!activa) continue;
+      let fase = 'CONEXION';
       try {
         const scope = await this.contexto(sede.empresaId, sede.sucursalId);
+        fase = 'EJECUCION';
         resultados.push(
           await this.conEscritura('PROCESO_AUTOMATICO', () =>
             contextoSede.run(scope, trabajo),
           ),
         );
-      } catch {
+      } catch (error) {
         console.error(
-          `No se pudo ejecutar el proceso automático de la sede ${sede.sucursalId}`,
+          `No se pudo ejecutar el proceso automático de la sede ${sede.sucursalId}; proceso=${/^[A-Z_]{1,40}$/.test(proceso) ? proceso : 'GENERAL'}; fase=${fase}; codigo=${codigoErrorOperacion(error)}`,
         );
       }
     }

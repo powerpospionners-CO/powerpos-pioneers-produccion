@@ -161,7 +161,7 @@ export class CajaService {
 
   @Cron('*/5 * * * *')
   async cerrarCajaAutomaticaPorHorario() {
-    if (this.prisma.enCadaSede) return this.prisma.enCadaSede(()=>this.cerrarCajaAutomaticaSede());
+    if (this.prisma.enCadaSede) return this.prisma.enCadaSede(()=>this.cerrarCajaAutomaticaSede(), 'CIERRE_CAJA');
     return this.cerrarCajaAutomaticaSede();
   }
 
