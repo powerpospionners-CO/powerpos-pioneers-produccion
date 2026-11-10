@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import '../runtime-limits';
 import { resolve } from 'node:path';
 import { normalizarNulosMysql } from './nulos-mysql';
 

@@ -27,6 +27,19 @@ El canal reduce la dependencia de un proceso, pero no reemplaza el inventario ni
 
 ## Comprobar servicio y respaldos
 
+### Hilos del motor de base en Hostinger
+
+El arranque de la API y las herramientas de copia/compilación usan por defecto
+`TOKIO_WORKER_THREADS=1` y `RAYON_NUM_THREADS=1`, antes de inicializar Prisma.
+Se conservan valores explícitos del entorno. Evita que los hilos del motor Rust
+agoten el límite del alojamiento compartido. Prisma documenta este tipo de
+fallo en [su incidencia de Hostinger](https://github.com/prisma/prisma/issues/29336).
+La prueba en este alojamiento falló sin esos límites y conectó control y las
+cuatro bases activas con ellos, validando sus sellos sin modificar registros.
+
+Los errores P1001 también pueden tener otras causas: comprobar la conexión
+desde el servidor antes de cambiar contraseñas, destinos o permisos de red.
+
 El exportador `api/scripts/export-migracion-mysql.cjs` admite PostgreSQL y MySQL.
 Para MySQL requiere generar primero su cliente (`npm run build:mysql`).
 Usa `MIGRACION_ORIGEN_URL` con una cuenta de lectura y ejecuta una copia por base:

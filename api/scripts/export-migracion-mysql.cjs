@@ -1,4 +1,6 @@
 // Exportación PostgreSQL/MySQL de solo lectura. No importa ni cambia conexiones.
+process.env.TOKIO_WORKER_THREADS ??= '1';
+process.env.RAYON_NUM_THREADS ??= '1';
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createCipheriv, createDecipheriv, randomBytes, createHash } = require('node:crypto');

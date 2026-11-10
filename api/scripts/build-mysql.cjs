@@ -1,4 +1,6 @@
 const { spawnSync } = require('node:child_process');
+process.env.TOKIO_WORKER_THREADS ??= '1';
+process.env.RAYON_NUM_THREADS ??= '1';
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
