@@ -84,7 +84,7 @@ const fechaCorta = (valor: string) =>
   new Date(`${valor}T12:00:00`).toLocaleDateString('es-CO');
 
 export default function RecaudoSemanalPage() {
-  const { aviso } = useNotificar();
+  const { aviso, confirmar } = useNotificar();
   const usuario = useAuthStore((state) => state.usuario);
   const [configuracion, setConfiguracion] = useState<Configuracion | null>(null);
   const [resumen, setResumen] = useState<ResumenRecaudo | null>(null);
@@ -96,6 +96,9 @@ export default function RecaudoSemanalPage() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [retiroEditar, setRetiroEditar] = useState<Retiro | null>(null);
+  const [retiroReal, setRetiroReal] = useState('');
+  const [motivoRetiro, setMotivoRetiro] = useState('');
 
   const cargar = useCallback(async (inicio = periodoInicio) => {
     setCargando(true);
@@ -133,6 +136,7 @@ export default function RecaudoSemanalPage() {
   const cambiarSemana = (dias: number) => {
     const siguiente = sumarDias(periodoInicio, dias);
     if (siguiente > lunesDe(new Date())) return;
+    setRetiroEditar(null);
     setPeriodoInicio(siguiente);
   };
 
@@ -171,6 +175,30 @@ export default function RecaudoSemanalPage() {
     } finally {
       setGuardando(false);
     }
+  };
+
+  const eliminarGasto = async (gasto: ResumenRecaudo['gastos'][number]) => {
+    if (guardando || !(await confirmar(`Eliminar "${gasto.descripcion}" del ${new Date(gasto.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })} por ${moneda(gasto.monto)}. El disponible se recalculará y quedará registro en auditoría.`, { titulo: 'Eliminar gasto equivocado', textoConfirmar: 'Eliminar gasto', peligroso: true }))) return;
+    setGuardando(true);
+    try {
+      await api.delete(`/financiero/movimiento/${gasto.id}`);
+      aviso('Gasto eliminado. El disponible del recaudo se recalculó.', 'exito');
+      await cargar();
+    } catch (e: any) { aviso(e?.response?.data?.message || 'No se pudo eliminar el gasto.', 'error'); }
+    finally { setGuardando(false); }
+  };
+
+  const corregirRetiro = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!retiroEditar || guardando) return;
+    setGuardando(true);
+    try {
+      await api.patch(`/caja/recaudo/retiro/${retiroEditar.id}`, { montoRetirado: Number(retiroReal), montoAnterior: retiroEditar.retirado, motivo: motivoRetiro });
+      setRetiroEditar(null);
+      aviso('Retiro corregido con historial. Recaudo recalculado.', 'exito');
+      await cargar();
+    } catch (e: any) { aviso(e?.response?.data?.message || 'No se pudo corregir el retiro.', 'error'); }
+    finally { setGuardando(false); }
   };
 
   const esAdmin = usuario?.rol === 'ADMIN_EMPRESA';
@@ -236,19 +264,28 @@ export default function RecaudoSemanalPage() {
                       <p className="mt-3 text-xs text-gray-400">Solo se descuentan los gastos marcados como “Pagado con dinero del recaudo”, por su fecha y sucursal. La base fija no se utiliza.</p>
                       {resumen.faltanteParaGastos > 0 && <p role="alert" className="mt-3 text-sm text-yellow-300">Los gastos superan el efectivo retirado en {moneda(resumen.faltanteParaGastos)}. Revisa cómo se cubrió ese faltante.</p>}
                     </div>
-                    {(resumen.gastos?.length ?? 0) > 0 && <details className="mt-4 rounded-xl border border-gray-800 p-4"><summary className="cursor-pointer text-sm font-medium">Ver gastos descontados ({resumen.gastos.length})</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-gray-400"><tr><th className="p-2">Fecha</th><th className="p-2">Gasto</th><th className="p-2">Registrado por</th><th className="p-2 text-right">Valor</th></tr></thead><tbody>{resumen.gastos.map(g => <tr key={g.id} className="border-t border-gray-800"><td className="p-2">{new Date(g.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}</td><td className="p-2">{g.descripcion}</td><td className="p-2">{g.registradoPor}</td><td className="p-2 text-right">{moneda(g.monto)}</td></tr>)}</tbody></table></div></details>}
+                    {(resumen.gastos?.length ?? 0) > 0 && <details className="mt-4 rounded-xl border border-gray-800 p-4"><summary className="cursor-pointer text-sm font-medium">Ver gastos descontados ({resumen.gastos.length})</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-gray-400"><tr><th className="p-2">Fecha</th><th className="p-2">Gasto</th><th className="p-2">Registrado por</th><th className="p-2 text-right">Valor</th>{esAdmin && <th className="p-2">Acciones</th>}</tr></thead><tbody>{resumen.gastos.map(g => <tr key={g.id} className="border-t border-gray-800"><td className="p-2">{new Date(g.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}</td><td className="p-2">{g.descripcion}</td><td className="p-2">{g.registradoPor}</td><td className="p-2 text-right">{moneda(g.monto)}</td>{esAdmin && <td className="p-2"><button type="button" disabled={guardando} onClick={() => void eliminarGasto(g)} className="text-red-300 underline disabled:opacity-50">Eliminar gasto</button></td>}</tr>)}</tbody></table></div></details>}
                     {resumen.retiros.length > 0 ? (
                       <div className="mt-5 overflow-x-auto rounded-xl border border-gray-800">
                         <table className="w-full text-left text-sm">
-                          <thead className="border-b border-gray-800 text-gray-400"><tr><th className="px-3 py-2">Cierre</th><th className="px-3 py-2">Cajero</th><th className="px-3 py-2">Registró retiro</th><th className="px-3 py-2 text-right">Ventas efectivo</th><th className="px-3 py-2 text-right">Retirado</th><th className="px-3 py-2 text-right">Diferencia</th></tr></thead>
-                          <tbody>{resumen.retiros.map((retiro) => <tr key={retiro.id} className="border-b border-gray-800 last:border-0"><td className="px-3 py-2">{retiro.cerradoEn ? new Date(retiro.cerradoEn).toLocaleString('es-CO') : new Date(retiro.fecha).toLocaleString('es-CO')}</td><td className="px-3 py-2">{retiro.cajero}</td><td className="px-3 py-2">{retiro.registradoPor}</td><td className="px-3 py-2 text-right">{moneda(retiro.esperado)}</td><td className="px-3 py-2 text-right">{moneda(retiro.retirado)}</td><td className={`px-3 py-2 text-right ${retiro.diferencia === 0 ? 'text-green-400' : 'text-yellow-300'}`}>{moneda(retiro.diferencia)}</td></tr>)}</tbody>
+                          <thead className="border-b border-gray-800 text-gray-400"><tr><th className="px-3 py-2">Cierre</th><th className="px-3 py-2">Cajero</th><th className="px-3 py-2">Registró retiro</th><th className="px-3 py-2 text-right">Ventas efectivo</th><th className="px-3 py-2 text-right">Retirado</th><th className="px-3 py-2 text-right">Diferencia</th>{esAdmin && <th className="px-3 py-2">Acciones</th>}</tr></thead>
+                          <tbody>{resumen.retiros.map((retiro) => <tr key={retiro.id} className="border-b border-gray-800 last:border-0"><td className="px-3 py-2">{retiro.cerradoEn ? new Date(retiro.cerradoEn).toLocaleString('es-CO') : new Date(retiro.fecha).toLocaleString('es-CO')}</td><td className="px-3 py-2">{retiro.cajero}</td><td className="px-3 py-2">{retiro.registradoPor}</td><td className="px-3 py-2 text-right">{moneda(retiro.esperado)}</td><td className="px-3 py-2 text-right">{moneda(retiro.retirado)}</td><td className={`px-3 py-2 text-right ${retiro.diferencia === 0 ? 'text-green-400' : 'text-yellow-300'}`}>{moneda(retiro.diferencia)}</td>{esAdmin && <td className="px-3 py-2"><button type="button" disabled={guardando} onClick={() => { setRetiroEditar(retiro); setRetiroReal(String(retiro.retirado)); setMotivoRetiro(''); }} className="text-orange-300 underline disabled:opacity-50">Corregir retiro</button></td>}</tr>)}</tbody>
                         </table>
                       </div>
                     ) : <p className="mt-5 rounded-xl border border-gray-800 p-4 text-sm text-gray-400">Aún no hay retiros de efectivo registrados para esta semana.</p>}
 
+                    {resumen.diferenciaRecaudo !== 0 && <p className="mt-3 text-sm text-yellow-200">Corregir el método de pago actualiza las ventas esperadas, pero conserva el efectivo que se registró como retirado. Si ese retiro también se digitó mal, el administrador puede corregirlo indicando el valor real y el motivo.</p>}
+                    {esAdmin && retiroEditar && <form onSubmit={corregirRetiro} className="mt-4 space-y-3 rounded-xl border border-orange-500/40 p-4">
+                      <h3 className="font-semibold">Corregir retiro de la caja #{retiroEditar.cajaId}</h3>
+                      <p className="text-sm text-gray-400">Registrado: {moneda(retiroEditar.retirado)}. Ventas en efectivo: {moneda(retiroEditar.esperado)}. Escribe el dinero que realmente se retiró. Se conservarán el conteo original y el historial de la corrección.</p>
+                      <label className="block text-sm">Retiro real<input required type="number" min="0" max="99999999.99" step="0.01" value={retiroReal} onChange={e => setRetiroReal(e.target.value)} className="mt-1 block rounded-lg border border-gray-700 bg-gray-900 p-2" /></label>
+                      <label className="block text-sm">Motivo<input required minLength={5} maxLength={250} value={motivoRetiro} onChange={e => setMotivoRetiro(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-900 p-2" /></label>
+                      <div className="flex gap-3"><button disabled={guardando || motivoRetiro.trim().length < 5} className="rounded-lg bg-orange-500 px-4 py-2 disabled:opacity-50">Guardar corrección</button><button type="button" disabled={guardando} onClick={() => setRetiroEditar(null)}>Cancelar</button></div>
+                    </form>}
+
                     {resumen.consignacion ? (
                       <div className="mt-5 rounded-xl border border-green-500/30 bg-green-500/5 p-4">
-                        <h3 className="font-semibold text-green-300">Consignación registrada</h3>
+                        <h3 className="font-semibold text-green-300">Consignación registrada</h3><p className="mt-2 text-sm text-gray-300">Diferencia frente al disponible actual: <strong>{moneda(resumen.consignacion.montoConsignado - resumen.disponibleConsignar)}</strong>. El comprobante original conserva los valores que tenía al registrarse.</p>
                         <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
                           <p>Fecha: <strong>{new Date(resumen.consignacion.fechaConsignacion).toLocaleDateString('es-CO')}</strong></p>
                           <p>Consignado: <strong>{moneda(resumen.consignacion.montoConsignado)}</strong></p>
