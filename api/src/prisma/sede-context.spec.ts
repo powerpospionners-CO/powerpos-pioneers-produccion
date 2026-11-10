@@ -69,4 +69,24 @@ describe('Database routing by authenticated branch', () => {
     await contextoSede.run('CONTROL', () => prisma.producto.findMany());
     expect(findMany).toHaveBeenCalledTimes(1);
   });
+  it('no elimina una conexión nueva cuando falla una verificación anterior', async () => {
+    let fallar: (error: Error) => void;
+    const pendiente = new Promise<void>((_, reject) => { fallar = reject; });
+    const desconectarAnterior = jest.fn().mockResolvedValue(undefined);
+    const anterior = { firma: 'conexion-cifrada', cliente: { $disconnect: desconectarAnterior }, verificacion: pendiente };
+    const nueva = { firma: 'conexion-cifrada', cliente: { $disconnect: jest.fn() }, verificacion: Promise.resolve() };
+    const cache = (prisma as any).clientesSede as Map<number, unknown>;
+    cache.set(3, anterior);
+    jest.spyOn(prisma.control.baseSede, 'findUnique').mockResolvedValue({ estado: 'ACTIVA', verificadoEn: new Date(), conexionCifrada: 'conexion-cifrada' } as any);
+    jest.spyOn(prisma.control.sucursal, 'findFirst').mockResolvedValue({ id: 3 } as any);
+    const solicitud = prisma.contexto(2, 3);
+    const resultado = expect(solicitud).rejects.toThrow('No se pudo verificar');
+    await new Promise(resolve => setImmediate(resolve));
+    cache.set(3, nueva);
+    fallar!(Object.assign(new Error('No disponible'), { code: 'P1001' }));
+    await resultado;
+    expect(cache.get(3)).toBe(nueva);
+    expect(desconectarAnterior).toHaveBeenCalledTimes(1);
+    expect(nueva.cliente.$disconnect).not.toHaveBeenCalled();
+  });
 });

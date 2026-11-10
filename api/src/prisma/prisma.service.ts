@@ -170,7 +170,10 @@ export class PrismaService
     try {
       await entrada.verificacion;
     } catch (cause) {
-      this.clientesSede.delete(sucursalId);
+      // Otra solicitud puede haber renovado el cliente mientras esta
+      // verificación estaba pendiente. No retirar la conexión nueva.
+      if (this.clientesSede.get(sucursalId) === entrada)
+        this.clientesSede.delete(sucursalId);
       void entrada.cliente.$disconnect().catch(() => undefined);
       throw new ServiceUnavailableException(
         'No se pudo verificar la base de esta sede', { cause },
