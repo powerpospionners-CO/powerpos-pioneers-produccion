@@ -96,6 +96,12 @@ export class CajaController {
     );
   }
 
+  @Patch('recaudo/retiro/:id')
+  @Roles('ADMIN_EMPRESA')
+  corregirRetiro(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.cajaService.corregirRetiroRecaudo(+id, body, req.user.sucursalId, req.user.empresaId, req.user.id);
+  }
+
   @Get('recaudo/semanal')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   recaudoSemanal(@Request() req: any, @Query('periodoInicio') periodoInicio?: string) {
