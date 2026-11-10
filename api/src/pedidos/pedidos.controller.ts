@@ -79,6 +79,6 @@ export class PedidosController {
   @Patch(':id/pago')
   @Roles('CAJERO', 'ADMIN_EMPRESA', 'GERENTE')
   actualizarPago(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    return this.pedidosService.actualizarPago(+id, body, req.user.id, req.user.empresaId);
+    return this.pedidosService.actualizarPago(+id, body, req.user.id, req.user.empresaId, req.user.rol);
   }
 }

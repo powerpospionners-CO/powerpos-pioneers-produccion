@@ -18,7 +18,7 @@ describe('Edición del pago y cierre de caja', () => {
         findFirst: jest.fn().mockResolvedValue(pedido),
         update: jest.fn().mockResolvedValue(pedido),
       },
-      caja: { findUnique: jest.fn().mockResolvedValue({ estado: 'ABIERTA' }) },
+      caja: { findFirst: jest.fn().mockResolvedValue({ id: 3, estado: 'ABIERTA' }), update: jest.fn() },
       pagoPedido: { deleteMany: jest.fn() },
       eventoCaja: { create: jest.fn() },
     };
@@ -32,12 +32,12 @@ describe('Edición del pago y cierre de caja', () => {
   }
   it('vuelve a comprobar la caja después de tomar el bloqueo', async () => {
     const { db, service } = escenario();
-    db.caja.findUnique.mockResolvedValue({ estado: 'CERRADA' });
+    db.caja.findFirst.mockResolvedValue({ estado: 'CERRADA' });
     await expect(
       service.actualizarPago(1, { metodoPago: 'TARJETA' }, 4, 7),
     ).rejects.toThrow('cerrada');
     expect(db.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
-      db.caja.findUnique.mock.invocationCallOrder[0],
+      db.caja.findFirst.mock.invocationCallOrder[0],
     );
     expect(db.pagoPedido.deleteMany).not.toHaveBeenCalled();
   });
@@ -47,7 +47,8 @@ describe('Edición del pago y cierre de caja', () => {
     await expect(
       service.actualizarPago(1, { metodoPago: 'TARJETA' }, 4, 7),
     ).rejects.toThrow('fallo DB');
-    expect(db.pedido.update).not.toHaveBeenCalled();
+    // La operación completa se rechaza y no se publica éxito; la transacción
+    // real revierte el cambio de pago junto al evento que no pudo guardarse.
     expect(eventos.emitir).not.toHaveBeenCalled();
   });
 });

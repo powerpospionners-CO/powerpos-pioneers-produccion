@@ -22,13 +22,15 @@ function MarcaPago({ metodo, grande = false }: { metodo: string; grande?: boolea
   </span>;
 }
 
-export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number; condicionPago?: "CREDITO"; vencimientoCredito?: string };
+export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number; condicionPago?: "CREDITO"; vencimientoCredito?: string; motivo?: string };
 
 export type BorradorCobro = { credito: boolean; abonoInicial?: boolean; vencimiento: string; mixto: boolean; metodoUnico: string; recibidoUnico: number; bancoTransferencia: string; lineas: { metodoPago: string; monto: string }[]; recibidosMixto: Record<number, number> };
 
 type Linea = { metodoPago: string; monto: string };
 
-export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion, borradorInicial, onBorradorChange, responsable = 'cliente' }: {
+export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion, borradorInicial, onBorradorChange, responsable = 'cliente', edicionPago = false, cajaCerrada = false }: {
+  edicionPago?: boolean;
+  cajaCerrada?: boolean;
   responsable?: 'cliente' | 'distribuidor';
   borradorInicial?: BorradorCobro | null;
   onBorradorChange?: (borrador: BorradorCobro) => void;
@@ -59,6 +61,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
       : [{ metodoPago: 'EFECTIVO', monto: String(total) }, { metodoPago: 'TRANSFERENCIA', monto: '0' }]),
   );
   const [recibidosMixto, setRecibidosMixto] = useState<Record<number, number>>(borradorInicial?.recibidosMixto ?? {});
+  const [motivo, setMotivo] = useState('');
 
   useEffect(() => {
     onBorradorChange?.({ credito, abonoInicial, vencimiento, mixto, metodoUnico, recibidoUnico, bancoTransferencia, lineas, recibidosMixto });
@@ -87,33 +90,34 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
   const puedeConfirmar = useMemo(() => {
     if (procesando) return false;
+    if (edicionPago && cajaCerrada && motivo.trim().length < 5) return false;
     if (credito) {
       if (!permitirCredito || total <= 0 || vencimiento < hoy) return false;
       if (!abonoInicial) return true;
       return sumaLineas > 0 && resta > 0 && lineas.every(l=>Number.isFinite(Number(l.monto)) && Number(l.monto)>0) && (indiceEfectivoMixto<0 || recibidoMixtoEfectivo>=montoEfectivoMixto);
     }
     if (!mixto) {
-      if (metodoUnico === 'EFECTIVO') return recibidoUnico >= total;
+      if (metodoUnico === 'EFECTIVO') return edicionPago || recibidoUnico >= total;
       return true;
     }
     if (Math.abs(resta) > 0.01) return false;
     if (lineas.some((l) => !Number(l.monto) || Number(l.monto) <= 0)) return false;
-    if (indiceEfectivoMixto >= 0 && recibidoMixtoEfectivo < montoEfectivoMixto) return false;
+    if (!edicionPago && indiceEfectivoMixto >= 0 && recibidoMixtoEfectivo < montoEfectivoMixto) return false;
     return true;
-  }, [credito, abonoInicial, sumaLineas, permitirCredito, vencimiento, hoy, procesando, mixto, metodoUnico, recibidoUnico, total, resta, lineas, indiceEfectivoMixto, recibidoMixtoEfectivo, montoEfectivoMixto]);
+  }, [credito, abonoInicial, sumaLineas, permitirCredito, vencimiento, hoy, procesando, mixto, metodoUnico, recibidoUnico, total, resta, lineas, indiceEfectivoMixto, recibidoMixtoEfectivo, montoEfectivoMixto, edicionPago, cajaCerrada, motivo]);
 
   const confirmar = () => {
     if (!puedeConfirmar) return;
     if (credito) { onConfirmar({ metodoPago: 'CREDITO', pagos: abonoInicial ? lineas.map(l=>({metodoPago:l.metodoPago,monto:Math.round(Number(l.monto)*100)/100})) : [], cambio: abonoInicial && indiceEfectivoMixto>=0 ? Math.max(0,recibidoMixtoEfectivo-montoEfectivoMixto) : 0, condicionPago: 'CREDITO', vencimientoCredito: vencimiento }); return; }
     if (!mixto) {
-      const cambio = metodoUnico === 'EFECTIVO' ? Math.max(0, recibidoUnico - total) : 0;
-      onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }], cambio });
+      const cambio = !edicionPago && metodoUnico === 'EFECTIVO' ? Math.max(0, recibidoUnico - total) : 0;
+      onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }], cambio, ...(edicionPago ? { motivo: motivo.trim() } : {}) });
       return;
     }
     const pagos = lineas.map((l) => ({ metodoPago: l.metodoPago, monto: Math.round((Number(l.monto) || 0) * 100) / 100 }));
     const metodoPago = pagos.length > 1 ? 'MIXTO' : pagos[0].metodoPago;
-    const cambio = indiceEfectivoMixto >= 0 ? Math.max(0, recibidoMixtoEfectivo - montoEfectivoMixto) : 0;
-    onConfirmar({ metodoPago, pagos, cambio });
+    const cambio = !edicionPago && indiceEfectivoMixto >= 0 ? Math.max(0, recibidoMixtoEfectivo - montoEfectivoMixto) : 0;
+    onConfirmar({ metodoPago, pagos, cambio, ...(edicionPago ? { motivo: motivo.trim() } : {}) });
   };
 
   return (
@@ -122,7 +126,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
         <div className="mb-4 flex items-center justify-between border-b border-gray-800 pb-4">
           <div>
             <h3 className="text-lg font-bold text-white">{titulo}</h3>
-            <p className="mt-1 text-xs uppercase tracking-widest text-gray-400">Total a pagar</p>
+            <p className="mt-1 text-xs uppercase tracking-widest text-gray-400">{edicionPago ? 'Total de la venta' : 'Total a pagar'}</p>
             <p className="text-3xl font-bold tabular-nums text-orange-400 sm:text-4xl">{moneda(total)}</p>
           </div>
           <button type="button" aria-label="Cerrar cobro" disabled={procesando} onClick={onCancelar} className="flex h-11 w-11 items-center justify-center text-gray-500 hover:text-white"><X size={20} /></button>
@@ -130,6 +134,12 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
         {permitirCredito && <label className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/40 p-3 text-amber-200"><input type="checkbox" checked={credito} disabled={procesando} onChange={e=>{setCredito(e.target.checked);setAbonoInicial(e.target.checked && mixto && sumaLineas>0 && resta>0);}} /> Dejar un saldo a crédito del {responsable}</label>}
         {credito && <div className="mb-4 space-y-3 rounded-xl bg-gray-950 p-4"><label>Fecha de vencimiento<input type="date" min={hoy} disabled={procesando} value={vencimiento} onChange={e=>setVencimiento(e.target.value)} className="ml-3 rounded border border-gray-700 bg-gray-900 p-2" /></label><label className="flex items-center gap-2"><input type="checkbox" checked={abonoInicial} disabled={procesando} onChange={e=>{setAbonoInicial(e.target.checked);if(e.target.checked)setMixto(true);}} /> El {responsable} paga una parte ahora</label><p className="text-sm text-amber-200">{abonoInicial ? `Abono de hoy: ${moneda(sumaLineas)} · Saldo a crédito: ${moneda(Math.max(0,resta))}` : `Saldo a crédito: ${moneda(total)}`}</p><p className="text-sm text-gray-400">Solo el dinero recibido entra a caja. El saldo pendiente queda en la cuenta del {responsable}.</p></div>}
+        {edicionPago && <section className="mb-4 rounded-xl border border-amber-500/40 p-3 text-sm text-amber-100">
+          <p>{cajaCerrada ? 'Conciliación de pago de una caja cerrada. Se recalculan el efectivo esperado y la diferencia; se conservan el conteo, el retiro y la fecha del cierre.' : 'Corrección del pago registrado. No se realiza un nuevo cobro.'}</p>
+          <label className="mt-3 block">Motivo de la corrección{cajaCerrada ? ' (obligatorio, mínimo 5 caracteres)' : ' (opcional)'}
+            <textarea value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={250} required={cajaCerrada} disabled={procesando} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-950 p-2 text-white" />
+          </label>
+        </section>}
         {opcionesImpresion && <div className="mb-4">{opcionesImpresion}</div>}
         <div hidden={credito && !abonoInicial}>
         <button
@@ -157,7 +167,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
               </div>
             </div>
             <div className="min-w-0">
-              {metodoUnico === 'EFECTIVO' ? (
+              {edicionPago ? <p className="rounded-xl border border-gray-700 p-5 text-gray-300">Se registrará el medio correcto para esta venta, sin movimiento de dinero en la caja actual.</p> : metodoUnico === 'EFECTIVO' ? (
                 <MontoRecibido key="unico" inicial={recibidoUnico} objetivo={total} onCambiar={setRecibidoUnico} />
               ) : (
                 <div className="flex min-h-96 flex-col items-center justify-center rounded-2xl border border-gray-700 bg-gray-950 p-5 text-center sm:p-8">
@@ -219,7 +229,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
             </div>
             {!credito && resta>0 && permitirCredito && <button type="button" disabled={procesando} onClick={()=>{setCredito(true);setAbonoInicial(true);}} className="w-full rounded-lg border border-amber-500/50 p-3 font-semibold text-amber-200">Dejar los {moneda(resta)} restantes a crédito</button>}
             {!credito && resta>0 && !permitirCredito && <p className="text-sm text-amber-200">Para dejar un saldo a crédito, vuelve a productos y selecciona el cliente.</p>}
-            {indiceEfectivoMixto >= 0 && (
+            {!edicionPago && indiceEfectivoMixto >= 0 && (
               <MontoRecibido key={`mixto-${indiceEfectivoMixto}`} inicial={recibidoMixtoEfectivo} objetivo={montoEfectivoMixto} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
             )}
           </div>

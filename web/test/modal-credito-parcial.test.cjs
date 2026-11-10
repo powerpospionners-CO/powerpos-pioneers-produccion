@@ -31,3 +31,25 @@ test('conserva el crédito completo sin abonos y exige vencimiento',()=>{
   const confirmar=hijos(p.render(),n=>n.type==='button'&&texto(n)==='Registrar crédito')[0];confirmar.props.onClick();assert.equal(p.confirmados[0].pagos.length,0);
   const sinFecha=modal({borradorInicial:{credito:true,vencimiento:'',lineas:[],recibidosMixto:{}}});assert.equal(hijos(sinFecha.render(),n=>n.type==='button'&&texto(n)==='Registrar crédito')[0].props.disabled,true);
 });
+
+test('la corrección de una caja cerrada exige motivo y no solicita cobrar de nuevo el efectivo',()=>{
+  const p=modal({edicionPago:true,cajaCerrada:true,permitirCredito:false,total:100,borradorInicial:null,textoConfirmar:'Guardar pago'});
+  let arbol=p.render();
+  assert.match(texto(arbol),/Se recalculan el efectivo esperado y la diferencia/);
+  assert.equal(hijos(arbol,n=>n.type==='button'&&texto(n)==='Guardar pago')[0].props.disabled,true);
+  assert.equal(hijos(arbol,n=>n.props?.objetivo!==undefined).length,0);
+  hijos(arbol,n=>n.type==='textarea')[0].props.onChange({target:{value:'La cajera seleccionó el medio incorrecto'}});
+  arbol=p.render();const boton=hijos(arbol,n=>n.type==='button'&&texto(n)==='Guardar pago')[0];
+  assert.equal(boton.props.disabled,false);boton.props.onClick();
+  assert.equal(JSON.stringify(p.confirmados[0]),JSON.stringify({metodoPago:'EFECTIVO',pagos:[{metodoPago:'EFECTIVO',monto:100}],cambio:0,motivo:'La cajera seleccionó el medio incorrecto'}));
+});
+
+test('permite corregir el desglose mixto sin exigir una nueva entrega de billetes y conserva el total',()=>{
+  const p=modal({edicionPago:true,cajaCerrada:true,permitirCredito:false,total:100,borradorInicial:null,metodoInicial:'MIXTO',pagosIniciales:[{metodoPago:'EFECTIVO',monto:30},{metodoPago:'TRANSFERENCIA',monto:70}],textoConfirmar:'Guardar pago'});
+  hijos(p.render(),n=>n.type==='textarea')[0].props.onChange({target:{value:'Corregir el desglose del recibo'}});
+  const boton=hijos(p.render(),n=>n.type==='button'&&texto(n)==='Guardar pago')[0];
+  assert.equal(boton.props.disabled,false);boton.props.onClick();
+  assert.equal(p.confirmados[0].cambio,0);assert.equal(p.confirmados[0].pagos.reduce((s,p)=>s+p.monto,0),100);
+  const invalido=modal({edicionPago:true,permitirCredito:false,total:100,borradorInicial:null,metodoInicial:'MIXTO',pagosIniciales:[{metodoPago:'EFECTIVO',monto:30},{metodoPago:'TRANSFERENCIA',monto:60}],textoConfirmar:'Guardar pago'});
+  assert.equal(hijos(invalido.render(),n=>n.type==='button'&&texto(n)==='Guardar pago')[0].props.disabled,true);
+});

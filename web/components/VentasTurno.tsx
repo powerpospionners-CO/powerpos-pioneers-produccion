@@ -8,6 +8,7 @@ import { moneda } from '@/lib/formato';
 import ModalCobro, { PagoConfirmado } from './ModalCobro';
 
 type Venta = {
+  caja?: { estado: string } | null;
   id: number; numero: string; total: string; metodoPago: string; estado: string; creadoEn: string; devueltoTotal?: boolean;
   pagos?: { metodoPago: string; monto: string }[];
 };
@@ -135,6 +136,9 @@ export default function VentasTurno({ cajaId, sucursalId, puedeGestionar }: { ca
 
       {ventaEditar && (
         <ModalCobro
+          edicionPago
+          cajaCerrada={ventaEditar.caja?.estado === 'CERRADA'}
+          opcionesImpresion={error ? <p role="alert" className="text-red-400">{error}</p> : undefined}
           total={Number(ventaEditar.total)}
           procesando={procesando}
           titulo={`Editar pago · ${ventaEditar.numero}`}

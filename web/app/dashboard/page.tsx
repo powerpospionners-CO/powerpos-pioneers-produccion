@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 
 interface Pedido {
+  caja?: { estado: string } | null;
   id: number;
   numero: string;
   estado: string;
@@ -197,11 +198,17 @@ function RestauranteDashboard() {
   };
 
   const [pedidoEditarPago, setPedidoEditarPago] = useState<Pedido | null>(null);
+  const [guardandoPago, setGuardandoPago] = useState(false);
+  const [errorPago, setErrorPago] = useState('');
   const guardarPago = async (pago: PagoConfirmado) => {
     if (!pedidoEditarPago) return;
-    await api.patch(`/pedidos/${pedidoEditarPago.id}/pago`, pago);
-    setPedidoEditarPago(null);
-    cargarDatos();
+    setGuardandoPago(true); setErrorPago('');
+    try {
+      await api.patch(`/pedidos/${pedidoEditarPago.id}/pago`, pago);
+      setPedidoEditarPago(null);
+      await cargarDatos();
+    } catch (e: any) { setErrorPago(e?.response?.data?.message || 'No se pudo corregir el pago.'); }
+    finally { setGuardandoPago(false); }
   };
 
   const datosIngresosEgresos = resumenFinanciero ? [
@@ -599,7 +606,7 @@ function RestauranteDashboard() {
         </div>
       </div>
       {pedidoEditarPago && (
-        <ModalCobro total={Number(pedidoEditarPago.total)} titulo={`Editar pago · ${pedidoEditarPago.numero}`} textoConfirmar="Guardar pago" metodoInicial={pedidoEditarPago.metodoPago} pagosIniciales={pedidoEditarPago.pagos} onConfirmar={guardarPago} onCancelar={() => setPedidoEditarPago(null)} />
+        <ModalCobro edicionPago cajaCerrada={pedidoEditarPago.caja?.estado === 'CERRADA'} procesando={guardandoPago} opcionesImpresion={errorPago ? <p role="alert" className="text-red-400">{errorPago}</p> : undefined} total={Number(pedidoEditarPago.total)} titulo={`Editar pago · ${pedidoEditarPago.numero}`} textoConfirmar="Guardar pago" metodoInicial={pedidoEditarPago.metodoPago} pagosIniciales={pedidoEditarPago.pagos} onConfirmar={guardarPago} onCancelar={() => { setPedidoEditarPago(null); setErrorPago(''); }} />
       )}
     </div>
     </AuthGuard>

@@ -16,6 +16,7 @@ import { fechaDia } from '../administracion/administracion.service';
 import { adicionalesConEmpaque } from './empaque';
 import { estadisticasCalendario } from './estadisticas-calendario';
 import { esBebida, adicionalListo } from '../adicionales/reglas-trailer';
+import { desgloseCobros } from './operaciones-venta.reglas';
 
 
 @Injectable()
@@ -559,6 +560,7 @@ export class PedidosService {
         ...(!cajaId && !rangoFecha ? { devueltoTotal: false } : {}),
       },
       include: {
+        caja: { select: { estado: true } },
         detalles: {
           include: {
             producto: true,
@@ -583,6 +585,7 @@ export class PedidosService {
       where: { id, sucursal: { empresaId } },
       include: {
         cuentaCredito: true,
+        caja: { select: { estado: true } },
         operacionesCaja: { where: { tipo: { in: ['DEVOLUCION', 'COBRO_CREDITO'] } } },
         detalles: {
           include: {
@@ -602,27 +605,25 @@ export class PedidosService {
     return pedido.metodoPago === 'CREDITO' ? { ...pedido, abonosCredito: pedido.operacionesCaja.filter(o=>o.tipo==='COBRO_CREDITO').map(o=>({metodoPago:o.metodoPago,monto:Number(o.monto)})) } : pedido;
   }
 
-  async actualizarPago(id: number, datos: any, usuarioId: number, empresaId: number) {
+  async actualizarPago(id: number, datos: any, usuarioId: number, empresaId: number, rol?: string) {
     const referencia = await this.prisma.pedido.findFirst({ where: { id, sucursal: { empresaId } }, select: { sucursalId: true } });
     if (!referencia) throw new NotFoundException('Pedido no encontrado');
     const actualizado = await this.prisma.$transaction(async (db) => {
       await bloquearCajaSucursal(db, referencia.sucursalId);
-      const pedido = await db.pedido.findFirst({ where: { id, sucursal: { empresaId } } });
+      const pedido = await db.pedido.findFirst({ where: { id, sucursal: { empresaId } }, include: { pagos: true } });
       if (!pedido) throw new NotFoundException('Pedido no encontrado');
       if (pedido.estado === 'ANULADO') throw new BadRequestException('Una venta anulada no puede modificarse');
       if (await db.operacionVentaCaja.count({ where: { pedidoId: id, tipo: 'DEVOLUCION' } })) throw new BadRequestException('Una venta con devoluciones no admite cambios de pago');
       if (pedido.metodoPago === 'CREDITO') throw new BadRequestException('Use el flujo de cobros de crédito para esta venta');
-      if (pedido.cajaId) {
-        const caja = await db.caja.findUnique({ where: { id: pedido.cajaId } });
-        if (!caja || caja.estado !== 'ABIERTA') throw new BadRequestException('La caja de esta venta ya está cerrada. Requiere conciliación para modificar el pago.');
-      }
+      const caja = pedido.cajaId ? await db.caja.findFirst({ where: { id: pedido.cajaId, sucursalId: pedido.sucursalId, sucursal: { empresaId } }, include: { retiroEfectivo: true } }) : null;
+      if (pedido.cajaId && !caja) throw new BadRequestException('No se encontró la caja de esta venta en la empresa');
+      const cerrada = caja?.estado === 'CERRADA';
+      const motivo = typeof datos.motivo === 'string' ? datos.motivo.trim() : '';
+      if (cerrada && rol !== 'ADMIN_EMPRESA') throw new BadRequestException('Solo el administrador de la empresa puede corregir el pago de una venta con caja cerrada');
+      if (cerrada && (motivo.length < 5 || motivo.length > 250)) throw new BadRequestException('Explica el motivo de la corrección de pago (entre 5 y 250 caracteres)');
       const { metodoPago, pagos } = normalizarPagos(datos, Number(pedido.total));
       await db.pagoPedido.deleteMany({ where: { pedidoId: id } });
-      if (pedido.cajaId) await db.eventoCaja.create({
-        data: { cajaId: pedido.cajaId, tipo: 'EDICION_PAGO',
-          descripcion: `Pago de la venta ${pedido.numero} cambiado de ${pedido.metodoPago} a ${metodoPago}`, usuarioId },
-      });
-      return db.pedido.update({
+      const actualizado = await db.pedido.update({
         where: { id },
         data: {
           metodoPago: metodoPago as any,
@@ -630,7 +631,38 @@ export class PedidosService {
         },
         include: { pagos: true },
       });
-    });
+      if (caja) {
+        let conciliacion: Prisma.InputJsonValue | undefined;
+        let resumenConciliacion = motivo ? `. Motivo: ${motivo}` : '';
+        if (cerrada) {
+          const [ventas, operaciones] = await Promise.all([
+            db.pedido.findMany({ where: { cajaId: caja.id, estado: { not: 'ANULADO' } }, include: { pagos: true } }),
+            db.operacionVentaCaja.findMany({ where: { cajaId: caja.id } }),
+          ]);
+          const efectivo = desgloseCobros(ventas, operaciones).find(p => p.metodo === 'EFECTIVO')?.total ?? 0;
+          const esperado = Math.round((Number(caja.montoInicial) + efectivo - Number(caja.retiroEfectivo?.montoRetirado ?? 0)) * 100) / 100;
+          const diferencia = caja.montoFinal === null ? null : Math.round((Number(caja.montoFinal) - esperado) * 100) / 100;
+          await db.caja.update({ where: { id: caja.id }, data: { diferencia } });
+          if (caja.retiroEfectivo) await db.retiroEfectivoCaja.update({ where: { cajaId: caja.id }, data: { montoEsperado: efectivo } });
+          conciliacion = {
+            cajaId: caja.id, montoContado: caja.montoFinal === null ? null : Number(caja.montoFinal),
+            montoRetirado: Number(caja.retiroEfectivo?.montoRetirado ?? 0), efectivoEsperado: efectivo, montoEsperado: esperado,
+            diferenciaAnterior: caja.diferencia === null ? null : Number(caja.diferencia), diferencia,
+            recaudoEsperadoAnterior: caja.retiroEfectivo ? Number(caja.retiroEfectivo.montoEsperado) : null,
+          };
+          resumenConciliacion = `. Conciliación de caja cerrada. Motivo: ${motivo}. Pago anterior: ${(pedido.pagos?.length ? pedido.pagos : [{ metodoPago: pedido.metodoPago, monto: pedido.total }]).map(p => `${p.metodoPago} $${Number(p.monto).toLocaleString('es-CO')}`).join(', ')}. Pago corregido: ${pagos.map(p => `${p.metodoPago} $${p.monto.toLocaleString('es-CO')}`).join(', ')}. Efectivo esperado: $${esperado.toLocaleString('es-CO')}. Diferencia: ${diferencia === null ? 'sin conteo' : '$' + diferencia.toLocaleString('es-CO')}`;
+          await db.auditoria.create({ data: {
+            empresaId, usuarioId, accion: 'EDITAR', entidad: 'CONCILIACION_PAGO_VENTA', entidadId: id,
+            detalle: { numero: pedido.numero, motivo, anterior: { metodoPago: pedido.metodoPago, pagos: (pedido.pagos?.length ? pedido.pagos : [{ metodoPago: pedido.metodoPago, monto: pedido.total }]).map(p => ({ metodoPago: p.metodoPago, monto: Number(p.monto) })) }, nuevo: { metodoPago, pagos }, conciliacion },
+          } });
+        }
+        await db.eventoCaja.create({ data: {
+          cajaId: caja.id, tipo: cerrada ? 'CORRECCION' : 'EDICION_PAGO', usuarioId,
+          descripcion: `Pago de la venta ${pedido.numero} cambiado de ${pedido.metodoPago} a ${metodoPago}${resumenConciliacion}`,
+        } });
+      }
+      return actualizado;
+    }, { timeout: 15000 });
 
     await this.eventos.emitir(empresaId, { tipo: 'ACTUALIZADO', pedidoId: id, estado: actualizado.estado });
     return actualizado;

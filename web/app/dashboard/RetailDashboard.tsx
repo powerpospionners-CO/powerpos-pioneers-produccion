@@ -13,7 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalEsperado?: number; totalEfectivo?: number; recaudoEfectivoHabilitado?: boolean; baseEfectivoCaja?: number | null };
 type ConfiguracionRecaudo = { habilitado: boolean; baseEfectivoCaja: number | null };
 type Producto = { id: number; nombre: string; codigoBarras?: string; controlaStock: boolean; stockActual: number; stockMinimo: number };
-type Venta = { id: number; numero: string; total: string; metodoPago: string; creadoEn: string; estado: string; pagos?: { metodoPago: string; monto: string }[] };
+type Venta = { id: number; numero: string; total: string; metodoPago: string; creadoEn: string; estado: string; caja?: { estado: string } | null; pagos?: { metodoPago: string; monto: string }[] };
 type Cajero = { id: number; nombre: string; rol: string };
 type DetalleVenta = {
   numero: string;
@@ -53,6 +53,7 @@ export default function RetailDashboard() {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
+  const [guardandoPago, setGuardandoPago] = useState(false);
   const [ventaDetalle, setVentaDetalle] = useState<DetalleVenta | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [reimprimiendoId, setReimprimiendoId] = useState<number | null>(null);
@@ -155,9 +156,10 @@ export default function RetailDashboard() {
 
   const guardarPago = async (pago: PagoConfirmado) => {
     if (!ventaEditar) return;
-    setError('');
+    setError(''); setGuardandoPago(true);
     try { await api.patch(`/pedidos/${ventaEditar.id}/pago`, pago); setVentaEditar(null); await cargar(); await cargarVentasFecha(fechaSeleccionada); }
     catch (e: any) { setError(e?.response?.data?.message || 'No se pudo actualizar el pago.'); }
+    finally { setGuardandoPago(false); }
   };
 
   const hoy = new Date().toDateString();
@@ -225,7 +227,7 @@ export default function RetailDashboard() {
     </section>
   </div>
   {ventaEditar && (
-    <ModalCobro total={Number(ventaEditar.total)} titulo={`Editar pago · ${ventaEditar.numero}`} textoConfirmar="Guardar pago" metodoInicial={ventaEditar.metodoPago} pagosIniciales={ventaEditar.pagos} onConfirmar={guardarPago} onCancelar={() => setVentaEditar(null)} />
+    <ModalCobro edicionPago cajaCerrada={ventaEditar.caja?.estado === 'CERRADA'} procesando={guardandoPago} opcionesImpresion={error ? <p role="alert" className="text-red-400">{error}</p> : undefined} total={Number(ventaEditar.total)} titulo={`Editar pago · ${ventaEditar.numero}`} textoConfirmar="Guardar pago" metodoInicial={ventaEditar.metodoPago} pagosIniciales={ventaEditar.pagos} onConfirmar={guardarPago} onCancelar={() => setVentaEditar(null)} />
   )}
   {(ventaDetalle || cargandoDetalle) && (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

@@ -275,6 +275,27 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(movsConciliados.filter(m=>m.categoria==='COSTO_VENTA').length,1);
     console.log('PASS conciliación histórica: saldo recuperado, sin nuevo stock, cobro, costo ni duplicados');
 
+    const cajaHistorica=(await http.post('/caja/abrir').set('Authorization',token).send({montoInicial:50000}).expect(201)).body;
+    const ventaHistorica=(await http.post('/pedidos').set('Authorization',token).send({sucursalId:sede.id,claveIdempotencia:randomUUID(),metodoPago:'EFECTIVO',items:[{productoId:mercanciaDist.id,cantidad:1}]}).expect(201)).body;
+    await http.post(`/caja/${cajaHistorica.id}/cerrar`).set('Authorization',token).send({montoFinal:50000,montoRetirado:10000}).expect(201);
+    const fechaHistorica=new Date(Date.now()-3*86400000);
+    await db.pedido.update({where:{id:ventaHistorica.id},data:{creadoEn:fechaHistorica}});
+    await db.caja.update({where:{id:cajaHistorica.id},data:{abiertaEn:fechaHistorica,cerradaEn:fechaHistorica}});
+    const correccionHistorica={metodoPago:'TRANSFERENCIA',motivo:'La cajera seleccionó efectivo por error'};
+    await http.patch(`/pedidos/${ventaHistorica.id}/pago`).set('Authorization',sesionPaula).send(correccionHistorica).expect(400);
+    await http.patch(`/pedidos/${ventaHistorica.id}/pago`).set('Authorization',token).send({metodoPago:'TRANSFERENCIA'}).expect(400);
+    await http.patch(`/pedidos/${ventaHistorica.id}/pago`).set('Authorization',token).send(correccionHistorica).expect(200);
+    const cajaConciliada=await db.caja.findUnique({where:{id:cajaHistorica.id},include:{retiroEfectivo:true}});
+    assert.equal(cajaConciliada.estado,'CERRADA');assert.equal(Number(cajaConciliada.montoFinal),50000);assert.equal(Number(cajaConciliada.diferencia),10000);
+    assert.equal(cajaConciliada.cerradaEn.toISOString(),fechaHistorica.toISOString());assert.equal(Number(cajaConciliada.retiroEfectivo.montoEsperado),0);assert.equal(Number(cajaConciliada.retiroEfectivo.montoRetirado),10000);
+    assert.equal((await db.pedido.findUnique({where:{id:ventaHistorica.id}})).creadoEn.toISOString(),fechaHistorica.toISOString());
+    assert.equal(await db.auditoria.count({where:{empresaId:empresa.id,entidad:'CONCILIACION_PAGO_VENTA',entidadId:ventaHistorica.id}}),1);
+    await http.patch(`/pedidos/${ventaHistorica.id}/pago`).set('Authorization',token).send({...correccionHistorica,pagos:[{metodoPago:'TRANSFERENCIA',monto:9000}]}).expect(400);
+    assert.equal((await db.pagoPedido.findMany({where:{pedidoId:ventaHistorica.id}}))[0].metodoPago,'TRANSFERENCIA');
+    await http.patch(`/pedidos/${ventaHistorica.id}/pago`).set('Authorization',token).send(correccionHistorica).expect(200);
+    assert.equal(Number((await db.caja.findUnique({where:{id:cajaHistorica.id}})).diferencia),10000);
+    console.log('PASS conciliación de pago histórico: solo administrador, motivo obligatorio, efectivo esperado corregido, conteo y retiro conservados y reintento sin doble descuento');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);

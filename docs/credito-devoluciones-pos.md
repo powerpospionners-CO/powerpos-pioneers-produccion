@@ -1,5 +1,13 @@
 # Crédito y devoluciones en el POS
 
+## Corregir el medio de pago de una venta con caja cerrada
+
+El administrador de la empresa puede abrir el Dashboard, elegir la fecha de la venta y usar **Editar medio de pago**. Debe seleccionar el medio o desglose correcto, escribir un motivo de entre 5 y 250 caracteres y guardar. No necesita abrir la caja de ese día ni la caja actual. Cajeros y gerentes conservan la restricción sobre cajas cerradas.
+
+La corrección conserva el total y la fecha de la venta. Si $50.000 pasan de efectivo a transferencia, el efectivo esperado del cierre baja $50.000 y el valor de transferencia aumenta $50.000. También se recalculan la diferencia del cierre y el efectivo esperado del retiro semanal. El efectivo que se contó, el que realmente se retiró y la fecha del cierre se conservan. Por eso puede quedar una diferencia que requiere revisar el conteo o el retiro registrado; cambiar el pago no inventa un movimiento de dinero.
+
+La actualización de los pagos, el cierre, el esperado del retiro y la auditoría se guarda en una sola transacción. Quedan registrados administrador, motivo, pago anterior, pago corregido y efecto sobre el cierre. Las ventas a crédito, anuladas o con devoluciones conservan sus flujos específicos y no se modifican mediante esta opción.
+
 Los roles CAJERO, GERENTE y ADMIN_EMPRESA pueden vender a crédito, registrar abonos y devoluciones. Se mantiene el control de empresa, sede y caja abierta. El cajero requiere una caja propia en la sede de la venta. Cada operación conserva usuario, motivo, fecha, caja y clave para impedir duplicados por reintentos.
 
 En el cobro se elige cliente y vencimiento. El crédito entrega mercancía y crea una cuenta por cobrar, sin registrar efectivo recibido. No admite canje de puntos ni domicilio. Los puntos de acumulación se asignan al liquidar la deuda. Los abonos posteriores se registran en el turno donde se recibe el dinero, sin modificar cierres anteriores.
