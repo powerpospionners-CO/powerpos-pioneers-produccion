@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowDownToLine, ChevronLeft, ChevronRight, Wallet, Trash2, SquarePen } from 'lucide-react';
 import api from '@/lib/api';
@@ -99,6 +99,15 @@ export default function RecaudoSemanalPage() {
   const [retiroEditar, setRetiroEditar] = useState<Retiro | null>(null);
   const [retiroReal, setRetiroReal] = useState('');
   const [motivoRetiro, setMotivoRetiro] = useState('');
+  const [gastoEditar, setGastoEditar] = useState<ResumenRecaudo['gastos'][number] | null>(null);
+  const [gastoForm, setGastoForm] = useState({ descripcion: '', monto: '', fecha: '' });
+  const dialogoGasto = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (gastoEditar) dialogoGasto.current?.showModal();
+    else dialogoGasto.current?.close();
+  }, [gastoEditar]);
+
 
   const cargar = useCallback(async (inicio = periodoInicio) => {
     setCargando(true);
@@ -137,6 +146,7 @@ export default function RecaudoSemanalPage() {
     const siguiente = sumarDias(periodoInicio, dias);
     if (siguiente > lunesDe(new Date())) return;
     setRetiroEditar(null);
+    setGastoEditar(null);
     setPeriodoInicio(siguiente);
   };
 
@@ -177,6 +187,27 @@ export default function RecaudoSemanalPage() {
     }
   };
 
+  const fechaGasto = (fecha: string) => new Date(fecha).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const editarGasto = (gasto: ResumenRecaudo['gastos'][number]) => {
+    setGastoForm({ descripcion: gasto.descripcion, monto: String(gasto.monto), fecha: fechaGasto(gasto.fecha) });
+    setGastoEditar(gasto);
+  };
+  const guardarGasto = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!gastoEditar || guardando) return;
+    setGuardando(true);
+    try {
+      await api.patch(`/financiero/movimiento/${gastoEditar.id}`, {
+        descripcion: gastoForm.descripcion.trim(), monto: Number(gastoForm.monto),
+        ...(gastoForm.fecha !== fechaGasto(gastoEditar.fecha) ? { fecha: `${gastoForm.fecha}T12:00:00-05:00` } : {}),
+      });
+      setGastoEditar(null);
+      aviso('Gasto actualizado. El disponible del recaudo se recalculó.', 'exito');
+      await cargar();
+    } catch (e: any) { aviso(e?.response?.data?.message || 'No se pudo editar el gasto.', 'error'); }
+    finally { setGuardando(false); }
+  };
+
   const eliminarGasto = async (gasto: ResumenRecaudo['gastos'][number]) => {
     if (guardando || !(await confirmar(`Eliminar "${gasto.descripcion}" del ${new Date(gasto.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })} por ${moneda(gasto.monto)}. El disponible se recalculará y quedará registro en auditoría.`, { titulo: 'Eliminar gasto equivocado', textoConfirmar: 'Eliminar gasto', peligroso: true }))) return;
     setGuardando(true);
@@ -208,6 +239,16 @@ export default function RecaudoSemanalPage() {
     <AuthGuard>
       <main className="min-h-screen bg-gray-950 text-white">
         <Navbar />
+        {esAdmin && <dialog ref={dialogoGasto} aria-labelledby="titulo-editar-gasto" onCancel={e => { e.preventDefault(); if (!guardando) setGastoEditar(null); }} className="fixed inset-0 m-auto max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl backdrop:bg-black/70">
+          <form onSubmit={guardarGasto} className="space-y-4">
+            <h2 id="titulo-editar-gasto" className="text-xl font-semibold">Editar gasto</h2>
+            <p className="text-sm text-gray-400">Los cambios quedan en auditoría y actualizan el recaudo según la fecha del gasto.</p>
+            <label className="block text-sm">Descripción<input required maxLength={250} value={gastoForm.descripcion} onChange={e => setGastoForm({ ...gastoForm, descripcion: e.target.value })} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 p-3" /></label>
+            <label className="block text-sm">Valor del gasto<input required type="number" min="0.01" max="99999999.99" step="0.01" value={gastoForm.monto} onChange={e => setGastoForm({ ...gastoForm, monto: e.target.value })} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 p-3" /></label>
+            <label className="block text-sm">Fecha del gasto<input required type="date" value={gastoForm.fecha} onChange={e => setGastoForm({ ...gastoForm, fecha: e.target.value })} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 p-3" /></label>
+            <div className="flex justify-end gap-3"><button type="button" disabled={guardando} onClick={() => setGastoEditar(null)} className="rounded-lg border border-gray-700 px-4 py-2">Cancelar</button><button disabled={guardando || !gastoForm.descripcion.trim()} className="rounded-lg bg-orange-500 px-4 py-2 font-semibold disabled:opacity-50">{guardando ? 'Guardando…' : 'Guardar cambios'}</button></div>
+          </form>
+        </dialog>}
         <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
           <header className="flex items-center gap-3">
             <Wallet className="text-orange-500" size={25} />
@@ -264,7 +305,7 @@ export default function RecaudoSemanalPage() {
                       <p className="mt-3 text-xs text-gray-400">Solo se descuentan los gastos marcados como “Pagado con dinero del recaudo”, por su fecha y sucursal. La base fija no se utiliza.</p>
                       {resumen.faltanteParaGastos > 0 && <p role="alert" className="mt-3 text-sm text-yellow-300">Los gastos superan el efectivo retirado en {moneda(resumen.faltanteParaGastos)}. Revisa cómo se cubrió ese faltante.</p>}
                     </div>
-                    {(resumen.gastos?.length ?? 0) > 0 && <details className="mt-4 rounded-xl border border-gray-800 p-4"><summary className="cursor-pointer text-sm font-medium">Ver gastos descontados ({resumen.gastos.length})</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-gray-400"><tr><th className="p-2">Fecha</th><th className="p-2">Gasto</th><th className="p-2">Registrado por</th><th className="p-2 text-right">Valor</th>{esAdmin && <th className="p-2">Acciones</th>}</tr></thead><tbody>{resumen.gastos.map(g => <tr key={g.id} className="border-t border-gray-800"><td className="p-2">{new Date(g.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}</td><td className="p-2">{g.descripcion}</td><td className="p-2">{g.registradoPor}</td><td className="p-2 text-right">{moneda(g.monto)}</td>{esAdmin && <td className="p-2"><button type="button" disabled={guardando} onClick={() => void eliminarGasto(g)} title="Eliminar gasto" aria-label={`Eliminar gasto: ${g.descripcion}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-300 transition-colors hover:border-red-400/50 hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400 disabled:opacity-50"><Trash2 size={18} aria-hidden="true" /></button></td>}</tr>)}</tbody></table></div></details>}
+                    {(resumen.gastos?.length ?? 0) > 0 && <details className="mt-4 rounded-xl border border-gray-800 p-4"><summary className="cursor-pointer text-sm font-medium">Ver gastos descontados ({resumen.gastos.length})</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-gray-400"><tr><th className="p-2">Fecha</th><th className="p-2">Gasto</th><th className="p-2">Registrado por</th><th className="p-2 text-right">Valor</th>{esAdmin && <th className="p-2">Acciones</th>}</tr></thead><tbody>{resumen.gastos.map(g => <tr key={g.id} className="border-t border-gray-800"><td className="p-2">{new Date(g.fecha).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}</td><td className="p-2">{g.descripcion}</td><td className="p-2">{g.registradoPor}</td><td className="p-2 text-right">{moneda(g.monto)}</td>{esAdmin && <td className="p-2"><div className="flex items-center gap-2"><button type="button" disabled={guardando} onClick={() => editarGasto(g)} title="Editar gasto" aria-label={`Editar gasto: ${g.descripcion}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-orange-400/20 bg-orange-500/10 text-orange-300 transition-colors hover:border-orange-400/50 hover:bg-orange-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400 disabled:opacity-50"><SquarePen size={18} aria-hidden="true" /></button><button type="button" disabled={guardando} onClick={() => void eliminarGasto(g)} title="Eliminar gasto" aria-label={`Eliminar gasto: ${g.descripcion}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-300 transition-colors hover:border-red-400/50 hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400 disabled:opacity-50"><Trash2 size={18} aria-hidden="true" /></button></div></td>}</tr>)}</tbody></table></div></details>}
                     {resumen.retiros.length > 0 ? (
                       <div className="mt-5 overflow-x-auto rounded-xl border border-gray-800">
                         <table className="w-full text-left text-sm">
