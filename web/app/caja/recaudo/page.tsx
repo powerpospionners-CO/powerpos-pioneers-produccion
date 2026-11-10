@@ -102,6 +102,7 @@ export default function RecaudoSemanalPage() {
   const [gastoEditar, setGastoEditar] = useState<ResumenRecaudo['gastos'][number] | null>(null);
   const [gastoForm, setGastoForm] = useState({ descripcion: '', monto: '', fecha: '' });
   const dialogoGasto = useRef<HTMLDialogElement>(null);
+  const [errorGasto, setErrorGasto] = useState('');
 
   useEffect(() => {
     if (gastoEditar) dialogoGasto.current?.showModal();
@@ -189,12 +190,14 @@ export default function RecaudoSemanalPage() {
 
   const fechaGasto = (fecha: string) => new Date(fecha).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const editarGasto = (gasto: ResumenRecaudo['gastos'][number]) => {
+    setErrorGasto('');
     setGastoForm({ descripcion: gasto.descripcion, monto: String(gasto.monto), fecha: fechaGasto(gasto.fecha) });
     setGastoEditar(gasto);
   };
   const guardarGasto = async (e: FormEvent) => {
     e.preventDefault();
     if (!gastoEditar || guardando) return;
+    setErrorGasto('');
     setGuardando(true);
     try {
       await api.patch(`/financiero/movimiento/${gastoEditar.id}`, {
@@ -204,7 +207,7 @@ export default function RecaudoSemanalPage() {
       setGastoEditar(null);
       aviso('Gasto actualizado. El disponible del recaudo se recalculó.', 'exito');
       await cargar();
-    } catch (e: any) { aviso(e?.response?.data?.message || 'No se pudo editar el gasto.', 'error'); }
+    } catch (e: any) { setErrorGasto(e?.response?.data?.message || 'No se pudo editar el gasto.'); }
     finally { setGuardando(false); }
   };
 
@@ -242,6 +245,7 @@ export default function RecaudoSemanalPage() {
         {esAdmin && <dialog ref={dialogoGasto} aria-labelledby="titulo-editar-gasto" onCancel={e => { e.preventDefault(); if (!guardando) setGastoEditar(null); }} className="fixed inset-0 m-auto max-h-[90vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-gray-700 bg-gray-900 p-6 text-white shadow-2xl backdrop:bg-black/70">
           <form onSubmit={guardarGasto} className="space-y-4">
             <h2 id="titulo-editar-gasto" className="text-xl font-semibold">Editar gasto</h2>
+            {errorGasto && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{errorGasto}</p>}
             <p className="text-sm text-gray-400">Los cambios quedan en auditoría y actualizan el recaudo según la fecha del gasto.</p>
             <label className="block text-sm">Descripción<input required maxLength={250} value={gastoForm.descripcion} onChange={e => setGastoForm({ ...gastoForm, descripcion: e.target.value })} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 p-3" /></label>
             <label className="block text-sm">Valor del gasto<input required type="number" min="0.01" max="99999999.99" step="0.01" value={gastoForm.monto} onChange={e => setGastoForm({ ...gastoForm, monto: e.target.value })} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 p-3" /></label>
