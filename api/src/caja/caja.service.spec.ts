@@ -50,11 +50,25 @@ function escenario() {
     caja,
     db,
     notificaciones,
+    impresion,
     service: new CajaService(db, notificaciones as any, impresion as any),
   };
 }
 
 describe('Conciliación de caja', () => {
+  it('guarda el cierre sin depender de la impresora del escritorio', async () => {
+    const { service, db, impresion } = escenario();
+    impresion.imprimirCierreCaja.mockRejectedValue(new Error('Impresora desconectada'));
+    expect(await service.cerrarCaja(1, { montoFinal: 300, imprimir: false }, 3, false, 4)).toMatchObject({ estado: 'CERRADA', montoEsperado: 300, diferencia: 0 });
+    expect(impresion.imprimirCierreCaja).not.toHaveBeenCalled();
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 15000, maxWait: 5000 });
+  });
+  it('conserva la impresión habitual y confirma el cierre aunque falle la impresora', async () => {
+    const { service, impresion } = escenario();
+    impresion.imprimirCierreCaja.mockRejectedValue(new Error('Sin papel'));
+    expect(await service.cerrarCaja(1, { montoFinal: 300 }, 3, false, 4)).toMatchObject({ estado: 'CERRADA' });
+    expect(impresion.imprimirCierreCaja).toHaveBeenCalledTimes(1);
+  });
   it('registra la apertura con llave con usuario autenticado y alerta explícitamente manual', async () => {
     const {service,db,notificaciones}=escenario();
     await service.registrarAperturaConLlave(1,'Retirar comprobante atascado',3,4,2,'CAJERO');

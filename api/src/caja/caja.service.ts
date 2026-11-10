@@ -369,7 +369,7 @@ export class CajaService {
         productosVendidos,
         cantidadVentas: pedidosValidos.length,
       };
-    });
+    }, { timeout: 15000, maxWait: 5000 });
     const {
       caja,
       cajaActualizada,
@@ -410,29 +410,31 @@ export class CajaService {
 
     // Tirilla de cierre: efecto secundario, no debe bloquear ni hacer
     // fallar el cierre si no hay agente/impresora disponible en este momento.
-    const colilla = this.impresion
-      .imprimirCierreCaja(
-        {
-          cajeroNombre: caja.usuario.nombre,
-          sucursalNombre: caja.sucursal.nombre,
-          abiertaEn: caja.abiertaEn,
-          cerradaEn: cajaActualizada.cerradaEn,
-          montoInicial: caja.montoInicial,
-          montoFinal,
-          montoEsperado,
-          retiroEfectivo: recaudoHabilitado
-            ? { montoEsperado: totalEfectivo, montoRetirado }
-            : null,
-          diferencia,
-          totalVentas,
-          cantidadVentas,
-          ventasPorMetodoPago,
-          productosVendidos,
-        },
-        empresaId!,
-      )
-      .catch(() => this.logger.warn('No se pudo imprimir el cierre de caja'));
-    if (impresionEnEscritorio()) await colilla;
+    if (datos?.imprimir !== false) {
+      const colilla = this.impresion
+        .imprimirCierreCaja(
+          {
+            cajeroNombre: caja.usuario.nombre,
+            sucursalNombre: caja.sucursal.nombre,
+            abiertaEn: caja.abiertaEn,
+            cerradaEn: cajaActualizada.cerradaEn,
+            montoInicial: caja.montoInicial,
+            montoFinal,
+            montoEsperado,
+            retiroEfectivo: recaudoHabilitado
+              ? { montoEsperado: totalEfectivo, montoRetirado }
+              : null,
+            diferencia,
+            totalVentas,
+            cantidadVentas,
+            ventasPorMetodoPago,
+            productosVendidos,
+          },
+          empresaId!,
+        )
+        .catch(() => this.logger.warn('No se pudo imprimir el cierre de caja'));
+      if (impresionEnEscritorio()) await colilla;
+    }
 
     return {
       ...cajaActualizada,

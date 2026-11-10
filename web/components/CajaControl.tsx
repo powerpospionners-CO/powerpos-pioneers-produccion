@@ -8,6 +8,8 @@ import CalculadoraBilletes from './CalculadoraBilletes';
 import { useNotificar } from './Notificaciones';
 import RegistroAperturaLlave from './RegistroAperturaLlave';
 import EscritorioEstado from './EscritorioEstado';
+import { guardarCierreCaja, imprimirCierreGuardado } from '@/lib/cierreCaja';
+import { useAuthStore } from '@/store/authStore';
 
 type Caja = {
   id: number;
@@ -27,6 +29,7 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
   onCambio: () => void;
 }) {
   const { aviso } = useNotificar();
+  const rol = useAuthStore((s) => s.usuario?.rol);
   const [montoInicial, setMontoInicial] = useState('');
   const [configRecaudo, setConfigRecaudo] = useState<{ habilitado: boolean; baseEfectivoCaja: number | null } | null>(null);
   const [montoRetirado, setMontoRetirado] = useState('');
@@ -86,14 +89,16 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
     if (!caja) return;
     setOcupado(true); setError('');
     try {
-      await api.post(`/caja/${caja.id}/cerrar`, {
+      const cierre = await guardarCierreCaja(caja.id, {
         montoFinal,
         ...(recaudoActivo ? { montoRetirado: Number(montoRetirado) } : {}),
       });
       setModalCierre(false);
       onCambio();
+      aviso(cierre.recuperado ? 'Se verificó que la caja ya quedó cerrada. Revisa la colilla antes de reimprimir.' : 'Caja cerrada correctamente.', 'exito');
+      if (cierre.impresionLocal) void imprimirCierreGuardado(caja.id, rol).then(advertencia => { if (advertencia) aviso(advertencia, 'error'); });
     } catch (e: any) {
-      setError(e?.response?.data?.message || 'No se pudo cerrar la caja.');
+      setError(e?.response?.data?.message || e?.message || 'No se pudo confirmar el cierre de la caja.');
     } finally { setOcupado(false); }
   };
 

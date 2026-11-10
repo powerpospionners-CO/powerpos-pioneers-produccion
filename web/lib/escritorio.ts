@@ -1,7 +1,7 @@
 export function rutaImpresionEscritorio(ruta: string) {
   return (
     /^\/impresion\/(ticket|comanda|comandas|abrir-cajon)$/.test(ruta) ||
-    /^\/caja\/(\d+\/(cerrar|reimprimir-cierre)|reimprimir-mi-cierre)$/.test(
+    /^\/caja\/(\d+\/reimprimir-cierre|reimprimir-mi-cierre)$/.test(
       ruta,
     )
   );

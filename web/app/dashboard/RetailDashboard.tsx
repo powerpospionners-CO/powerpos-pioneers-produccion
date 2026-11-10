@@ -9,6 +9,7 @@ import Navbar from '@/components/Navbar';
 import ModalCobro, { PagoConfirmado } from '@/components/ModalCobro';
 import { moneda } from '@/lib/formato';
 import { useAuthStore } from '@/store/authStore';
+import { guardarCierreCaja, imprimirCierreGuardado } from '@/lib/cierreCaja';
 
 type Caja = { id: number; usuarioId: number; usuario?: { nombre: string }; montoInicial: string; totalEsperado?: number; totalEfectivo?: number; recaudoEfectivoHabilitado?: boolean; baseEfectivoCaja?: number | null };
 type ConfiguracionRecaudo = { habilitado: boolean; baseEfectivoCaja: number | null };
@@ -107,15 +108,17 @@ export default function RetailDashboard() {
     if (!caja || contado === '' || Number(contado) < 0) return;
     setOcupado(true); setError('');
     try {
-      await api.post(`/caja/${caja.id}/cerrar`, {
+      const cierre = await guardarCierreCaja(caja.id, {
         montoFinal: Number(contado),
         ...(caja.recaudoEfectivoHabilitado ? { montoRetirado: Number(montoRetirado) } : {}),
       });
       setContado('');
       setMontoRetirado('');
+      aviso(cierre.recuperado ? 'Se verificó que la caja ya quedó cerrada. Revisa la colilla antes de reimprimir.' : 'Caja cerrada correctamente.', 'exito');
+      if (cierre.impresionLocal) void imprimirCierreGuardado(caja.id, usuario?.rol).then(advertencia => { if (advertencia) aviso(advertencia, 'error'); });
       await cargar();
     }
-    catch (e: any) { setError(e?.response?.data?.message || 'No se pudo cerrar la caja.'); }
+    catch (e: any) { setError(e?.response?.data?.message || e?.message || 'No se pudo confirmar el cierre de la caja.'); }
     finally { setOcupado(false); }
   };
 
