@@ -61,11 +61,45 @@ function origenPagina(url, origen) {
     return (
       Object.values(ORIGENES).includes(origen) &&
       u.origin === origen &&
-      u.protocol === "https:"
+      u.protocol === "https:" && !u.username && !u.password
     );
   } catch {
     return false;
   }
+}
+function sitioPagina(url) {
+  return Object.keys(ORIGENES).find((sitio) => origenPagina(url, ORIGENES[sitio]));
+}
+function navegacionPermitida(url, sitio) {
+  const destino = sitioPagina(url);
+  if (!destino || !Object.hasOwn(ORIGENES, sitio)) return false;
+  if (sitio === "general" || destino === sitio) return true;
+  // La web usa el login central incluso al salir de una empresa.
+  const ruta = new URL(url).pathname;
+  return destino === "general" && (ruta === "/login" || ruta === "/superadmin");
+}
+function tipoVentana(url, origen) {
+  if (!sitioPagina(origen)) return "bloqueada";
+  if (url === "about:blank") return "recibo";
+  try {
+    const u = new URL(url);
+    if (u.origin === new URL(origen).origin && origenPagina(url, u.origin))
+      return ["/cliente", "/llamado"].includes(u.pathname) ? "pantalla" : "interna";
+    if (u.protocol === "https:" && !u.username && !u.password && !sitioPagina(url))
+      return "externa";
+  } catch {}
+  return "bloqueada";
+}
+function bytesTrabajo(t) {
+  if (!t || !["TICKET", "COMANDA", "CAJON", "CIERRE"].includes(t.tipo) ||
+      typeof t.datosBase64 !== "string" || !t.datosBase64.length ||
+      t.datosBase64.length > 14 * 1024 * 1024 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(t.datosBase64))
+    throw Error("Trabajo de impresión no válido");
+  const bytes = Buffer.from(t.datosBase64, "base64");
+  if (!bytes.length || bytes.length > 10 * 1024 * 1024)
+    throw Error("Documento de impresión demasiado grande");
+  return bytes;
 }
 module.exports = {
   ORIGENES,
@@ -73,4 +107,8 @@ module.exports = {
   ipPrivada,
   validarSolicitud,
   origenPagina,
+  sitioPagina,
+  navegacionPermitida,
+  tipoVentana,
+  bytesTrabajo,
 };

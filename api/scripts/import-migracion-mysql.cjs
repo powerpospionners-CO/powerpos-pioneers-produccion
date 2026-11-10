@@ -71,7 +71,7 @@ function normalizar(f, valor) {
   return valor;
 }
 function validarSnapshot(snapshot) {
-  if (snapshot.formato !== 1 || snapshot.motorOrigen !== 'postgresql' || snapshot.esquema !== hash(modelos)) throw Error('Esquema del respaldo diferente');
+  if (snapshot.formato !== 1 || !['postgresql', 'mysql'].includes(snapshot.motorOrigen) || snapshot.esquema !== hash(modelos)) throw Error('Esquema del respaldo diferente');
   if (Object.keys(snapshot.tablas).length !== modelos.length) throw Error('Respaldo incompleto');
   const datos = new Map();
   for (const m of modelos) {

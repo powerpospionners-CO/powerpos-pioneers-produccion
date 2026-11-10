@@ -14,6 +14,15 @@ function esAutomatica(valor: Prisma.JsonValue | null) {
   );
 }
 
+function verificarRespuestaProveedor(respuesta: Response) {
+  const conservada = ' La empresa está guardada; después usa Preparar sedes pendientes para continuar sin duplicarla.';
+  if (respuesta.status === 401 || respuesta.status === 403)
+    throw new ServiceUnavailableException('Hostinger rechazó el token de creación de bases. Revisa su vigencia y permisos y actualízalo en las variables privadas del servidor.' + conservada);
+  if (respuesta.status === 429)
+    throw new ServiceUnavailableException('Hostinger limitó temporalmente las solicitudes. Espera unos minutos antes de reintentar.' + conservada);
+  if (!respuesta.ok) throw new Error('PROVEEDOR_NO_DISPONIBLE');
+}
+
 export function configuracionHostinger() {
   const cuenta = process.env.HOSTINGER_ACCOUNT || '';
   const token = process.env.HOSTINGER_API_TOKEN || '';
@@ -124,7 +133,7 @@ export async function asegurarBaseHostinger(
           endpoint + '?search=' + encodeURIComponent(nombre) + '&per_page=100',
           { headers, signal: AbortSignal.timeout(20000), redirect: 'error' },
         );
-        if (!listado.ok) throw new Error();
+        verificarRespuestaProveedor(listado);
         const respuesta = (await listado.json()) as {
           data?: Array<{ name: string; user: string }>;
         };
@@ -147,8 +156,9 @@ export async function asegurarBaseHostinger(
             website_domain: config.dominio,
           }),
         });
-        if (!creada.ok) throw new Error();
-      } catch {
+        verificarRespuestaProveedor(creada);
+      } catch (error) {
+        if (error instanceof ServiceUnavailableException) throw error;
         // No imprimir respuestas del proveedor: pueden contener datos de conexión.
         throw new ServiceUnavailableException(
           'No se pudo confirmar la creación de la base en Hostinger. La empresa está guardada; usa Preparar sedes pendientes para reintentar sin duplicarla.',

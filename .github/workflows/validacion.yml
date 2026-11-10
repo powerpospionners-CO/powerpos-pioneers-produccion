@@ -39,6 +39,7 @@ jobs:
       - run: npm ci
       - run: npm test -- --runInBand
       - run: npm run test:operacion
+      - run: node --test scripts/export-migracion-mysql.test.cjs scripts/import-migracion-mysql.test.cjs
       - run: npm run test:e2e -- --runInBand
       - run: npm run build
       - run: npx prisma db push --skip-generate
@@ -48,6 +49,9 @@ jobs:
       - run: npm run build:mysql
       - run: npx prisma db push --schema prisma/mysql/schema.prisma --skip-generate
       - run: node test/pos-integracion.cjs
+        env:
+          POS_TEST_DATABASE_URL: mysql://root:solo_ci@127.0.0.1:55440/powerpos_pos_test
+      - run: node scripts/probar-restauracion-mysql.cjs
         env:
           POS_TEST_DATABASE_URL: mysql://root:solo_ci@127.0.0.1:55440/powerpos_pos_test
   web:

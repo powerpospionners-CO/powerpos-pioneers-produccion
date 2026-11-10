@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, dialog, shell, safeStorage, powerMonitor } = require("electron");
 const fs = require("node:fs/promises"),
   path = require("node:path");
 const {
@@ -6,8 +6,38 @@ const {
   ipPrivada,
   validarSolicitud,
   origenPagina,
+  sitioPagina,
+  navegacionPermitida,
+  tipoVentana,
+  bytesTrabajo,
 } = require("./seguridad.cjs");
 const { buscar, enviar, crearCola } = require("./impresora.cjs");
+const { crearAgente } = require("./agente.cjs");
+const { enviarWindows } = require("./windows.cjs");
+const { localizar, normalizarMac, crearRevisionDiaria } = require("./red-impresora.cjs");
+let estadoRed = "Sin comprobar", relojRed;
+const red = { localizar };
+async function actualizarImpresora() {
+  if (smoke || !config.impresora || config.impresoraWindows) return;
+  const encontrada = await red.localizar(config);
+  if (config.impresora !== encontrada.ip || config.impresoraMac !== encontrada.mac) {
+    const anterior = { ...config };
+    config.impresora = encontrada.ip;
+    config.impresoraMac = encontrada.mac;
+    try { await guardar(); } catch (e) { config = anterior; throw e; }
+  }
+  estadoRed = "Impresora verificada: " + encontrada.ip;
+}
+const revisionDiaria = crearRevisionDiaria({ ejecutar: () => cola(actualizarImpresora), informar: (mensaje) => { estadoRed = mensaje; } });
+const transporte = { solicitar: (...args) => fetch(...args), enviar: (...args) => enviar(...args) };
+const enlaces = { abrir: (url) => shell.openExternal(url) };
+function abrirExterno(url) {
+  void enlaces.abrir(url).catch(() => {
+    if (!ventana?.isDestroyed()) void dialog.showMessageBox(ventana, { type: "warning", message: "No se pudo abrir el enlace en el navegador de Windows." });
+  });
+}
+const auxiliares = new Set();
+let agente, revision = 0, estadoAgente = "Recepción automática desactivada";
 let ventana,
   config = {},
   archivo,
@@ -17,7 +47,10 @@ const cola = crearCola(),
   smoke = process.argv.includes("--smoke-test");
 const salidaSmoke =
   process.env.POWERPOS_SMOKE_DIR || path.join(__dirname, "dist");
-if (smoke) app.disableHardwareAcceleration();
+if (smoke) {
+  app.disableHardwareAcceleration();
+  app.setPath("userData", path.join(salidaSmoke, "perfil-pruebas"));
+}
 const setup = path.join(__dirname, "setup.html");
 function esSetup(event) {
   return (
@@ -30,11 +63,51 @@ function esSitio(event) {
   return (
     event.sender === ventana?.webContents &&
     event.senderFrame === ventana.webContents.mainFrame &&
-    origenPagina(event.senderFrame.url, ORIGENES[config.sitio])
+    (config.sitio === "general" ? !!sitioPagina(event.senderFrame.url) :
+      origenPagina(event.senderFrame.url, ORIGENES[config.sitio]))
   );
 }
 async function guardar() {
-  await fs.writeFile(archivo, JSON.stringify(config, null, 2), { mode: 0o600 });
+  const temporal = archivo + ".tmp";
+  await fs.writeFile(temporal, JSON.stringify(config, null, 2), { mode: 0o600 });
+  await fs.rename(temporal, archivo);
+}
+function cerrarAuxiliares() {
+  for (const w of auxiliares) if (!w.isDestroyed()) w.destroy();
+}
+function iniciarAgente() {
+  agente?.detener();
+  agente = undefined;
+  estadoAgente = "Recepción automática desactivada";
+  if (!config.tokenAgenteCifrado || (!config.impresora && !config.impresoraWindows) || smoke) return;
+  try {
+    const token = safeStorage.decryptString(Buffer.from(config.tokenAgenteCifrado, "base64"));
+    const version = revision;
+    agente = crearAgente({ token,
+      imprimir: (bytes, vigente) => enviarLocal(bytes, version, vigente),
+      estado: (valor) => { if (version === revision) estadoAgente = valor; },
+    });
+    agente.terminado.catch(() => { estadoAgente = "No se pudo iniciar la recepción automática"; });
+  } catch { estadoAgente = "Vuelve a guardar el token de recepción automática en este usuario de Windows"; }
+}
+async function enviarLocal(bytes, version, vigente = () => true) {
+  return cola(async () => {
+    if (version !== revision || !vigente()) throw Error("La configuración cambió o el trabajo venció. Revisa el documento antes de reimprimir.");
+    if (config.impresoraWindows) return enviarWindows(config.impresoraWindows, bytes);
+    if (!config.impresora) throw Error("Selecciona una impresora de red o usa la impresión de Windows.");
+    if (!smoke) await actualizarImpresora();
+    if (version !== revision || !vigente()) throw Error("El trabajo venció durante la verificación de la impresora. Vuelve a solicitarlo.");
+    try { await transporte.enviar(config.impresora, bytes); }
+    catch (e) {
+      if (!e.antesDeEnviar) throw Error("No se confirmó el envío. Revisa la tirilla antes de reimprimir para evitar duplicados.");
+      const encontrada = await red.localizar(config);
+      if (version !== revision || !vigente()) throw Error("El trabajo venció durante la búsqueda. Revisa la impresora y vuelve a solicitarlo.");
+      config.impresora = encontrada.ip;
+      config.impresoraMac = encontrada.mac;
+      await guardar();
+      await transporte.enviar(config.impresora, bytes);
+    }
+  });
 }
 async function descubrir() {
   if (!buscando)
@@ -44,6 +117,7 @@ async function descubrir() {
   return buscando;
 }
 async function mostrarSetup() {
+  cerrarAuxiliares();
   await ventana.loadFile(setup);
 }
 async function sitio() {
@@ -55,7 +129,12 @@ ipcMain.handle("powerpos:estado", (event) => {
   return {
     sitio: config.sitio || "trailer",
     impresora: config.impresora || "",
+    impresoraWindows: config.impresoraWindows || "",
     version: app.getVersion(),
+    agenteConfigurado: !!config.tokenAgenteCifrado,
+    estadoAgente,
+    impresoraMac: config.impresoraMac || "",
+    estadoRed,
   };
 });
 ipcMain.handle("powerpos:configurar", async (event) => {
@@ -67,15 +146,59 @@ ipcMain.handle("powerpos:buscar-impresoras", async (event) => {
   if (!esSetup(event)) throw Error("Origen no autorizado");
   return descubrir();
 });
+ipcMain.handle("powerpos:impresoras-windows", async (event) => {
+  if (!esSetup(event)) throw Error("Origen no autorizado");
+  return (await ventana.webContents.getPrintersAsync()).map((p) => ({ nombre: p.name, predeterminada: p.isDefault }));
+});
+async function validarImpresoraWindows(nombre) {
+  if (typeof nombre !== "string" || !(await ventana.webContents.getPrintersAsync()).some((p) => p.name === nombre))
+    throw Error("Selecciona una impresora instalada en Windows.");
+}
+ipcMain.handle("powerpos:probar-impresora", async (event, datos) => {
+  if (!esSetup(event)) throw Error("Origen no autorizado");
+  if (datos?.nombre) await validarImpresoraWindows(datos.nombre);
+  else if (!ipPrivada(datos?.ip)) throw Error("Escribe una IP privada válida o selecciona la impresora de Windows.");
+  const bytes = Buffer.from("\x1b@PowerPOS " + app.getVersion() + "\nPRUEBA DE IMPRESION\nConexion local de Windows\nSin apertura del cajon\n\n\n\x1dVA\x03", "ascii");
+  await cola(() => datos.nombre ? enviarWindows(datos.nombre, bytes) : enviar(datos.ip, bytes));
+  return { enviado: true };
+});
 ipcMain.handle("powerpos:guardar-configuracion", async (event, datos) => {
   if (
     !esSetup(event) ||
     !Object.hasOwn(ORIGENES, datos?.sitio) ||
-    !ipPrivada(datos?.impresora)
+    (datos?.impresora !== "" && !ipPrivada(datos?.impresora)) ||
+    (datos?.tokenAgente && !/^[a-fA-F0-9]{64}$/.test(datos.tokenAgente))
   )
-    throw Error("Selecciona empresa e impresora de red válidas");
-  config = { sitio: datos.sitio, impresora: datos.impresora };
-  await guardar();
+    throw Error("Selecciona una empresa y una impresora válida. El token debe tener 64 caracteres hexadecimales.");
+  const nueva = { sitio: datos.sitio, impresora: datos.impresora };
+  if (datos.impresoraWindows) {
+    await validarImpresoraWindows(datos.impresoraWindows);
+    nueva.impresoraWindows = datos.impresoraWindows;
+    nueva.impresora = "";
+  }
+  if (nueva.impresora) {
+    // Guardar confirma explícitamente la selección inicial o el reemplazo físico.
+    const identidad = await red.localizar({ impresora: nueva.impresora });
+    nueva.impresoraMac = identidad.mac;
+  }
+  if (!datos.quitarAgente && datos.sitio === config.sitio && config.tokenAgenteCifrado)
+    nueva.tokenAgenteCifrado = config.tokenAgenteCifrado;
+  if (datos.tokenAgente && !datos.quitarAgente) {
+    if (!nueva.impresora && !nueva.impresoraWindows) throw Error("La recepción automática necesita una impresora de red o de Windows.");
+    if (!safeStorage.isEncryptionAvailable()) throw Error("Windows no pudo proteger el token. Revisa la sesión de Windows.");
+    nueva.tokenAgenteCifrado = safeStorage.encryptString(datos.tokenAgente).toString("base64");
+  }
+  if (!nueva.impresora && !nueva.impresoraWindows) delete nueva.tokenAgenteCifrado;
+  // No cambiar de destino mientras se están enviando bytes.
+  await cola(async () => {
+    const anterior = config;
+    config = nueva;
+    try { await guardar(); } catch (e) { config = anterior; throw e; }
+    revision++;
+    cerrarAuxiliares();
+    iniciarAgente();
+  });
+  void revisionDiaria(true).catch(() => {});
   await sitio();
   return true;
 });
@@ -84,10 +207,12 @@ ipcMain.handle("powerpos:imprimir", async (event, solicitud) => {
     throw Error("Solo el POS de la empresa seleccionada puede imprimir");
   const s = validarSolicitud(
     solicitud,
-    config.sitio === "trailer" ? 1 : config.sitio === "enchila" ? 2 : undefined,
+    (config.sitio === "general" ? sitioPagina(event.senderFrame.url) : config.sitio) === "trailer" ? 1 :
+      (config.sitio === "general" ? sitioPagina(event.senderFrame.url) : config.sitio) === "enchila" ? 2 : undefined,
   );
+  const version = revision;
   // Los bytes se obtienen directamente de la API HTTPS fija; el renderer no puede enviar bytes ni elegir hosts.
-  const respuesta = await fetch("https://api.powerpospioneers.com" + s.ruta, {
+  const respuesta = await transporte.solicitar("https://api.powerpospioneers.com" + s.ruta, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -108,39 +233,10 @@ ipcMain.handle("powerpos:imprimir", async (event, solicitud) => {
     return { status: respuesta.status, data: cuerpo };
   if (cuerpo.trabajos.length > 4)
     throw Error("Respuesta de impresión inesperada");
-  const trabajos = cuerpo.trabajos.map((t) => {
-    if (
-      !["TICKET", "COMANDA", "CAJON", "CIERRE"].includes(t.tipo) ||
-      typeof t.datosBase64 !== "string" ||
-      t.datosBase64.length > 14 * 1024 * 1024 ||
-      !/^[A-Za-z0-9+/]*={0,2}$/.test(t.datosBase64)
-    )
-      throw Error("Trabajo de impresión no válido");
-    return Buffer.from(t.datosBase64, "base64");
-  });
+  const trabajos = cuerpo.trabajos.map(bytesTrabajo);
   const { trabajos: omitidos, ...resultado } = cuerpo;
   try {
-    await cola(async () => {
-      const bytes = Buffer.concat(trabajos);
-      try {
-        await enviar(config.impresora, bytes);
-      } catch (e) {
-        if (!e.antesDeEnviar)
-          throw Error(
-            "No se confirmó el envío. Revisa la tirilla antes de reimprimir para evitar duplicados.",
-          );
-        const ips = await descubrir();
-        if (ips.length !== 1)
-          throw Error(
-            ips.length
-              ? "Hay varias impresoras. Selecciona la correcta en Archivo → Configurar impresora."
-              : "No se encontró la impresora. Revisa que esté encendida y en la misma red.",
-          );
-        config.impresora = ips[0];
-        await guardar();
-        await enviar(config.impresora, bytes);
-      }
-    });
+    await enviarLocal(Buffer.concat(trabajos), version);
     return {
       status: respuesta.status,
       data: {
@@ -161,7 +257,7 @@ ipcMain.handle("powerpos:imprimir", async (event, solicitud) => {
         impreso: false,
         abierto: false,
         modo: "escritorio",
-        fallbackBrowser: false,
+        fallbackBrowser: !config.impresora && !config.impresoraWindows && !s.ruta.endsWith("abrir-cajon"),
         motivo: e.message,
       },
     };
@@ -169,14 +265,41 @@ ipcMain.handle("powerpos:imprimir", async (event, solicitud) => {
 });
 app.on("web-contents-created", (_event, contenido) => {
   contenido.on("will-attach-webview", (event) => event.preventDefault());
-  contenido.setWindowOpenHandler(() => ({ action: "deny" }));
+  contenido.setWindowOpenHandler(({ url }) => {
+    if (contenido !== ventana?.webContents || !esOrigenActual(contenido.getURL())) return { action: "deny" };
+    const tipo = tipoVentana(url, contenido.getURL());
+    if (["recibo", "pantalla", "interna"].includes(tipo) && auxiliares.size < 6) return {
+      action: "allow", overrideBrowserWindowOptions: {
+        show: !smoke, autoHideMenuBar: true, title: "PowerPOS",
+        webPreferences: { preload: undefined, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false },
+      },
+    };
+    if (tipo === "externa") abrirExterno(url);
+    return { action: "deny" };
+  });
+  contenido.on("did-create-window", (w) => {
+    auxiliares.add(w);
+    w.on("closed", () => auxiliares.delete(w));
+    // Las pantallas secundarias no reciben el puente de impresión/configuración.
+  });
+  const controlarNavegacion = (event, url) => {
+    if (!navegacionPermitida(url, config.sitio)) {
+      event.preventDefault();
+      if (contenido === ventana?.webContents && esOrigenActual(contenido.getURL()) && tipoVentana(url, contenido.getURL()) === "externa") abrirExterno(url);
+      return;
+    }
+    if (contenido === ventana?.webContents && new URL(url).pathname === "/login") cerrarAuxiliares();
+  };
   contenido.on("will-navigate", (event, url) => {
-    if (!origenPagina(url, ORIGENES[config.sitio])) event.preventDefault();
+    controlarNavegacion(event, url);
   });
   contenido.on("will-redirect", (event, url) => {
-    if (!origenPagina(url, ORIGENES[config.sitio])) event.preventDefault();
+    controlarNavegacion(event, url);
   });
 });
+function esOrigenActual(url) {
+  return config.sitio === "general" ? !!sitioPagina(url) : origenPagina(url, ORIGENES[config.sitio]);
+}
 if (!app.requestSingleInstanceLock() && !smoke) app.quit();
 else
   app
@@ -188,8 +311,11 @@ else
       );
       try {
         const c = JSON.parse(await fs.readFile(archivo, "utf8"));
-        if (Object.hasOwn(ORIGENES, c.sitio) && ipPrivada(c.impresora))
-          config = c;
+        if (Object.hasOwn(ORIGENES, c.sitio) && (c.impresora === "" || ipPrivada(c.impresora)))
+          config = { sitio: c.sitio, impresora: c.impresora,
+            ...(normalizarMac(c.impresoraMac) ? { impresoraMac: normalizarMac(c.impresoraMac) } : {}),
+            ...(typeof c.impresoraWindows === "string" && c.impresoraWindows.length <= 256 && !/[\x00-\x1f]/.test(c.impresoraWindows) ? { impresoraWindows: c.impresoraWindows } : {}),
+            ...(typeof c.tokenAgenteCifrado === "string" && c.tokenAgenteCifrado.length < 8192 ? { tokenAgenteCifrado: c.tokenAgenteCifrado } : {}) };
       } catch {}
       ventana = new BrowserWindow({
         width: 1440,
@@ -212,6 +338,10 @@ else
         (_c, _p, callback) => callback(false),
       );
       ventana.webContents.session.setPermissionCheckHandler(() => false);
+      ventana.webContents.session.on("will-download", (_e, item) => {
+        item.setSaveDialogOptions({ title: "Guardar archivo de PowerPOS", defaultPath: path.join(app.getPath("downloads"), path.basename(item.getFilename())) });
+      });
+      ventana.on("closed", cerrarAuxiliares);
       Menu.setApplicationMenu(
         Menu.buildFromTemplate([
           {
@@ -223,6 +353,10 @@ else
                 click: () => (config.sitio ? sitio() : mostrarSetup()),
               },
               { type: "separator" },
+              { label: "Acerca de PowerPOS", click: () => dialog.showMessageBox(ventana, {
+                type: "info", title: "PowerPOS", message: "PowerPOS " + app.getVersion(),
+                detail: "Sistema conectado a Hostinger.\n" + estadoAgente + "\nImpresora: " + (config.impresoraWindows || config.impresora || "Ventana de impresión manual") + "\n" + estadoRed,
+              }) },
               { role: "quit", label: "Salir" },
             ],
           },
@@ -260,6 +394,8 @@ else
           await new Promise((r) => setTimeout(r, 50));
         if (!puenteComprobado) throw Error("El puente seguro no respondió");
         await fs.mkdir(salidaSmoke, { recursive: true });
+        config = { sitio: "trailer", impresora: "192.168.1.200" };
+        const integracion = await require("./smoke.cjs").comprobar({ ventana, auxiliares, salida: salidaSmoke, transporte, enlaces });
         if (process.env.POWERPOS_SMOKE_CAPTURE !== "0") {
         const imagen = await ventana.webContents.capturePage();
         await fs.writeFile(
@@ -277,18 +413,28 @@ else
               ventana.webContents.getLastWebPreferences().contextIsolation,
             nodeIntegration:
               ventana.webContents.getLastWebPreferences().nodeIntegration,
+            version: app.getVersion(),
+            integracion,
           }),
         );
         app.quit();
-      } else if (config.sitio) await sitio();
+      } else if (config.sitio) {
+        void revisionDiaria(true).catch(() => {});
+        iniciarAgente(); await sitio();
+      }
       else await mostrarSetup();
+      if (!smoke) {
+        relojRed = setInterval(() => { void revisionDiaria().catch(() => {}); }, 60000);
+        relojRed.unref();
+        powerMonitor.on("resume", () => { void revisionDiaria(true).catch(() => {}); });
+      }
     })
     .catch(async (error) => {
       if (smoke) {
         await fs.mkdir(salidaSmoke, { recursive: true });
         await fs.writeFile(
           path.join(salidaSmoke, "error-smoke.txt"),
-          String(error.message),
+          String(error.stack || error.message),
         );
         app.exit(1);
       } else {
@@ -300,3 +446,4 @@ else
       }
     });
 app.on("window-all-closed", () => app.quit());
+app.on("before-quit", () => { agente?.detener(); clearInterval(relojRed); });

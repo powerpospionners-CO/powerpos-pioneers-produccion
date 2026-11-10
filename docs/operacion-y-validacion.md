@@ -27,6 +27,18 @@ El canal reduce la dependencia de un proceso, pero no reemplaza el inventario ni
 
 ## Comprobar servicio y respaldos
 
+El exportador `api/scripts/export-migracion-mysql.cjs` admite PostgreSQL y MySQL.
+Para MySQL requiere generar primero su cliente (`npm run build:mysql`).
+Usa `MIGRACION_ORIGEN_URL` con una cuenta de lectura y ejecuta una copia por base:
+`node scripts/export-migracion-mysql.cjs control` o `sede-EMPRESA-SUCURSAL`.
+`BACKUP_DIRECTORY` elige el destino privado; `BACKUP_KEY_DIRECTORY` debe apuntar
+a una ubicación privada separada para las claves. La etiqueta no selecciona la
+conexión: hay que indicar la URL correspondiente a cada base.
+Cada copia genera un manifiesto de integridad y se descifra y compara antes de
+declararse válida. No incluye imágenes ni sustituye la prueba de restauración.
+La validación del importador admite copias de ambos motores y se niega a cargar
+en tablas que ya tienen datos; no restaura encima de producción.
+
 `npm run verificar:operacion` lee `POWERPOS_HEALTH_URL` (terminada en `/health/ready`) y/o `BACKUP_MANIFEST_PATH`. Devuelve JSON y código de salida 1 si falla, para conectarlo al monitor del servidor. `BACKUP_MAX_HOURS` permite cambiar el máximo predeterminado de 36 horas.
 
 El manifiesto debe acompañar los archivos cifrados y tener este formato:

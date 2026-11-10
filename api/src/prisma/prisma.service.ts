@@ -341,8 +341,18 @@ export class PrismaService
           ),
         );
       } catch (error) {
+        let destino = 'NO_DISPONIBLE';
+        let central = 'NO_DISPONIBLE';
+        if (codigoErrorOperacion(error) === 'P1001') {
+          try {
+            const url = new URL(descifrarConexion(sede.conexionCifrada, sede.empresaId, sede.sucursalId));
+            destino = `${url.hostname}:${url.port || 'PREDETERMINADO'}`;
+            const control = new URL(process.env.DATABASE_URL || '');
+            central = `${control.hostname}:${control.port || 'PREDETERMINADO'}`;
+          } catch { /* Nunca registrar la conexión completa. */ }
+        }
         console.error(
-          `No se pudo ejecutar el proceso automático de la sede ${sede.sucursalId}; proceso=${/^[A-Z_]{1,40}$/.test(proceso) ? proceso : 'GENERAL'}; fase=${fase}; codigo=${codigoErrorOperacion(error)}`,
+          `No se pudo ejecutar el proceso automático de la sede ${sede.sucursalId}; proceso=${/^[A-Z_]{1,40}$/.test(proceso) ? proceso : 'GENERAL'}; fase=${fase}; codigo=${codigoErrorOperacion(error)}; servidor=${destino}; central=${central}`,
         );
       }
     }

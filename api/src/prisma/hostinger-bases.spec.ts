@@ -68,6 +68,18 @@ describe('Creación automática Hostinger', () => {
     delete process.env.HOSTINGER_API_TOKEN;
     expect(() => configuracionHostinger()).toThrow('Configura');
   });
+  it.each([401, 403])('informa token rechazado (%s) sin mostrar respuestas privadas ni recrear la empresa', async (status) => {
+    fetchMock.mockResolvedValue(Response.json({ token: 'no-mostrar' }, { status }));
+    await expect(preparar()).rejects.toThrow('Revisa su vigencia y permisos');
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(registro.conexionCifrada).toMatch(/^v1\./);
+  });
+  it('explica el límite temporal del proveedor y conserva la reserva', async () => {
+    fetchMock.mockResolvedValue(Response.json({}, { status: 429 }));
+    await expect(preparar()).rejects.toThrow('Espera unos minutos');
+    expect(create).toHaveBeenCalledTimes(1);
+  });
   it('reserva credenciales cifradas antes de crear una base y usuario exclusivos', async () => {
     fetchMock.mockImplementation((_url, opciones) => {
       expect(registro?.conexionCifrada).toMatch(/^v1\./);

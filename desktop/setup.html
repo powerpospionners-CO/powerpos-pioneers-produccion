@@ -100,18 +100,38 @@
             <option value="trailer">Trailer del Sabor</option>
             <option value="enchila">Enchila Market Pereira</option>
             <option value="general">Acceso general PowerPOS</option>
-          </select></label
-        ><label
+          </select></label>
+        <label>Conexión de la impresora<select id="modo">
+          <option value="red">Impresora de red por IP</option>
+          <option value="windows">Impresora térmica instalada en Windows (USB o compartida)</option>
+        </select></label>
+        <div id="panel-windows" hidden>
+          <label>Impresora de Windows<select id="impresora-windows"><option value="">Selecciona la impresora</option></select></label>
+          <button id="actualizar-windows" type="button" class="secondary">Actualizar lista de impresoras</button>
+          <small>Instala primero el controlador del fabricante. La impresora seleccionada debe ser térmica compatible con ESC/POS. La cola de Windows admite el envío; confirma físicamente el papel y el cajón con una prueba.</small>
+        </div>
+        <div id="panel-red"><label
           >IP de la impresora de red<input
             id="impresora"
             placeholder="Ejemplo: 192.168.18.228"
-            required
             autocomplete="off"
             list="impresoras" /></label
         ><datalist id="impresoras"></datalist
         ><button id="buscar" type="button" class="secondary">
-          Buscar impresoras automáticamente</button
-        ><button id="guardar" type="submit">Guardar y abrir PowerPOS</button>
+          Buscar impresoras automáticamente</button>
+          <p id="estado-red" role="status"></p>
+          <small>PowerPOS identifica la impresora por su MAC y revisa su IP al iniciar, cada día y antes de imprimir. Si cambia, guarda la nueva IP automáticamente. La impresora debe estar encendida y en la misma red local.</small>
+        </div>
+        <button id="probar" type="button" class="secondary">Imprimir tirilla de prueba</button>
+        <details style="margin-top:24px">
+          <summary>Recepción automática de impresión</summary>
+          <p>Para imprimir cierres automáticos y trabajos enviados por el servidor, pega el token de esta empresa y sede, generado por su administrador en Configuración → Impresora en red. Usa una sola aplicación receptora por sede y cierra el agente anterior.</p>
+          <label>Token de impresión<input id="token-agente" type="password" autocomplete="off" maxlength="64" placeholder="Opcional: 64 caracteres" /></label>
+          <p id="estado-agente" role="status"></p>
+          <label><input id="quitar-agente" type="checkbox" style="width:auto" /> Desactivar recepción automática</label>
+          <small>El token se protege con tu usuario de Windows. Deja el campo vacío para conservarlo. Al cambiar de empresa se elimina el token anterior. La recepción automática requiere que PowerPOS permanezca abierto y que el servidor use su canal de agente.</small>
+        </details>
+        <button id="guardar" type="submit">Guardar y abrir PowerPOS</button>
       </form>
       <p id="estado" role="status"></p>
       <small

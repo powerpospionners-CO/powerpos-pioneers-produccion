@@ -12,6 +12,13 @@ HOSTINGER_API_TOKEN=TOKEN_PRIVADO_DE_HOSTINGER
 
 La cuenta debe coincidir con el prefijo de la base central en `DATABASE_URL`. Conservar también `SEDE_DATABASE_ENCRYPTION_KEY`, la clave existente de las conexiones. Nunca cambiar esa clave para activar esta función. El token se obtiene desde la cuenta de Hostinger, se guarda solo en el servidor y debe permitir gestionar bases de esa cuenta.
 
+El token de Hostinger tiene vigencia propia: el POS no puede renovarlo usando
+un token vencido. Renovarlo desde Hostinger antes de su vencimiento y reemplazar
+solo `HOSTINGER_API_TOKEN`, conservando cuenta, dominio y clave de cifrado.
+Un rechazo 401/403 muestra una indicación de revisar vigencia/permisos; un 429
+indica esperar. Ambos conservan la empresa y la base reservada para reintentar,
+sin pedir crear otra empresa ni revelar la respuesta privada del proveedor.
+
 La API comprueba la configuración antes de guardar una nueva empresa. Después guarda empresa y administradores en una transacción, reserva una conexión cifrada con nombre y contraseña aleatorios, crea una base con usuario propio mediante la API oficial de Hostinger y carga el esquema y los administradores. La sede solo se activa después de verificar sus datos. Las bases que ya están conectadas se conservan.
 
 Si la llamada al proveedor o la carga inicial falla, la respuesta identifica `pendienteActivacion: true`. La empresa y sus administradores están guardados. En Superadmin, abrir los administradores de esa empresa y usar **Preparar sedes pendientes**. El reintento conserva las credenciales y consulta si la base ya existe antes de solicitar otra. Nunca volver a crear la misma empresa para resolver una activación pendiente.

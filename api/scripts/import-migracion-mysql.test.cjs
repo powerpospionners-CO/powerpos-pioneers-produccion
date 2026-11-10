@@ -30,9 +30,17 @@ test('convierte listas a JSON y rechaza listas y filas incompletas', () => {
   assert.equal(normalizar(campo('String', {isList:true}), ['uno', 'dos']), '["uno","dos"]');
   assert.throws(() => normalizar(campo('String', {isList:true}), ['uno', 2]));
   const s = respaldoVacio();
-  assert.equal(validarSnapshot(s).size, 59);
+  assert.equal(validarSnapshot(s).size, modelos.length);
   s.tablas.SelloBaseSede.filas.push({id:1});
   assert.throws(() => validarSnapshot(s), /incompleta/);
+});
+
+test('acepta respaldos MySQL del esquema actual y rechaza motores desconocidos', () => {
+  const s = respaldoVacio();
+  s.motorOrigen = 'mysql';
+  assert.equal(validarSnapshot(s).size, modelos.length);
+  s.motorOrigen = 'desconocido';
+  assert.throws(() => validarSnapshot(s), /Esquema/);
 });
 test('rechaza un esquema distinto y relaciones ausentes antes de conectar', () => {
   const s = respaldoVacio();
