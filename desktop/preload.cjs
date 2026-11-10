@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld(
   "powerposDesktop",
   Object.freeze({
-    version: "1.1.1",
+    version: "1.2.0",
     imprimir: (solicitud) => ipcRenderer.invoke("powerpos:imprimir", solicitud),
     configurar: () => ipcRenderer.invoke("powerpos:configurar"),
     estado: () => ipcRenderer.invoke("powerpos:estado"),

@@ -90,18 +90,13 @@
       <img src="logo.png" alt="PowerPOS" />
       <h1>Tu caja, lista para trabajar</h1>
       <p>
-        Selecciona la empresa y la impresora de esta sede. Los recibos y el
-        cajón se controlan desde esta aplicación, sin abrir una ventana de
-        impresión.
+        Ingresa con el usuario y la contraseña de tu empresa. PowerPOS identifica
+        tu empresa y sede al iniciar sesión, incluidas las empresas nuevas.
+        Puedes configurar la impresora ahora o después desde Archivo.
       </p>
       <form id="configurar">
-        <label
-          >Empresa<select id="sitio">
-            <option value="trailer">Trailer del Sabor</option>
-            <option value="enchila">Enchila Market Pereira</option>
-            <option value="general">Acceso general PowerPOS</option>
-          </select></label>
         <label>Conexión de la impresora<select id="modo">
+          <option value="sin">Configurar impresora después</option>
           <option value="red">Impresora de red por IP</option>
           <option value="windows">Impresora térmica instalada en Windows (USB o compartida)</option>
         </select></label>
@@ -129,9 +124,9 @@
           <label>Token de impresión<input id="token-agente" type="password" autocomplete="off" maxlength="64" placeholder="Opcional: 64 caracteres" /></label>
           <p id="estado-agente" role="status"></p>
           <label><input id="quitar-agente" type="checkbox" style="width:auto" /> Desactivar recepción automática</label>
-          <small>El token se protege con tu usuario de Windows. Deja el campo vacío para conservarlo. Al cambiar de empresa se elimina el token anterior. La recepción automática requiere que PowerPOS permanezca abierto y que el servidor use su canal de agente.</small>
+          <small>El token se protege con tu usuario de Windows. Deja el campo vacío para conservarlo. Usa el token de la empresa y sede que atiende esta impresora. La recepción automática requiere que PowerPOS permanezca abierto y que el servidor use su canal de agente.</small>
         </details>
-        <button id="guardar" type="submit">Guardar y abrir PowerPOS</button>
+        <button id="guardar" type="submit">Continuar a PowerPOS</button>
       </form>
       <p id="estado" role="status"></p>
       <small

@@ -39,10 +39,10 @@ async function comprobar({ ventana, auxiliares, salida, transporte, enlaces }) {
     await esperar(() => wc.getURL() === url && !wc.isLoading());
   };
   try {
-    await ventana.loadURL(ORIGENES.trailer + "/pos");
+    await ventana.loadURL(ORIGENES.general + "/pos");
     const estado = await js("window.powerposDesktop.estado()");
-    assert.equal(estado.sitio, "trailer");
-    const token = "aaa." + Buffer.from(JSON.stringify({ empresaId: 1 })).toString("base64url") + ".ccc";
+    assert.equal(estado.sitio, "general");
+    const token = "aaa." + Buffer.from(JSON.stringify({ empresaId: 7397 })).toString("base64url") + ".ccc";
     const solicitud = JSON.stringify({ ruta: "/caja/123/cerrar", datos: {}, token });
     const cierre = await js(`window.powerposDesktop.imprimir(${solicitud})`);
     assert.equal(cierre.status, 201);
@@ -60,7 +60,7 @@ async function comprobar({ ventana, auxiliares, salida, transporte, enlaces }) {
     resultado.cierreConservadoAnteFalloDeImpresion = true;
     resultado.transporteLocalSinDuplicar = true;
     await navegar(ORIGENES.general + "/login");
-    await navegar(ORIGENES.trailer + "/auth/callback");
+    await navegar(ORIGENES.general + "/auth/callback");
     resultado.loginCentralYRetorno = true;
 
     await js("window.open('/cliente', 'powerpos-pantalla-cliente'); true");
@@ -108,18 +108,18 @@ async function comprobar({ ventana, auxiliares, salida, transporte, enlaces }) {
     await navegar(ORIGENES.general + "/login");
     assert.equal(auxiliares.size, 0);
     resultado.cierreDePantallasAlSalir = true;
-    await navegar(ORIGENES.trailer + "/pos");
+    await navegar(ORIGENES.general + "/pos");
     let bloqueada = false;
-    const detectar = (e, url) => { if (url === ORIGENES.enchila + "/pos") bloqueada = e.defaultPrevented; };
+    const detectar = (e, url) => { if (url === "https://otra-empresa.example" + "/pos") bloqueada = e.defaultPrevented; };
     wc.on("will-navigate", detectar);
-    await js(`location.href = ${JSON.stringify(ORIGENES.enchila + "/pos")}; true`);
+    await js(`location.href = ${JSON.stringify("https://otra-empresa.example" + "/pos")}; true`);
     await esperar(() => bloqueada);
     wc.removeListener("will-navigate", detectar);
-    assert.equal(wc.getURL(), ORIGENES.trailer + "/pos");
+    assert.equal(wc.getURL(), ORIGENES.general + "/pos");
     resultado.otraEmpresaBloqueada = true;
     await js("location.assign('https://checkout.wompi.co/p/?prueba=local'); true");
     await esperar(() => externos.includes("https://checkout.wompi.co/p/?prueba=local"));
-    assert.equal(wc.getURL(), ORIGENES.trailer + "/pos");
+    assert.equal(wc.getURL(), ORIGENES.general + "/pos");
     resultado.pagoExternoSinSalirDelPOS = true;
     return resultado;
   } finally { session.protocol.unhandle("https"); }

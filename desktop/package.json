@@ -1,6 +1,6 @@
 {
   "name": "powerpos-desktop",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "PowerPOS para Windows con impresión local integrada",
   "author": "PowerPOS Pioneers",
   "private": true,

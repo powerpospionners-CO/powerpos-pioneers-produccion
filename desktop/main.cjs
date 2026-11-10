@@ -6,10 +6,10 @@ const {
   ipPrivada,
   validarSolicitud,
   origenPagina,
-  sitioPagina,
   navegacionPermitida,
   tipoVentana,
   bytesTrabajo,
+  migrarConfiguracion,
 } = require("./seguridad.cjs");
 const { buscar, enviar, crearCola } = require("./impresora.cjs");
 const { crearAgente } = require("./agente.cjs");
@@ -63,8 +63,7 @@ function esSitio(event) {
   return (
     event.sender === ventana?.webContents &&
     event.senderFrame === ventana.webContents.mainFrame &&
-    (config.sitio === "general" ? !!sitioPagina(event.senderFrame.url) :
-      origenPagina(event.senderFrame.url, ORIGENES[config.sitio]))
+    origenPagina(event.senderFrame.url, ORIGENES.general)
   );
 }
 async function guardar() {
@@ -127,7 +126,7 @@ ipcMain.handle("powerpos:estado", (event) => {
   if (!esSetup(event) && !esSitio(event)) throw Error("Origen no autorizado");
   if (esSetup(event)) puenteComprobado = true;
   return {
-    sitio: config.sitio || "trailer",
+    sitio: "general",
     impresora: config.impresora || "",
     impresoraWindows: config.impresoraWindows || "",
     version: app.getVersion(),
@@ -169,7 +168,7 @@ ipcMain.handle("powerpos:guardar-configuracion", async (event, datos) => {
     (datos?.impresora !== "" && !ipPrivada(datos?.impresora)) ||
     (datos?.tokenAgente && !/^[a-fA-F0-9]{64}$/.test(datos.tokenAgente))
   )
-    throw Error("Selecciona una empresa y una impresora válida. El token debe tener 64 caracteres hexadecimales.");
+    throw Error("Configura una impresora válida o elige configurarla después. El token debe tener 64 caracteres hexadecimales.");
   const nueva = { sitio: datos.sitio, impresora: datos.impresora };
   if (datos.impresoraWindows) {
     await validarImpresoraWindows(datos.impresoraWindows);
@@ -204,12 +203,10 @@ ipcMain.handle("powerpos:guardar-configuracion", async (event, datos) => {
 });
 ipcMain.handle("powerpos:imprimir", async (event, solicitud) => {
   if (!esSitio(event))
-    throw Error("Solo el POS de la empresa seleccionada puede imprimir");
-  const s = validarSolicitud(
-    solicitud,
-    (config.sitio === "general" ? sitioPagina(event.senderFrame.url) : config.sitio) === "trailer" ? 1 :
-      (config.sitio === "general" ? sitioPagina(event.senderFrame.url) : config.sitio) === "enchila" ? 2 : undefined,
-  );
+    throw Error("Solo el portal de PowerPOS puede imprimir");
+  // La API valida la empresa/sede de la sesión. No hay IDs de clientes
+  // incorporados en el instalador ni un catálogo público de empresas.
+  const s = validarSolicitud(solicitud);
   const version = revision;
   // Los bytes se obtienen directamente de la API HTTPS fija; el renderer no puede enviar bytes ni elegir hosts.
   const respuesta = await transporte.solicitar("https://api.powerpospioneers.com" + s.ruta, {
@@ -298,7 +295,7 @@ app.on("web-contents-created", (_event, contenido) => {
   });
 });
 function esOrigenActual(url) {
-  return config.sitio === "general" ? !!sitioPagina(url) : origenPagina(url, ORIGENES[config.sitio]);
+  return origenPagina(url, ORIGENES.general);
 }
 if (!app.requestSingleInstanceLock() && !smoke) app.quit();
 else
@@ -310,8 +307,8 @@ else
         "configuracion-impresora.json",
       );
       try {
-        const c = JSON.parse(await fs.readFile(archivo, "utf8"));
-        if (Object.hasOwn(ORIGENES, c.sitio) && (c.impresora === "" || ipPrivada(c.impresora)))
+        const c = migrarConfiguracion(JSON.parse(await fs.readFile(archivo, "utf8")));
+        if (c)
           config = { sitio: c.sitio, impresora: c.impresora,
             ...(normalizarMac(c.impresoraMac) ? { impresoraMac: normalizarMac(c.impresoraMac) } : {}),
             ...(typeof c.impresoraWindows === "string" && c.impresoraWindows.length <= 256 && !/[\x00-\x1f]/.test(c.impresoraWindows) ? { impresoraWindows: c.impresoraWindows } : {}),
@@ -347,7 +344,7 @@ else
           {
             label: "Archivo",
             submenu: [
-              { label: "Configurar empresa e impresora", click: mostrarSetup },
+              { label: "Configurar impresora", click: mostrarSetup },
               {
                 label: "Volver al POS",
                 click: () => (config.sitio ? sitio() : mostrarSetup()),
@@ -394,7 +391,7 @@ else
           await new Promise((r) => setTimeout(r, 50));
         if (!puenteComprobado) throw Error("El puente seguro no respondió");
         await fs.mkdir(salidaSmoke, { recursive: true });
-        config = { sitio: "trailer", impresora: "192.168.1.200" };
+        config = { sitio: "general", impresora: "192.168.1.200" };
         const integracion = await require("./smoke.cjs").comprobar({ ventana, auxiliares, salida: salidaSmoke, transporte, enlaces });
         if (process.env.POWERPOS_SMOKE_CAPTURE !== "0") {
         const imagen = await ventana.webContents.capturePage();

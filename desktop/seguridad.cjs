@@ -1,6 +1,4 @@
 const ORIGENES = Object.freeze({
-  enchila: "https://enchilamarketpereira.powerpospioneers.com",
-  trailer: "https://trailerdelsabor.powerpospioneers.com",
   general: "https://app.powerpospioneers.com",
 });
 function rutaImpresion(ruta) {
@@ -73,10 +71,13 @@ function sitioPagina(url) {
 function navegacionPermitida(url, sitio) {
   const destino = sitioPagina(url);
   if (!destino || !Object.hasOwn(ORIGENES, sitio)) return false;
-  if (sitio === "general" || destino === sitio) return true;
-  // La web usa el login central incluso al salir de una empresa.
-  const ruta = new URL(url).pathname;
-  return destino === "general" && (ruta === "/login" || ruta === "/superadmin");
+  return destino === sitio;
+}
+function migrarConfiguracion(c) {
+  if (!c || typeof c.sitio !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(c.sitio) || (c.impresora !== '' && !ipPrivada(c.impresora))) return null;
+  // Las instalaciones anteriores conservan la impresora y pasan al portal
+  // único. No se trasladan sesiones ni tokens entre dominios.
+  return { ...c, sitio: 'general', ...(c.sitio !== 'general' ? { tokenAgenteCifrado: undefined } : {}) };
 }
 function tipoVentana(url, origen) {
   if (!sitioPagina(origen)) return "bloqueada";
@@ -111,4 +112,5 @@ module.exports = {
   navegacionPermitida,
   tipoVentana,
   bytesTrabajo,
+  migrarConfiguracion,
 };

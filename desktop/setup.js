@@ -1,6 +1,5 @@
 "use strict";
-const sitio = document.getElementById("sitio"),
-  impresora = document.getElementById("impresora"),
+const impresora = document.getElementById("impresora"),
   estado = document.getElementById("estado"),
   boton = document.getElementById("buscar");
 const modo = document.getElementById("modo"), impresoraWindows = document.getElementById("impresora-windows");
@@ -9,6 +8,7 @@ function actualizarModo() {
   document.getElementById("panel-windows").hidden = modo.value !== "windows";
   impresora.required = modo.value === "red";
   impresoraWindows.required = modo.value === "windows";
+  document.getElementById("probar").disabled = modo.value === "sin";
 }
 async function cargarWindows(seleccion = impresoraWindows.value) {
   try {
@@ -25,9 +25,8 @@ actualizarModo();
 window.powerposDesktop
   .estado()
   .then(async (c) => {
-    sitio.value = c.sitio;
     impresora.value = c.impresora;
-    modo.value = c.impresoraWindows ? "windows" : "red";
+    modo.value = c.impresoraWindows ? "windows" : c.impresora ? "red" : "sin";
     actualizarModo();
     await cargarWindows(c.impresoraWindows || "");
     document.getElementById("estado-agente").textContent = (c.agenteConfigurado ? "Token guardado. " : "") + c.estadoAgente;
@@ -52,7 +51,7 @@ boton.addEventListener("click", async () => {
     if (ips.length === 1) {
       impresora.value = ips[0];
       estado.textContent =
-        "Se encontró una impresora. Confirma la empresa y guarda.";
+        "Se encontró una impresora. Confirma que sea la de esta caja y guarda.";
     } else
       estado.textContent = ips.length
         ? "Se encontraron varias impresoras: " +
@@ -81,7 +80,7 @@ document.getElementById("configurar").addEventListener("submit", async (e) => {
   b.disabled = true;
   try {
     await window.powerposDesktop.guardarConfiguracion({
-      sitio: sitio.value,
+      sitio: "general",
       impresora: modo.value === "red" ? impresora.value.trim() : "",
       impresoraWindows: modo.value === "windows" ? impresoraWindows.value : "",
       tokenAgente: document.getElementById("token-agente").value.trim(),

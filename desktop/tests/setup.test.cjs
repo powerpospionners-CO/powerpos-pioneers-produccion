@@ -1,0 +1,24 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const fs=require('node:fs');
+test('instalación nueva sin directorio de empresas ni IP obligatoria', async()=>{
+ const html=fs.readFileSync(require.resolve('../setup.html'),'utf8');
+ assert.doesNotMatch(html,/id="sitio"/);
+ const elementos=new Map();
+ const elemento=(id)=>{if(!elementos.has(id)) elementos.set(id,{value:id==='modo'?'sin':'',listeners:{},addEventListener(tipo,fn){this.listeners[tipo]=fn},replaceChildren(){},add(){}});return elementos.get(id)};
+ let guardada;
+ const puente={estado:async()=>({impresora:'',version:'1.2.0'}),impresorasWindows:async()=>[],guardarConfiguracion:async(c)=>{guardada=c}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../setup.js'),'utf8'),{document:{getElementById:elemento},window:{powerposDesktop:puente},Option:function(text,value){this.value=value}});
+ await new Promise(r=>setImmediate(r));
+ assert.equal(elemento('impresora').required,false);
+ assert.equal(elemento('panel-red').hidden,true);
+ assert.equal(elemento('probar').disabled,true);
+ await elemento('configurar').listeners.submit({preventDefault(){}});
+ assert.equal(guardada.sitio,'general');
+ assert.equal(guardada.impresora,'');
+ assert.equal(guardada.impresoraWindows,'');
+ elemento('modo').value='red';elemento('modo').listeners.change();
+ assert.equal(elemento('impresora').required,true);
+ assert.equal(elemento('panel-red').hidden,false);
+});
