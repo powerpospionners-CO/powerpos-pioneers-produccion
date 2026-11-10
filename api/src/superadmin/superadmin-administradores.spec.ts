@@ -36,6 +36,26 @@ function escenario(aislamientoActivo = false, activa = false) {
 const datos = { nombre: 'Administrador nuevo', email: 'NUEVO@example.com', password: 'ClavePrueba123', sucursalId: 11 };
 
 describe('Administradores de empresas existentes', () => {
+  it('no guarda una empresa nueva si falta configurar la creación automática', async () => {
+    const { prisma, auditoria, root } = escenario(true);
+    const sedes: any = { validarCreacionAutomatica: jest.fn(() => { throw new Error('Falta configurar Hostinger'); }), preparar: jest.fn() };
+    const service = new SuperadminService(prisma, auditoria, sedes);
+    await expect(service.crearEmpresa({ empresa: { nombre: 'Nueva' }, admin: datos })).rejects.toThrow('Falta configurar');
+    expect(root.$transaction).not.toHaveBeenCalled();
+    expect(sedes.preparar).not.toHaveBeenCalled();
+  });
+  it.each([false, true])('informa la activación pendiente=%s después de guardar empresa y administradores', async pendiente => {
+    const { prisma, auditoria, root } = escenario(true);
+    root.empresa.findUnique.mockResolvedValue(null);
+    const tx = { empresa: { create: jest.fn().mockResolvedValue({ id: 7, nombre: 'Nueva', sucursales: [{ id: 11 }] }) }, usuario: { create: jest.fn().mockResolvedValue({ id: 12 }) } };
+    prisma.$transaction = jest.fn(fn => fn(tx));
+    const sedes: any = { validarCreacionAutomatica: jest.fn(), preparar: pendiente ? jest.fn().mockRejectedValue(new Error('Proveedor no disponible')) : jest.fn().mockResolvedValue(undefined) };
+    const service = new SuperadminService(prisma, auditoria, sedes);
+    const resultado = await service.crearEmpresa({ empresa: { nombre: 'Nueva', nit: '123' }, admin: datos });
+    expect(resultado).toMatchObject({ id: 7, pendienteActivacion: pendiente });
+    expect(sedes.preparar).toHaveBeenCalledWith(7, 11);
+    expect(tx.usuario.create).toHaveBeenCalledTimes(1);
+  });
   it('crea el acceso con contraseña cifrada y permite reintentar sin duplicarlo', async () => {
     const { service, root, auditoria } = escenario();
     const primero = await service.crearAdministrador(7, datos, 1);

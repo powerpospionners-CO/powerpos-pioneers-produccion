@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CUENTAS_INICIALES, codigoSuperior, validarCodigoPuc, motivoProteccionPuc } from './plan-cuentas.catalogo';
@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 
 @Injectable()
 export class PlanCuentasService implements OnModuleInit {
+  private readonly logger = new Logger(PlanCuentasService.name);
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
@@ -33,8 +34,12 @@ export class PlanCuentasService implements OnModuleInit {
     if (estado?.activo) {
       const sedes = await this.prisma.control.baseSede.findMany({ where: { estado: 'ACTIVA' } });
       for (const sede of sedes) {
-        const contexto = await this.prisma.contexto(sede.empresaId, sede.sucursalId, true);
-        await preparar(contexto.cliente);
+        try {
+          const contexto = await this.prisma.contexto(sede.empresaId, sede.sucursalId, true);
+          await preparar(contexto.cliente);
+        } catch {
+          this.logger.error(`No se pudo preparar PUC para la empresa ${sede.empresaId}, sede ${sede.sucursalId}. Requiere revisión de esa base; las demás sedes continúan disponibles.`);
+        }
       }
     }
   }

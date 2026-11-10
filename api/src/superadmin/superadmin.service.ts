@@ -21,6 +21,10 @@ export class SuperadminService {
   constructor(private readonly prisma: PrismaService, private readonly auditoria: AuditoriaService, @Optional() private readonly sedes?: SedesProvisionService) {}
 
   async crearEmpresa(datos: any, usuarioId?: number) {
+    if (this.prisma.aislamientoActivo) {
+      if (!this.sedes) throw new ServiceUnavailableException('El servicio de creación de bases no está disponible');
+      this.sedes.validarCreacionAutomatica();
+    }
     const { empresa, admin, administradores, plan = 'BASICO', permisos = {} } = datos;
     const tipoNegocio = validarTipoNegocio(empresa?.tipoNegocio ?? 'RESTAURANTE');
     const listaAdministradores = Array.isArray(administradores) && administradores.length > 0
@@ -111,12 +115,19 @@ export class SuperadminService {
       detalle: { plan, tipoNegocio, administradores: administradoresCreados.map((admin) => ({ nombre: admin.nombre, email: admin.email })) },
     });
 
+    let pendienteActivacion = false;
     if (this.prisma.aislamientoActivo) {
-      if (!this.sedes) throw new ServiceUnavailableException('La empresa está registrada y pendiente de activar su base');
-      await this.sedes.preparar(creada.id,creada.sucursales[0].id);
+      try {
+        await this.sedes!.preparar(creada.id,creada.sucursales[0].id);
+      } catch {
+        // La empresa y sus administradores ya existen. No devolver un error
+        // de creación que induzca al usuario a registrar la misma empresa otra vez.
+        pendienteActivacion = true;
+      }
     }
     return {
       id: creada.id,
+      pendienteActivacion,
       nombre: creada.nombre,
       tiendaRuta: `/tienda/${creada.tiendaSlug}`,
       nit: creada.nit,

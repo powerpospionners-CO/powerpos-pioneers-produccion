@@ -420,7 +420,7 @@ export default function SuperadminPage() {
     setError('');
 
     const administradoresValidos = administradores
-      .map((admin) => ({ ...admin, nombre: admin.nombre.trim(), email: admin.email.trim(), password: admin.password.trim() }))
+      .map((admin) => ({ ...admin, nombre: admin.nombre.trim(), email: admin.email.trim() }))
       .filter((admin) => admin.nombre || admin.email || admin.password);
 
     if (administradoresValidos.length === 0) {
@@ -443,13 +443,14 @@ export default function SuperadminPage() {
     }
 
     try {
-      await api.post('/superadmin/empresas', {
+      const { data } = await api.post('/superadmin/empresas', {
         empresa: { nombre: nuevaEmpresa.nombre, nit: nuevaEmpresa.nit, email: nuevaEmpresa.email, telefono: nuevaEmpresa.telefono, direccion: nuevaEmpresa.direccion, tipoNegocio: tipoNegocioNuevo },
         admin: administradoresValidos[0],
         administradores: administradoresValidos,
         plan: planNuevo,
         permisos: permisosPorPlan[planNuevo].reduce((acceso, modulo) => ({ ...acceso, [modulo]: tipoNegocioNuevo === 'RESTAURANTE' || modulo !== 'cocina' }), {} as Record<string, boolean>),
-      });
+      }, { timeout: 180000 });
+      aviso(data.pendienteActivacion ? 'Empresa y administradores guardados. La base está pendiente: abre sus administradores y pulsa Preparar sedes pendientes para reintentar.' : 'Empresa creada y lista para iniciar sesión.', data.pendienteActivacion ? 'error' : 'exito');
       setMostrarCrear(false);
       setNuevaEmpresa({ nombre: '', nit: '', email: '', telefono: '', direccion: '' });
       setAdministradores([{ nombre: '', email: '', password: '' }]);

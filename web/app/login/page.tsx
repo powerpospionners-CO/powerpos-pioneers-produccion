@@ -7,7 +7,6 @@ import { Keyboard, Moon, Sun, Mail, Lock, Zap, Printer, Store, ArrowRight } from
 import TouchKeyboard from '@/components/TouchKeyboard';
 import { useTema } from '@/components/ThemeProvider';
 
-const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com';
 
 function rutaPorRol(rol: string) {
   switch (rol) {
@@ -53,20 +52,8 @@ export default function LoginPage() {
       const usuario = data.usuario;
       const destino = rutaPorRol(usuario.rol);
 
-      // El login es genérico (una sola puerta para todas las empresas), pero
-      // si el usuario pertenece a una empresa con su propio subdominio de
-      // marca, lo mandamos allá para que trabaje bajo esa dirección — la
-      // sesión se guarda por separado en cada dominio, por eso el traspaso.
-      const hostActual = window.location.hostname;
-      const enDominioReal = hostActual === ROOT_DOMAIN || hostActual.endsWith(`.${ROOT_DOMAIN}`);
-      const hostDestino = usuario.tiendaSlug ? `${usuario.tiendaSlug}.${ROOT_DOMAIN}` : null;
-
-      if (enDominioReal && hostDestino && hostActual !== hostDestino) {
-        const datosUsuario = encodeURIComponent(btoa(JSON.stringify(usuario)));
-        window.location.href = `https://${hostDestino}/auth/callback?token=${encodeURIComponent(data.access_token)}&u=${datosUsuario}&next=${encodeURIComponent(destino)}`;
-        return;
-      }
-
+      // La sesión funciona en el portal actual. El slug de la tienda no
+      // acredita que exista un dominio, DNS ni certificado para esa empresa.
       setAuth(data.access_token, usuario);
       router.push(destino);
     } catch (e: any) {

@@ -4,11 +4,15 @@ import * as path from 'node:path';
 import { PrismaService } from './prisma.service';
 import { motorBase, claseCliente } from './mysql-adapter';
 import { provisionarMysql, registrarConexionMysql } from './sedes-provision.mysql';
+import { asegurarBaseHostinger, configuracionHostinger } from './hostinger-bases';
 
 @Injectable()
 export class SedesProvisionService {
   private readonly pendientes = new Map<number, Promise<void>>();
   constructor(private readonly prisma: PrismaService) {}
+  validarCreacionAutomatica() {
+    if (this.prisma.aislamientoActivo && motorBase() === 'mysql') configuracionHostinger();
+  }
   async configurarMysql(empresaId: number, sucursalId: number, datos: { base?: unknown; usuario?: unknown; password?: unknown }) {
     if (motorBase() !== 'mysql' || !this.prisma.aislamientoActivo) throw new BadRequestException('Esta opción requiere sedes aisladas MySQL');
     await registrarConexionMysql(this.prisma.control, claseCliente(), empresaId, sucursalId, datos);
@@ -36,6 +40,7 @@ export class SedesProvisionService {
     sucursalOrigen?: number,
   ) {
     if (motorBase() === 'mysql') {
+      await asegurarBaseHostinger(this.prisma.control, empresaId, sucursalId);
       await provisionarMysql(this.prisma.control, claseCliente(), empresaId, sucursalId, sucursalOrigen ? (await this.prisma.contexto(empresaId, sucursalOrigen)).cliente : undefined);
       return;
     }

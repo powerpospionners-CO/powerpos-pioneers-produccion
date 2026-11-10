@@ -2,7 +2,7 @@
 
 ## Documentación del proyecto
 
-Consulta el [expediente académico y técnico](docs/README.md) y el [paquete de entrega al cliente](docs/cliente/README.md), con requerimientos, diagramas entidad-relación, diccionario de datos, API, instalación, manuales, pruebas y acta de entrega. Las versiones imprimibles están en [docs/entregables](docs/entregables/).
+Consulta la [operación y validación](docs/operacion-y-validacion.md), la [migración a Hostinger](docs/migracion-mysql-hostinger.md), el [aislamiento por sede](docs/aislamiento-por-sede.md) y la [creación automática de empresas y bases](docs/creacion-automatica-empresas.md). Esta copia no incluye el expediente académico ni el paquete imprimible de entrega al cliente.
 
 El expediente inicial describe el código del 15 de septiembre de 2026. El estado de arquitectura, las correcciones del 23 de octubre y los pasos de activación están en [operación y validación](docs/operacion-y-validacion.md).
 
