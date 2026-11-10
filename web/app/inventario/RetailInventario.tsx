@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Boxes, CalendarClock, History, Package, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Boxes, CalendarClock, ChevronDown, History, Package, Search, Trash2, X } from 'lucide-react';
 import api from '@/lib/api';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
@@ -192,12 +192,19 @@ export default function RetailInventario() {
           {aviso && <div role="status" className="mb-4 rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-green-400">{aviso}</div>}
 
           {bajoMinimo.length > 0 && (
-            <div className="mb-5 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
-              <div className="flex items-center gap-2 text-yellow-400 font-semibold">
-                <AlertTriangle size={17} />
-                {bajoMinimo.length} producto(s) con existencias bajas
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <details className="group/alerta mb-5 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 rounded-lg text-yellow-400 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-yellow-400 [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2 font-semibold">
+                  <AlertTriangle size={17} className="shrink-0" />
+                  {bajoMinimo.length} producto(s) con existencias bajas
+                </span>
+                <span className="flex items-center gap-2 text-sm">
+                  <span className="group-open/alerta:hidden">Ver productos</span>
+                  <span className="hidden group-open/alerta:inline">Ocultar productos</span>
+                  <ChevronDown size={17} className="shrink-0 transition-transform group-open/alerta:rotate-180" />
+                </span>
+              </summary>
+              <div className="mt-3 flex max-h-48 flex-wrap gap-2 overflow-y-auto pr-1">
                 {bajoMinimo.map((p) => (
                   <button
                     key={p.id}
@@ -208,16 +215,23 @@ export default function RetailInventario() {
                   </button>
                 ))}
               </div>
-            </div>
+            </details>
           )}
 
           {porVencer.length > 0 && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-              <div className="flex items-center gap-2 text-red-400 font-semibold">
-                <CalendarClock size={17} />
-                {porVencer.length} lote(s) por vencer en los próximos 7 días
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <details className="group/alerta mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 rounded-lg text-red-400 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400 [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2 font-semibold">
+                  <CalendarClock size={17} className="shrink-0" />
+                  {porVencer.length} lote(s) por vencer en los próximos 7 días
+                </span>
+                <span className="flex items-center gap-2 text-sm">
+                  <span className="group-open/alerta:hidden">Ver lotes</span>
+                  <span className="hidden group-open/alerta:inline">Ocultar lotes</span>
+                  <ChevronDown size={17} className="shrink-0 transition-transform group-open/alerta:rotate-180" />
+                </span>
+              </summary>
+              <div className="mt-3 flex max-h-48 flex-wrap gap-2 overflow-y-auto pr-1">
                 {porVencer.map((l) => {
                   const dias = Math.ceil((new Date(l.fechaVencimiento).getTime() - Date.now()) / 86400000);
                   return (
@@ -227,7 +241,7 @@ export default function RetailInventario() {
                   );
                 })}
               </div>
-            </div>
+            </details>
           )}
 
           {loading ? (
