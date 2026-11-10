@@ -850,27 +850,6 @@ export class CajaService {
     };
   }
 
-  async corregirRetiroRecaudo(id: number, datos: { montoRetirado?: unknown; montoAnterior?: unknown; motivo?: unknown } | undefined, sucursalId: number, empresaId: number, usuarioId: number) {
-    const monto = Number(datos?.montoRetirado);
-    const motivo = typeof datos?.motivo === 'string' ? datos.motivo.trim() : '';
-    if (!Number.isSafeInteger(id) || id < 1 || !['string', 'number'].includes(typeof datos?.montoRetirado) || datos?.montoRetirado === '' || datos?.montoRetirado == null || !Number.isFinite(monto) || monto < 0 || monto > 99999999.99 || Math.abs(monto * 100 - Math.round(monto * 100)) > 0.000001 || motivo.length < 5 || motivo.length > 250)
-      throw new BadRequestException('Indica el retiro real y un motivo de 5 a 250 caracteres');
-    return this.prisma.$transaction(async tx => {
-      await bloquearCajaSucursal(tx, sucursalId);
-      const retiro = await tx.retiroEfectivoCaja.findFirst({ where: { id, sucursalId, empresaId }, include: { caja: true } });
-      if (!retiro || retiro.caja.estado !== 'CERRADA') throw new NotFoundException('No se encontró un retiro de caja cerrada en esta sede');
-      if (datos?.montoAnterior == null || Number(datos.montoAnterior) !== Number(retiro.montoRetirado))
-        throw new ConflictException('El retiro cambió. Actualiza el resumen antes de corregirlo');
-      const esperado = new Prisma.Decimal(retiro.caja.montoInicial).plus(retiro.montoEsperado).minus(monto);
-      const diferencia = retiro.caja.montoFinal === null ? null : new Prisma.Decimal(retiro.caja.montoFinal).minus(esperado).toDecimalPlaces(2);
-      await tx.retiroEfectivoCaja.update({ where: { id }, data: { montoRetirado: monto } });
-      await tx.caja.update({ where: { id: retiro.cajaId }, data: { diferencia } });
-      await tx.auditoria.create({ data: { empresaId, usuarioId, entidad: 'CORRECCION_RETIRO_RECAUDO', entidadId: id, accion: 'EDITAR', detalle: { cajaId: retiro.cajaId, motivo, anterior: { montoRetirado: Number(retiro.montoRetirado), diferencia: retiro.caja.diferencia === null ? null : Number(retiro.caja.diferencia) }, nuevo: { montoRetirado: monto, diferencia: diferencia?.toNumber() ?? null }, montoEsperado: Number(retiro.montoEsperado) } } });
-      await tx.eventoCaja.create({ data: { cajaId: retiro.cajaId, usuarioId, tipo: 'CORRECCION', descripcion: `Retiro de recaudo corregido de $${Number(retiro.montoRetirado)} a $${monto}. Motivo: ${motivo}` } });
-      return { ok: true };
-    });
-  }
-
   async obtenerRecaudoSemanal(
     periodoInicio: string | undefined,
     sucursalId: number,

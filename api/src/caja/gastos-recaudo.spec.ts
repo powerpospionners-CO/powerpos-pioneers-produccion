@@ -28,15 +28,6 @@ describe('Gastos pagados del recaudo', () => {
     };
     const resumen = await new CajaService(db, {} as any, {} as any).obtenerRecaudoSemanal('2026-10-05', 2, 4);
     expect(resumen).toMatchObject({ efectivoRecaudado: 780, gastosDelRecaudo: 230, disponibleConsignar: 550, diferenciaRecaudo: -20 });
-    // Una corrección del retiro afecta el disponible; quitar un gasto lo
-    // devuelve al saldo sin tocar la base fija ni duplicar descuentos.
-    const servicio = new CajaService(db, {} as any, {} as any);
-    const retiros = await db.retiroEfectivoCaja.findMany();
-    retiros[0].montoRetirado = 750;
-    expect(await servicio.obtenerRecaudoSemanal('2026-10-05', 2, 4)).toMatchObject({ efectivoRecaudado: 750, disponibleConsignar: 520, diferenciaRecaudo: -50 });
-    db.movimientoFinanciero.findMany.mockResolvedValue([]);
-    expect(await servicio.obtenerRecaudoSemanal('2026-10-05', 2, 4)).toMatchObject({ gastosDelRecaudo: 0, disponibleConsignar: 750 });
-
     expect(db.movimientoFinanciero.findMany.mock.calls[0][0].where).toEqual({ empresaId: 4, sucursalId: 2, id: { in: [5] }, tipo: 'EGRESO', categoria: { notIn: ['COSTO_VENTA','VENTA'] }, pedidoId: null, fecha: { gte: new Date('2026-10-05T05:00:00Z'), lt: new Date('2026-10-12T05:00:00Z') } });
   });
   it('guarda el bruto y una copia del neto al consignar, sin crear otro egreso', async () => {
