@@ -27,6 +27,11 @@ export class DistribuidoresController {
     return this.service.listarLiquidaciones(req.user.empresaId);
   }
 
+  @Get('configuracion-alta')
+  configuracionAlta(@Request() req: any) {
+    return this.service.configuracionAlta(req.user.empresaId);
+  }
+
   @Get(':id')
   obtener(@Param('id') id: string, @Request() req: any) {
     return this.service.obtener(+id, req.user.empresaId);

@@ -25,6 +25,8 @@ export default function DistribuidoresPage() {
   const [modalCrear, setModalCrear] = useState(false);
   const [editando, setEditando] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [alta, setAlta] = useState<{ siguienteCodigo: string; dominioCorreo: string } | null>(null);
+  const [cargandoAlta, setCargandoAlta] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' });
 
@@ -47,13 +49,26 @@ export default function DistribuidoresPage() {
     api.get('/sucursales').then((r) => setSucursales(r.data)).catch(() => undefined);
   }, []);
 
+  const abrirNuevo = async () => {
+    setEditando(null); setError(''); setAlta(null);
+    setForm({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' });
+    setModalCrear(true); setCargandoAlta(true);
+    try {
+      const { data } = await api.get('/distribuidores/configuracion-alta');
+      setAlta(data);
+      setForm(actual => ({ ...actual, codigo: data.siguienteCodigo }));
+    } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo preparar el código y correo. Cierra y vuelve a abrir el formulario.'); }
+    finally { setCargandoAlta(false); }
+  };
+
   const crear = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (guardando || (!editando && (!alta || cargandoAlta))) return;
     setGuardando(true);
     setError('');
     try {
       if (editando) await api.patch(`/distribuidores/${editando}`, { codigo: form.codigo, nombre: form.nombre, zona: form.zona, email: form.email, porcentajeComision: Number(form.porcentajeComision) });
-      else await api.post('/distribuidores', { ...form, porcentajeComision: Number(form.porcentajeComision) });
+      else await api.post('/distribuidores', { nombre: form.nombre, zona: form.zona, sucursalId: form.sucursalId, usuarioEmail: form.email, password: form.password, porcentajeComision: Number(form.porcentajeComision) });
       setModalCrear(false);
       setForm({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' });
       await cargar();
@@ -129,7 +144,7 @@ export default function DistribuidoresPage() {
               <h1 className="mt-1 text-3xl font-bold">Distribuidores</h1>
               <p className="mt-1 text-sm text-gray-400">Cada uno tiene su propio código y acceso para registrar sus pedidos.</p>
             </div>
-            <button type="button" disabled={guardando} onClick={() => { setEditando(null); setError(''); setForm({ codigo: '', nombre: '', zona: '', sucursalId: '', email: '', password: '', porcentajeComision: '' }); setModalCrear(true); }} className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600">
+            <button type="button" disabled={guardando} onClick={() => void abrirNuevo()} className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600">
               <Plus size={18} /> Nuevo distribuidor
             </button>
           </div>
@@ -170,7 +185,8 @@ export default function DistribuidoresPage() {
               </div>
               {error && <div role="alert" className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
               <div className="space-y-3">
-                <input required value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="Código (ej. DIST-001)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                <label className="block text-sm text-gray-300">Código<input required readOnly={!editando} value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder={cargandoAlta ? 'Calculando código…' : 'Código automático'} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white read-only:cursor-default read-only:text-gray-400" /></label>
+                {!editando && <p className="text-xs text-gray-500">Se asigna automáticamente al guardar.</p>}
                 <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <input value={form.zona} onChange={(e) => setForm({ ...form, zona: e.target.value })} placeholder="Zona (opcional)" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
                 <select required disabled={!!editando} value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })} className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white disabled:opacity-60">
@@ -178,10 +194,10 @@ export default function DistribuidoresPage() {
                   {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                 </select>
                 <input required type="number" min={0} max={100} step="0.01" value={form.porcentajeComision} onChange={(e) => setForm({ ...form, porcentajeComision: e.target.value })} placeholder="% de comisión" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
-                <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email de acceso" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />
+                {editando ? <input required type="email" aria-label="Email de acceso" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email de acceso" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" /> : <label className="block text-sm text-gray-300">Correo de acceso<div className="mt-1 flex flex-wrap items-center overflow-hidden rounded-lg border border-gray-700 bg-gray-800 focus-within:border-orange-500"><input required type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} pattern="[a-zA-Z0-9]+([._-][a-zA-Z0-9]+)*" maxLength={64} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value.toLowerCase() })} placeholder="nombre" title="Solo el nombre de acceso, sin @ ni espacios" className="min-w-24 flex-1 bg-transparent px-3 py-2 text-white outline-none" /><span className="max-w-full break-all border-l border-gray-700 bg-gray-900/50 px-3 py-2 text-xs text-orange-300">{alta ? `@${alta.dominioCorreo}` : 'Cargando sufijo…'}</span></div></label>}
                 {!editando && <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Contraseña" className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white" />}
               </div>
-              <button type="submit" disabled={guardando} className="mt-4 w-full rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">{guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear distribuidor'}</button>
+              <button type="submit" disabled={guardando || (!editando && (!alta || cargandoAlta))} className="mt-4 w-full rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">{guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear distribuidor'}</button>
             </form>
           </div>
         )}

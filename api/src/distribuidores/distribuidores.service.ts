@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { monto } from '../tienda/reglas';
 import { gestionPedidos } from './gestion-pedidos';
+import { CONSECUTIVO_DISTRIBUIDOR, siguienteCodigo, dominioDistribuidor, correoDistribuidor } from './alta-distribuidor';
 import { fechaDia } from '../administracion/administracion.service';
 
 @Injectable()
@@ -13,21 +14,34 @@ export class DistribuidoresService {
   // uno a uno a su perfil (código, zona, % de comisión) — así reutiliza todo
   // el login/JWT ya existente, solo que sus pantallas son otras.
   async crear(datos: any, empresaId: number) {
-    const codigo = String(datos.codigo || '').trim();
     const nombre = String(datos.nombre || '').trim();
-    const email = String(datos.email || '').trim().toLowerCase();
-    if (!codigo || !nombre || !email || !datos.password) throw new BadRequestException('Código, nombre, email y contraseña son obligatorios');
+    if (!nombre || nombre.length > 150 || !datos.password) throw new BadRequestException('Nombre y contraseña son obligatorios');
+    const alta = await this.datosAlta(empresaId);
+    const dominioCorreo = dominioDistribuidor(alta.nombreEmpresa, alta.correos);
+    // Las versiones anteriores enviaban el correo completo. Se acepta solo
+    // si pertenece al sufijo de esta empresa; el cliente nunca decide el dominio.
+    const entrada = datos.usuarioEmail ?? (typeof datos.email === 'string' && datos.email.toLowerCase().endsWith(`@${dominioCorreo}`) ? datos.email.slice(0, -dominioCorreo.length - 1) : datos.email);
+    const email = correoDistribuidor(entrada, dominioCorreo);
+    if (alta.correos.includes(email)) throw new ConflictException('Ya existe una cuenta con ese nombre de acceso en la empresa');
     const porcentajeComision = monto(Number(datos.porcentajeComision), 'El % de comisión', 0, 100);
 
     const sucursal = await this.prisma.sucursal.findFirst({ where: { id: Number(datos.sucursalId), empresaId, activo: true } });
     if (!sucursal) throw new BadRequestException('La sucursal no pertenece a esta empresa');
 
-    const codigoExiste = await this.prisma.distribuidor.findUnique({ where: { empresaId_codigo: { empresaId, codigo } } });
-    if (codigoExiste) throw new ConflictException('Ya existe un distribuidor con ese código');
     const emailExiste = await this.prisma.usuario.findUnique({ where: { email } });
     if (emailExiste) throw new ConflictException('Ya existe una cuenta con ese email');
 
     const passwordHash = await bcrypt.hash(String(datos.password), 10);
+
+    // Reserva central por empresa: también evita duplicados entre bases de
+    // sedes. Si la creación falla, no se reutiliza un código ya reservado.
+    const codigo = await this.prisma.control.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM empresas WHERE id = ${empresaId} FOR UPDATE`;
+      const ultimo = await tx.auditoria.findFirst({ where: { empresaId, entidad: CONSECUTIVO_DISTRIBUIDOR }, orderBy: { id: 'desc' } });
+      const siguiente = siguienteCodigo(alta.codigos, Number((ultimo?.detalle as any)?.numero ?? 0));
+      await tx.auditoria.create({ data: { empresaId, entidad: CONSECUTIVO_DISTRIBUIDOR, accion: 'RESERVAR', detalle: siguiente } });
+      return siguiente.codigo;
+    });
 
     return this.prisma.$transaction(async (tx) => {
       const distribuidor = await tx.distribuidor.create({
@@ -40,7 +54,28 @@ export class DistribuidoresService {
         },
       });
       return distribuidor;
+    }).catch(error => {
+      if (error?.code === 'P2002') throw new ConflictException('El código o correo ya está registrado. Actualiza el formulario e intenta con otro nombre de acceso');
+      throw error;
     });
+  }
+
+  private async datosAlta(empresaId: number) {
+    const empresa = await this.prisma.control.empresa.findUnique({ where: { id: empresaId }, select: { nombre: true } });
+    if (!empresa) throw new NotFoundException('Empresa no encontrada');
+    const clientes = [this.prisma.control];
+    if (this.prisma.aislamientoActivo) {
+      const bases = await this.prisma.control.baseSede.findMany({ where: { empresaId, estado: 'ACTIVA' }, select: { sucursalId: true } });
+      for (const base of bases) clientes.push((await this.prisma.contexto(empresaId, base.sucursalId, true)).cliente);
+    }
+    const perfiles = (await Promise.all(clientes.map(cliente => cliente.distribuidor.findMany({ where: { empresaId }, select: { codigo: true, usuario: { select: { email: true } } } })))).flat();
+    return { nombreEmpresa: empresa.nombre, codigos: perfiles.map(p => p.codigo), correos: perfiles.flatMap(p => p.usuario?.email ? [p.usuario.email.toLowerCase()] : []) };
+  }
+
+  async configuracionAlta(empresaId: number) {
+    const alta = await this.datosAlta(empresaId);
+    const ultimo = await this.prisma.control.auditoria.findFirst({ where: { empresaId, entidad: CONSECUTIVO_DISTRIBUIDOR }, orderBy: { id: 'desc' } });
+    return { siguienteCodigo: siguienteCodigo(alta.codigos, Number((ultimo?.detalle as any)?.numero ?? 0)).codigo, dominioCorreo: dominioDistribuidor(alta.nombreEmpresa, alta.correos) };
   }
 
   async listar(empresaId: number) {
