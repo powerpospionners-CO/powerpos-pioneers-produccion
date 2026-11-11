@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { monto } from '../tienda/reglas';
+import { resumirVentasDistribuidores } from './resumen-ventas';
 import { gestionPedidos } from './gestion-pedidos';
 import { CONSECUTIVO_DISTRIBUIDOR, siguienteCodigo, dominioDistribuidor, correoDistribuidor } from './alta-distribuidor';
 import { fechaDia } from '../administracion/administracion.service';
@@ -76,6 +77,27 @@ export class DistribuidoresService {
     const alta = await this.datosAlta(empresaId);
     const ultimo = await this.prisma.control.auditoria.findFirst({ where: { empresaId, entidad: CONSECUTIVO_DISTRIBUIDOR }, orderBy: { id: 'desc' } });
     return { siguienteCodigo: siguienteCodigo(alta.codigos, Number((ultimo?.detalle as any)?.numero ?? 0)).codigo, dominioCorreo: dominioDistribuidor(alta.nombreEmpresa, alta.correos) };
+  }
+
+  async resumenVentas(empresaId: number) {
+    const registros = await this.prisma.pedidoDistribuidor.findMany({
+      where: { empresaId, estado: { not: 'ANULADO' } },
+      select: { id: true, distribuidorId: true, estado: true, total: true, comisionMonto: true, liquidacionId: true, creadoEn: true },
+    });
+    return resumirVentasDistribuidores(await gestionPedidos(this.prisma, empresaId, registros));
+  }
+
+  async ventasDistribuidor(id: number, empresaId: number, pagina = 1) {
+    if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 1000000) throw new BadRequestException('Página no válida');
+    await this.obtener(id, empresaId);
+    const where = { empresaId, distribuidorId: id };
+    const [total, registros] = await Promise.all([
+      this.prisma.pedidoDistribuidor.count({ where }),
+      this.prisma.pedidoDistribuidor.findMany({ where, orderBy: [{ creadoEn: 'desc' }, { id: 'desc' }], take: 50, skip: (pagina - 1) * 50,
+        select: { id: true, numero: true, estado: true, total: true, comisionMonto: true, liquidacionId: true, creadoEn: true, clienteReferencia: true },
+      }),
+    ]);
+    return { pedidos: await gestionPedidos(this.prisma, empresaId, registros), total, pagina, paginas: Math.max(1, Math.ceil(total / 50)) };
   }
 
   async listar(empresaId: number) {

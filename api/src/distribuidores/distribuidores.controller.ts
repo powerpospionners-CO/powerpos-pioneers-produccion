@@ -32,6 +32,16 @@ export class DistribuidoresController {
     return this.service.configuracionAlta(req.user.empresaId);
   }
 
+  @Get('resumen-ventas')
+  resumenVentas(@Request() req: any) {
+    return this.service.resumenVentas(req.user.empresaId);
+  }
+
+  @Get(':id/ventas')
+  ventas(@Param('id') id: string, @Query('pagina') pagina: string | undefined, @Request() req: any) {
+    return this.service.ventasDistribuidor(+id, req.user.empresaId, pagina === undefined ? 1 : Number(pagina));
+  }
+
   @Get(':id')
   obtener(@Param('id') id: string, @Request() req: any) {
     return this.service.obtener(+id, req.user.empresaId);
