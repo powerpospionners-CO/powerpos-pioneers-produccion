@@ -38,6 +38,7 @@ export default function DistribuidorPage() {
   const borrador = useBorradorVenta('distribuidor', { carrito: [] as ItemCarrito[], clienteReferencia: '', modalidad: 'PAGO_ANTES', solicitud: null as Record<string, any> | null, edicion: null as { id: number; numero: string; revision: number; precios?: Record<string, number>; comisionPorcentaje?: number } | null });
   const [edicion, setEdicion] = useCampoBorrador(borrador, 'edicion');
   const [carrito, setCarrito] = useCampoBorrador(borrador, 'carrito');
+  const [ultimoAgregado, setUltimoAgregado] = useState<{ key: string } | null>(null);
   const [modalidad, setModalidad] = useCampoBorrador(borrador, 'modalidad');
   const [compatible, setCompatible] = useState(false);
   const [clienteReferencia, setClienteReferencia] = useCampoBorrador(borrador, 'clienteReferencia');
@@ -90,6 +91,7 @@ export default function DistribuidorPage() {
 
   const agregar = (producto: Producto, presentacion: Presentacion | null) => {
     const key = `${producto.id}:${presentacion?.id ?? 'base'}`;
+    setUltimoAgregado({ key });
     setCarrito((actual) => {
       const existe = actual.find((l) => l.key === key);
       if (existe) return actual.map((l) => (l.key === key ? { ...l, cantidad: l.cantidad + 1 } : l));
@@ -129,6 +131,7 @@ export default function DistribuidorPage() {
       else await api.post('/pedidos-distribuidor',datos);
       borrador.almacen.reiniciar();
       setCarrito([]);
+      setUltimoAgregado(null);
       setCantidadesEditadas({});
       setClienteReferencia('');
       aviso(datos.pedidoEdicionId ? 'Pedido actualizado. La cajera verá la corrección.' : 'Pedido enviado a la cajera. La mercancía queda pendiente de retiro.', 'exito');
@@ -180,7 +183,7 @@ export default function DistribuidorPage() {
       setClienteReferencia(data.clienteReferencia || '');
       setModalidad(data.modalidad || 'PAGO_ANTES');
       setEdicion({ id: data.id, numero: data.numero, revision: data.revision ?? 0, precios: Object.fromEntries(data.detalles.map(d => [`${d.productoId}:${d.presentacionId ?? 'base'}`, Number(d.precioUnitario)])), comisionPorcentaje: Number(data.comisionPorcentaje) });
-      setCantidadesEditadas({}); setError(''); setBusqueda('');
+      setCantidadesEditadas({}); setUltimoAgregado(null); setError(''); setBusqueda('');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch { aviso('No se pudo abrir el pedido para editar.', 'error'); }
     finally { setEnviando(false); }
@@ -262,8 +265,8 @@ export default function DistribuidorPage() {
 
             <div className="mt-4 space-y-2">
               {!carrito.length && <p className="py-4 text-center text-sm text-gray-500">Busca productos arriba para armar el pedido.</p>}
-              {carrito.map((l) => (
-                <div key={l.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 p-3">
+              {[...carrito].reverse().sort((a, b) => Number(b.key === ultimoAgregado?.key) - Number(a.key === ultimoAgregado?.key)).map((l) => (
+                <div key={l.key} className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 p-3 ${l.key === ultimoAgregado?.key ? 'ring-2 ring-orange-500' : ''}`}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-white">{l.nombre}</p>
                     <p className="text-xs text-gray-500">{moneda(l.precio)} c/u</p>
