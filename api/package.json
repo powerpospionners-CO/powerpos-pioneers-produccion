@@ -71,7 +71,7 @@
     "@types/passport": "^1.0.17",
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
-    "@types/pdfkit": "^0.17.6",
+    "@types/pdfkit": "^0.17.7",
     "@types/qs": "^6.15.1",
     "@types/range-parser": "^1.2.7",
     "@types/send": "^1.2.1",
