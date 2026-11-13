@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import { useAuthStore } from "@/store/authStore";
+import ProductosTienda from "./ProductosTienda";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
@@ -375,6 +376,7 @@ export default function MiTienda() {
               </form>
             )
           )}
+          {usuario?.rol === "ADMIN_EMPRESA" && <ProductosTienda />}
         </main>
       </div>
     </AuthGuard>

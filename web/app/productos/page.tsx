@@ -520,6 +520,15 @@ export default function ProductosPage() {
     cargarDatos();
   }, []);
 
+  useEffect(() => {
+    // Al volver de Mi tienda, muestra la foto y el precio actuales sin tocar el formulario abierto.
+    const actualizarCatalogo = () => {
+      void api.get<Producto[]>('/productos').then(({ data }) => setProductos(data)).catch(() => {});
+    };
+    window.addEventListener('focus', actualizarCatalogo);
+    return () => window.removeEventListener('focus', actualizarCatalogo);
+  }, []);
+
   const cargarDatos = async () => {
     const [prods, cats, ings, adic] = await Promise.all([
       api.get('/productos'),
