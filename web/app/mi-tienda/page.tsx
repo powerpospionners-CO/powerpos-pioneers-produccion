@@ -36,6 +36,18 @@ export default function MiTienda() {
   }, [usuario?.rol]);
   const cambiar = (k: string, v: unknown) =>
     setConfig((c: any) => ({ ...c, tienda: { ...c.tienda, [k]: v } }));
+  async function subirLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true); setMensaje('Analizando los colores del logo…');
+    try {
+      const form = new FormData(); form.append('logo', file);
+      const { data } = await api.post('/empresa/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setConfig((c: any) => ({ ...c, tienda: { ...c.tienda, paletaLogo: data.paleta, ...(c.tienda.coloresAutomaticos !== false ? { color: data.paleta.principal } : {}) } }));
+      setMensaje('Logo guardado. Sus colores ya están disponibles en tu tienda.');
+    } catch (error: any) { setMensaje(error.response?.data?.message || 'No se pudo analizar el logo'); }
+    finally { setBusy(false); e.target.value = ''; }
+  }
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -126,6 +138,9 @@ export default function MiTienda() {
                   </section>
                   <section className={card}>
                     <h2 className="text-xl font-bold">Diseño e información</h2>
+                    <label className="block">Logo de tu empresa<input className={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={subirLogo} /><span className="text-sm text-gray-400">Sube tu logo para obtener los colores de tu marca. Máximo 8 MB.</span></label>
+                    <label className="flex items-center gap-3"><input type="checkbox" checked={config.tienda.coloresAutomaticos !== false} onChange={e => { cambiar('coloresAutomaticos', e.target.checked); if (e.target.checked && config.tienda.paletaLogo) cambiar('color', config.tienda.paletaLogo.principal); }} />Usar automáticamente los colores de mi logo</label>
+                    {config.tienda.paletaLogo && <div className="flex gap-3">{Object.values(config.tienda.paletaLogo as Record<string, string>).map((color, i) => <span key={i} className="rounded-lg border border-gray-600 px-4 py-2" style={{borderLeft:`20px solid ${color}`}}>{color}</span>)}</div>}
                     <p className="text-gray-400">
                       El nombre, logo y contacto se toman de{" "}
                       <a
@@ -172,6 +187,7 @@ export default function MiTienda() {
                       Color de marca
                       <input
                         type="color"
+                        disabled={config.tienda.coloresAutomaticos !== false}
                         value={config.tienda.color}
                         onChange={(e) => cambiar("color", e.target.value)}
                       />

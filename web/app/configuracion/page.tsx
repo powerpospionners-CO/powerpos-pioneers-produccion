@@ -110,7 +110,7 @@ export default function ConfiguracionPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setEmpresa({ ...empresa, logo: data.logoUrl });
-      setMensajeEmpresa('✅ Logo actualizado correctamente');
+      setMensajeEmpresa('✅ Logo actualizado. Su paleta está disponible para los colores automáticos de tu tienda.');
       setTimeout(() => setMensajeEmpresa(''), 3000);
     } catch (e) {
       setMensajeEmpresa('❌ Error al subir el logo');

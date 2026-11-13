@@ -37,6 +37,10 @@ export class TiendaService {
       throw new BadRequestException('Configuración inválida');
     const actual = await this.configuracion(empresaId);
     const t = { ...actual.tienda, ...body.tienda };
+    if (typeof t.coloresAutomaticos !== 'boolean') throw new BadRequestException('Modo de colores inválido');
+    // La paleta procede del logo analizado en el servidor, nunca del navegador.
+    t.paletaLogo = actual.tienda.paletaLogo;
+    if (t.coloresAutomaticos && t.paletaLogo) t.color = t.paletaLogo.principal;
     const p = { ...actual.fidelizacion, ...body.fidelizacion };
     for (const campo of ['publicada', 'pedidosHabilitados'])
       if (typeof t[campo] !== 'boolean')
@@ -130,6 +134,8 @@ export class TiendaService {
       descripcion: t.descripcion,
       sobreNosotros: t.sobreNosotros,
       color: t.color,
+      coloresAutomaticos: t.coloresAutomaticos,
+      paletaLogo: t.paletaLogo,
       portada: t.portada,
       whatsapp: t.whatsapp,
       horario: t.horario,

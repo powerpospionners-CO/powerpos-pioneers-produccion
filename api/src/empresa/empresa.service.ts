@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaletaLogo } from './paleta-logo';
 
 @Injectable()
 export class EmpresaService {
@@ -35,10 +36,17 @@ export class EmpresaService {
     });
   }
 
-  async actualizarLogo(empresaId: number, logoUrl: string) {
-    return this.prisma.empresa.update({
+  async actualizarLogo(empresaId: number, logoUrl: string, paleta?: PaletaLogo) {
+    return this.prisma.$transaction(async tx => {
+      const empresa = await tx.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+      const config = (empresa.tiendaConfig || {}) as Record<string, unknown>;
+      return tx.empresa.update({
       where: { id: empresaId },
-      data: { logo: logoUrl },
+      data: { logo: logoUrl, ...(paleta ? { tiendaConfig: {
+        ...config, paletaLogo: paleta,
+        ...(config.coloresAutomaticos !== false ? { color: paleta.principal } : {}),
+      } } : {}) },
+      });
     });
   }
 

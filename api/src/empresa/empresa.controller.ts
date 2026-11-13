@@ -1,14 +1,16 @@
-import { Controller, Get, Patch, Post, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Patch, Post, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { promises as fs } from 'fs';
-import sharp from 'sharp';
+import * as sharpModule from 'sharp';
+const sharp = sharpModule as unknown as typeof sharpModule.default;
 import { EmpresaService } from './empresa.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { directorioUploads } from '../storage/uploads';
+import { analizarLogo } from './paleta-logo';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('empresa')
@@ -46,22 +48,27 @@ export class EmpresaController {
     limits: { fileSize: 8 * 1024 * 1024 },
   }))
   async subirLogo(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
+    if (!file) throw new BadRequestException('Selecciona una imagen de logo');
     // El logo se descarga y procesa en cada impresión de recibo (ver
     // impresion.service.ts); una foto subida a resolución completa (varios
     // MB) vuelve esa descarga lenta y puede llegar a tumbar la conexión con
     // el agente de impresión. Se reduce aquí, una sola vez, al subirla.
+    let paleta: Awaited<ReturnType<typeof analizarLogo>>;
     try {
-      const reducido = await sharp(file.path)
+      const reducido = await sharp(file.path, { limitInputPixels: 25000000 })
+        .rotate()
         .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
         .toBuffer();
+      paleta = await analizarLogo(reducido);
       await fs.writeFile(file.path, reducido);
     } catch {
-      // Si sharp no puede procesarla (formato raro, etc.) se deja la original.
+      await fs.unlink(file.path).catch(() => undefined);
+      throw new BadRequestException('No se pudo analizar el logo. Usa una imagen PNG, JPG o WebP válida.');
     }
     const baseUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
     const logoUrl = `${baseUrl}/uploads/logos/${file.filename}`;
-    await this.empresaService.actualizarLogo(req.user.empresaId, logoUrl);
-    return { logoUrl };
+    await this.empresaService.actualizarLogo(req.user.empresaId, logoUrl, paleta);
+    return { logoUrl, paleta };
   }
 
   @Post('agente-impresion/token')

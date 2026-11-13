@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import "./tienda.css";
+import { temaTienda } from "../../../lib/temaTienda";
 
 function WhatsAppIcon({ size = 24 }: { size?: number }) {
   return (
@@ -89,6 +90,8 @@ type Tienda = {
     descripcion: string;
     sobreNosotros: string;
     color: string;
+    coloresAutomaticos?: boolean;
+    paletaLogo?: { principal: string; secundario: string };
     portada: string;
     whatsapp: string;
     horario: string;
@@ -149,6 +152,17 @@ export default function TiendaPage() {
     } | null>(null);
   const clave = useRef("");
   const [mostrarSubir, setMostrarSubir] = useState(false);
+  const [orden, setOrden] = useState('nombre');
+  const [detalle, setDetalle] = useState<Producto | null>(null);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const dialogo = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!detalle || !dialogo.current) return;
+    const anterior = document.activeElement as HTMLElement | null;
+    const elemento = dialogo.current;
+    elemento.showModal();
+    return () => { elemento.close(); anterior?.focus(); };
+  }, [detalle]);
   useEffect(() => { if (tienda) document.title = `${tienda.nombre} · Tienda en línea`; }, [tienda]);
   useEffect(() => {
     const onScroll = () => setMostrarSubir(window.scrollY > 500);
@@ -271,6 +285,11 @@ export default function TiendaPage() {
     "Todos",
     ...new Set(tienda.productos.map((p) => p.categoria.nombre)),
   ];
+  const filtrados = tienda.productos.filter(p =>
+    (categoria === 'Todos' || p.categoria.nombre === categoria) &&
+    `${p.nombre} ${p.descripcion || ''}`.toLocaleLowerCase('es').includes(busqueda.toLocaleLowerCase('es'))
+  ).sort((a, b) => orden === 'menor' ? Number(a.precio) - Number(b.precio) : orden === 'mayor' ? Number(b.precio) - Number(a.precio) : a.nombre.localeCompare(b.nombre, 'es'));
+  const portada = t.portada || tienda.productos.find(p => p.imagen)?.imagen;
   const whatsapp = `https://wa.me/${t.whatsapp}?text=${encodeURIComponent(`Hola ${tienda.nombre}, quiero consultar este pedido:\n${items.map((p) => `${carrito[p.id]} × ${p.nombre}: ${dinero(Number(p.precio) * carrito[p.id])}`).join("\n")}\nProductos: ${dinero(subtotal)}\nEl domicilio y la disponibilidad quedan por confirmar.`)}`;
   const redesSociales = [
     { key: "facebook", url: enlaceRedSocial("facebook", t.facebook), Icon: FacebookIcon },
@@ -317,8 +336,9 @@ export default function TiendaPage() {
   return (
     <main
       className="store"
-      style={{ "--store-brand": t.color } as CSSProperties}
+      style={temaTienda(t.color, t.coloresAutomaticos !== false ? t.paletaLogo?.secundario : undefined) as CSSProperties}
     >
+      <div className="store-announcement">{tienda.nombre} <span>·</span> {t.horario || 'Descubre nuestro catálogo en línea'}</div>
       <header className="store-header">
         <a href="#inicio" className="store-brand">
           {tienda.logo ? (
@@ -328,7 +348,10 @@ export default function TiendaPage() {
           )}
           <strong>{tienda.nombre}</strong>
         </a>
-        <a href="#catalogo">Nuestro catálogo</a>
+        <button className="store-menu-toggle" aria-label="Abrir menú" aria-expanded={menuAbierto} onClick={() => setMenuAbierto(!menuAbierto)}>☰</button>
+        <nav className={menuAbierto ? 'store-nav open' : 'store-nav'} aria-label="Navegación principal" onClick={() => setMenuAbierto(false)}>
+          <a href="#inicio">Inicio</a><a href="#catalogo">Productos</a><a href="#nosotros">Nosotros</a><a href="#contacto">Contacto</a>
+        </nav>
         {redesSociales.length > 0 && (
           <div className="store-redes">
             {redesSociales.map(({ key, url, Icon }) => (
@@ -338,18 +361,19 @@ export default function TiendaPage() {
             ))}
           </div>
         )}
-        <a className="store-button" href="#carrito">
+        <a className="store-button" href="#carrito" data-count={Object.values(carrito).reduce((s, n) => s + n, 0)} aria-label={`Tu pedido: ${Object.values(carrito).reduce((s, n) => s + n, 0)} productos`}>
           <ShoppingBag size={17} />
           Tu pedido · {Object.values(carrito).reduce((s, n) => s + n, 0)}
         </a>
+        <label className="store-header-search"><Search size={18} /><input aria-label="Buscar productos" placeholder="¿Qué estás buscando?" value={busqueda} onChange={e => setBusqueda(e.target.value)} /><a href="#catalogo">Buscar</a></label>
       </header>
       <section
-        className={`store-hero ${t.portada ? "with-photo" : ""}`}
+        className={`store-hero ${portada ? "with-photo" : ""}`}
         id="inicio"
       >
         <div>
           <p className="store-eyebrow">
-            DIRECTO DE NUESTRO NEGOCIO A TU PUERTA
+            DESCUBRE LO QUE NOS HACE ÚNICOS
           </p>
           <h1>{t.titulo || `Bienvenido a ${tienda.nombre}`}</h1>
           <p>
@@ -357,15 +381,17 @@ export default function TiendaPage() {
               "Explora nuestro catálogo y elige tus favoritos. Estamos aquí para atenderte."}
           </p>
           <a className="store-button" href="#catalogo">
-            Explorar productos ↘
+            Explorar productos →
           </a>
+          {t.whatsapp && <a className="store-hero-contact" href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={18} /> Hablar por WhatsApp</a>}
           <div className="store-meta">
             {t.horario && <span><Clock size={15} />{t.horario}</span>}
             {tienda.direccion && <span><MapPin size={15} />{tienda.direccion}</span>}
           </div>
         </div>
-        {t.portada && <img src={t.portada} alt={`Conoce ${tienda.nombre}`} />}
+        {portada ? <img src={portada} alt={`Conoce ${tienda.nombre}`} /> : <div className="store-hero-identity">{tienda.logo ? <img src={tienda.logo} alt={`Logo de ${tienda.nombre}`} /> : <ShoppingBag size={120} />}<span>{tienda.nombre}</span></div>}
       </section>
+      {cats.length > 1 && <section className="store-category-showcase"><p className="store-eyebrow">EXPLORA A TU GUSTO</p><h2>Encuentra tus favoritos</h2><div>{cats.slice(1).map((c, i) => <a href="#catalogo" key={c} onClick={() => setCategoria(c)}><span>{String(i + 1).padStart(2, '0')}</span><strong>{c}</strong><span>↗</span></a>)}</div></section>}
       <section className="store-benefits">
         {BENEFICIOS.map(({ icon: Icon, titulo, texto }) => (
           <div key={titulo} className="store-benefit">
@@ -379,12 +405,12 @@ export default function TiendaPage() {
           </div>
         ))}
       </section>
-      {t.sobreNosotros && (
-        <section className="store-sobre">
+      {(
+        <section className="store-sobre" id="nosotros">
           <div className="store-sobre-texto">
             <p className="store-eyebrow">CONÓCENOS</p>
             <h2>Sobre {tienda.nombre}</h2>
-            <p>{t.sobreNosotros}</p>
+            <p>{t.sobreNosotros || t.descripcion || `Conoce el catálogo de ${tienda.nombre} y encuentra tus favoritos. Consulta con nuestro equipo si necesitas ayuda para elegir.`}</p>
             {redesSociales.length > 0 && (
               <div className="store-redes store-redes-grande">
                 {redesSociales.map(({ key, url, Icon }) => (
@@ -402,7 +428,7 @@ export default function TiendaPage() {
           <div className="store-catalog-heading">
             <div>
               <p className="store-eyebrow">ELIGE A TU GUSTO</p>
-              <h2>Nuestro catálogo</h2>
+              <h2>Productos para ti</h2>
             </div>
             <label className="store-search">
               Buscar
@@ -416,6 +442,7 @@ export default function TiendaPage() {
               </div>
             </label>
           </div>
+          <label className="store-order">Ordenar por <select value={orden} onChange={e => setOrden(e.target.value)}><option value="nombre">Nombre</option><option value="menor">Menor precio</option><option value="mayor">Mayor precio</option></select></label>
           <div className="store-categories">
             {cats.map((c) => (
               <button
@@ -434,14 +461,10 @@ export default function TiendaPage() {
             </p>
           )}
           <div className="store-products">
-            {tienda.productos
-              .filter(
-                (p) =>
-                  (categoria === "Todos" || p.categoria.nombre === categoria) &&
-                  p.nombre.toLowerCase().includes(busqueda.toLowerCase()),
-              )
+            {filtrados
               .map((p) => (
                 <article className="store-product" key={p.id}>
+                  <button className="store-detail-trigger" aria-label={`Ver detalle de ${p.nombre}`} onClick={() => setDetalle(p)}>
                   {p.imagen ? (
                     <img loading="lazy" src={p.imagen} alt={p.nombre} />
                   ) : (
@@ -450,6 +473,7 @@ export default function TiendaPage() {
                       <strong>{p.nombre}</strong>
                     </div>
                   )}
+                  </button>
                   <div>
                     <small>{p.categoria.nombre}</small>
                     <h3>{p.nombre}</h3>
@@ -468,6 +492,7 @@ export default function TiendaPage() {
                 </article>
               ))}
           </div>
+          {!!tienda.productos.length && !filtrados.length && <div className="store-empty"><PackageSearch size={24} /><p>No encontramos productos con estos filtros.</p><button onClick={() => { setBusqueda(''); setCategoria('Todos'); }}>Ver todos los productos</button></div>}
         </section>
         <aside id="carrito" className="store-cart">
           <div className="store-cart-heading">
@@ -694,8 +719,10 @@ export default function TiendaPage() {
           )}
         </aside>
       </div>
+      <section id="contacto" className="store-contact"><div><p className="store-eyebrow">ESTAMOS PARA AYUDARTE</p><h2>Conversemos</h2><p>Consulta productos y disponibilidad directamente con {tienda.nombre}.</p></div><div>{tienda.direccion && <p><MapPin size={18} />{tienda.direccion}</p>}{t.horario && <p><Clock size={18} />{t.horario}</p>}{t.whatsapp ? <a className="store-button" href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon size={18} /> Escribir por WhatsApp</a> : tienda.telefono && <p>{tienda.telefono}</p>}</div></section>
       <footer className="store-footer">
         <div className="store-footer-brand">
+          {tienda.logo && <img src={tienda.logo} alt={`Logo de ${tienda.nombre}`} width={90} height={60} style={{objectFit:'contain'}} />}
           <strong>{tienda.nombre}</strong>
           <small>Tienda conectada con PowerPOS</small>
         </div>
@@ -724,6 +751,7 @@ export default function TiendaPage() {
           </a>
         )}
       </footer>
+      {detalle && <dialog ref={dialogo} className="store-product-dialog" aria-label={detalle.nombre} onCancel={() => setDetalle(null)} onClick={e => { if (e.target === e.currentTarget) setDetalle(null); }}><button autoFocus className="store-modal-close" onClick={() => setDetalle(null)} aria-label="Cerrar detalle">×</button>{detalle.imagen && <img src={detalle.imagen} alt={detalle.nombre} />}<small>{detalle.categoria.nombre}</small><h2>{detalle.nombre}</h2><p>{detalle.descripcion}</p><strong>{dinero(Number(detalle.precio))}</strong><button className="store-button" disabled={!detalle.disponible || enviando} onClick={() => { cambiar(detalle.id, 1); setDetalle(null); }}>{detalle.disponible ? 'Agregar al carrito' : 'Agotado'}</button></dialog>}
 
       {t.whatsapp && (
         <a

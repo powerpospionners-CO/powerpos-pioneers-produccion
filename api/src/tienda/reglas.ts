@@ -14,6 +14,8 @@ export const tiendaDefaults = {
   descripcion: '',
   sobreNosotros: '',
   color: '#0f766e',
+  coloresAutomaticos: true,
+  paletaLogo: null as { principal: string; secundario: string } | null,
   portada: '',
   whatsapp: '',
   horario: '',
