@@ -8,6 +8,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
 import ConfiguracionComandas from '@/components/ConfiguracionComandas';
+import OrigenesProductos from '@/components/OrigenesProductos';
 
 interface Categoria {
   id: number;
@@ -1186,6 +1187,7 @@ export default function ProductosPage() {
                 />
               </div>
 
+              {editando && <OrigenesProductos productoId={editando.id} />}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">{form.ventaGranel ? `Precio por ${ETIQUETA_UNIDAD_GRANEL[form.unidadGranel].toLowerCase().replace(/s$/, '')}` : 'Precio'}</label>

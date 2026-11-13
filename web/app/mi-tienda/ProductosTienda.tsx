@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import api from "@/lib/api";
+import OrigenesProductos from "@/components/OrigenesProductos";
 
 interface Producto {
   id: number;
@@ -226,7 +227,8 @@ export default function ProductosTienda() {
           className="scroll-mt-6 rounded-xl border border-teal-700 p-5"
         >
           <h3 className="mb-4 text-lg font-bold">Editar {original.nombre}</h3>
-          <fieldset disabled={ocupado} className="space-y-4">
+        <OrigenesProductos productoId={original.id} />
+        <fieldset disabled={ocupado} className="space-y-4">
             <label className="block">
               Nombre
               <input

@@ -8,11 +8,24 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { directorioUploads } from '../storage/uploads';
+import { OrigenesService, agregarOrigen } from './origenes.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('productos')
 export class ProductosController {
-  constructor(private readonly productosService: ProductosService) {}
+  constructor(private readonly productosService: ProductosService, private readonly origenes: OrigenesService) {}
+
+  @Get('origenes')
+  listarOrigenes(@Request() req: any) { return this.origenes.listar(req.user.empresaId); }
+  @Post('origenes')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  crearOrigen(@Request() req: any, @Body() body: any) { return this.origenes.guardar(req.user.empresaId, body?.nombre); }
+  @Patch('origenes/:origenId')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  editarOrigen(@Request() req: any, @Param('origenId') id: string, @Body() body: any) { return this.origenes.guardar(req.user.empresaId, body?.nombre, id); }
+  @Patch(':id/origen')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  asignarOrigen(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.origenes.asignar(req.user.empresaId, +id, body?.origenId); }
 
   @Post()
   @Roles('ADMIN_EMPRESA', 'GERENTE')
@@ -40,8 +53,9 @@ export class ProductosController {
   }
 
   @Get()
-  listar(@Request() req: any, @Query('categoriaId') categoriaId?: string) {
-    return this.productosService.listar(req.user.empresaId, categoriaId ? +categoriaId : undefined);
+  async listar(@Request() req: any, @Query('categoriaId') categoriaId?: string) {
+    const [productos, origenes] = await Promise.all([this.productosService.listar(req.user.empresaId, categoriaId ? +categoriaId : undefined), this.origenes.listar(req.user.empresaId)]);
+    return productos.map(p => agregarOrigen(p, origenes));
   }
 
   @Post(':id/imagen')
@@ -119,8 +133,8 @@ export class ProductosController {
   }
 
   @Get(':id')
-  obtener(@Param('id') id: string, @Request() req: any) {
-    return this.productosService.obtener(+id, req.user.empresaId);
+  async obtener(@Param('id') id: string, @Request() req: any) {
+    return agregarOrigen(await this.productosService.obtener(+id, req.user.empresaId), await this.origenes.listar(req.user.empresaId));
   }
 
   @Get(':id/historial-stock')

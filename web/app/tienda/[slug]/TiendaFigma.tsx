@@ -9,6 +9,7 @@ import {
   useContext,
   type CSSProperties,
 } from "react";
+import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
 import type { TiendaPublica } from "../../../lib/tiendaPublica";
 import { PedidoTienda } from "./PedidoTienda";
@@ -275,6 +276,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
   const [chatMessages, setChatMessages] = useState<
     { from: "user" | "bot"; text: string }[]
   >([]);
+  const [chatProductos, setChatProductos] = useState<number[]>([]);
   const [chatInput, setChatInput] = useState("");
   const typing = false;
   const [chatFailed, setChatFailed] = useState(false);
@@ -425,23 +427,14 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
       document.querySelector<HTMLInputElement>("#buscador-tienda")?.focus();
       response = "Escribe el nombre en el buscador o en este chat.";
     } else {
-      const term = label.replace(/^Ver /, "").replace(/^Quiero consultar /, "");
-      const matches = products.filter((p) =>
-        (p.name + " " + p.category)
-          .toLocaleLowerCase("es")
-          .includes(term.toLocaleLowerCase("es")),
+      const resultado = responderTienda(
+        label.replace(/^Ver /, "").replace(/^Quiero consultar /, ""),
+        tienda,
+        chatProductos,
       );
-      if (matches.length) {
-        setSearch(term);
-        response = `Encontré ${matches.length} productos en el catálogo. Consulta sus fichas y confirma la disponibilidad con el negocio.`;
-        document
-          .querySelector("#productos")
-          ?.scrollIntoView({ behavior: "smooth" });
-      } else {
-        setChatFailed(true);
-        response =
-          "No encontré esa información en el catálogo. Un asesor puede ayudarte.";
-      }
+      response = resultado.texto;
+      setChatFailed(resultado.derivar);
+      setChatProductos(resultado.productoIds);
     }
     setChatMessages((c) => [...c, { from: "bot", text: response }]);
   };
@@ -592,16 +585,14 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                 <small>{t.portadaEtiqueta || "NUESTRA SELECCIÓN"}</small>
                 <strong>{t.portadaTexto || "Encuentra tus favoritos"}</strong>
               </div>
-              <div className="floating-card fc-two">
-                <span>
-                  {tienda.nombre
-                    .split(/\s+/)
-                    .map((p) => p[0])
-                    .slice(0, 3)
-                    .join("")}
-                </span>
-                <i /> <span>CO</span>
-              </div>
+              {origins.length > 0 && (
+                <div
+                  className="floating-card fc-two"
+                  aria-label="Orígenes de nuestros productos"
+                >
+                  <span>{origins.slice(0, 2).join(" · ")}</span>
+                </div>
+              )}
             </div>
           </section>
 
@@ -680,18 +671,25 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                 ))}
               </div>
               <div className="select-row">
-                <label>
-                  Origen
-                  <select
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
+                {origins.length > 0 && (
+                  <div
+                    className="filter-row"
+                    role="group"
+                    aria-label="Filtrar por origen"
                   >
-                    <option>Todos</option>
-                    {origins.map((origin) => (
-                      <option key={origin}>{origin}</option>
+                    {["Todos", ...origins].map((origin) => (
+                      <button
+                        key={origin}
+                        type="button"
+                        aria-pressed={country === origin}
+                        className={country === origin ? "active" : ""}
+                        onClick={() => setCountry(origin)}
+                      >
+                        {origin === "Todos" ? "Todos los orígenes" : origin}
+                      </button>
                     ))}
-                  </select>
-                </label>
+                  </div>
+                )}
                 <label>
                   Ordenar
                   <select
@@ -1294,7 +1292,12 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                 <Icon name="close" />
               </button>
             </header>
-            <div className="chat-body">
+            <div
+              className="chat-body"
+              role="log"
+              aria-live="polite"
+              style={{ whiteSpace: "pre-line" }}
+            >
               <div className="bot-message">
                 ¡Hola! Bienvenido a {tienda.nombre}. ¿Qué estás buscando hoy?
               </div>
@@ -1343,23 +1346,32 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                   ))}
                 </div>
               )}
-              {chatMessages.length > 0 && products.length > 0 && (
-                <div className="chat-recommendation">
-                  <ProductImage product={products[0]} />
-                  <div>
-                    <small>Recomendación</small>
-                    <strong>{products[0]?.name}</strong>
-                    <button
-                      onClick={() => {
-                        setSelected(products[0]);
-                        setChatOpen(false);
-                      }}
-                    >
-                      Ver producto
-                    </button>
+              {chatMessages.length > 0 &&
+                chatProductos.length > 0 &&
+                products.some((p) => p.id === chatProductos[0]) && (
+                  <div className="chat-recommendation">
+                    <ProductImage
+                      product={products.find((p) => p.id === chatProductos[0])!}
+                    />
+                    <div>
+                      <small>Producto consultado</small>
+                      <strong>
+                        {products.find((p) => p.id === chatProductos[0])?.name}
+                      </strong>
+                      <button
+                        onClick={() => {
+                          setSelected(
+                            products.find((p) => p.id === chatProductos[0]) ||
+                              null,
+                          );
+                          setChatOpen(false);
+                        }}
+                      >
+                        Ver producto
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
             <a
               className="chat-whatsapp"
@@ -1375,6 +1387,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Escribe tu pregunta..."
                 aria-label="Mensaje para el chat"
+                maxLength={500}
               />
               <button type="submit" aria-label="Enviar mensaje">
                 <Icon name="send" />

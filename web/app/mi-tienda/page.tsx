@@ -5,6 +5,7 @@ import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import { useAuthStore } from "@/store/authStore";
 import ProductosTienda from "./ProductosTienda";
+import OrigenesProductos from "@/components/OrigenesProductos";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
@@ -169,6 +170,8 @@ export default function MiTienda() {
                       ["descripcion", "Descripción del negocio"],
                       ["sobreNosotros", "Sobre nosotros (historia, qué los hace diferentes, etc.)"],
                       ["horario", "Horario de atención"],
+                      ["pagos", "Medios y condiciones de pago (respuestas del asistente)"],
+                      ["envios", "Condiciones y plazos de entrega (respuestas del asistente)"],
                       ["portada", "URL HTTPS de la imagen de portada"],
                       [
                         "whatsapp",
@@ -376,7 +379,7 @@ export default function MiTienda() {
               </form>
             )
           )}
-          {usuario?.rol === "ADMIN_EMPRESA" && <ProductosTienda />}
+          {usuario?.rol === "ADMIN_EMPRESA" && <div className="mt-8"><OrigenesProductos /><ProductosTienda /></div>}
         </main>
       </div>
     </AuthGuard>

@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PedidosService } from '../pedidos/pedidos.service';
 import { monto, puntosConfig, SLUGS_RESERVADOS, texto, tiendaConfig } from './reglas';
 import { paletaLogoLocal } from '../empresa/paleta-logo-local';
+import { agregarOrigen, leerOrigenes } from '../productos/origenes.service';
 
 @Injectable()
 export class TiendaService {
@@ -62,6 +63,8 @@ export class TiendaService {
       'descripcion',
       'sobreNosotros',
       'horario',
+      'pagos',
+      'envios',
       'whatsapp',
       'portada',
       'color',
@@ -154,6 +157,8 @@ export class TiendaService {
       portada: t.portada,
       whatsapp: t.whatsapp,
       horario: t.horario,
+      pagos: t.pagos,
+      envios: t.envios,
       facebook: t.facebook,
       instagram: t.instagram,
       tiktok: t.tiktok,
@@ -170,15 +175,19 @@ export class TiendaService {
     };
     try {
       if (body.slug !== undefined && this.prisma.aislamientoActivo) await this.prisma.reservarSlug(slug);
-      await this.prisma.empresa.update({
+      await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM empresas WHERE id = ${empresaId} FOR UPDATE`;
+      const reciente = await tx.empresa.findUnique({ where: { id: empresaId }, select: { tiendaConfig: true } });
+      await tx.empresa.update({
         where: { id: empresaId },
         data: {
           ...(body.slug !== undefined ? { tiendaSlug: slug } : {}),
-          ...(body.tienda !== undefined ? { tiendaConfig: tienda } : {}),
+          ...(body.tienda !== undefined ? { tiendaConfig: { ...tienda, origenes: leerOrigenes(reciente?.tiendaConfig) } } : {}),
           ...(body.fidelizacion !== undefined
             ? { fidelizacionConfig: fidelizacion }
             : {}),
         },
+      });
       });
     } catch (e) {
       if (e.code === 'P2002')
@@ -219,7 +228,7 @@ export class TiendaService {
       direccion: e.direccion,
       telefono: e.telefono,
       config,
-      productos,
+      productos: productos.map(p => agregarOrigen(p, leerOrigenes(e.tiendaConfig))),
     };
   }
 

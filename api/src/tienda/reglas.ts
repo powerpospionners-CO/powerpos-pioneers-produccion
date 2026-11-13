@@ -22,6 +22,8 @@ export const tiendaDefaults = {
   portada: '',
   whatsapp: '',
   horario: '',
+  pagos: '',
+  envios: '',
   facebook: '',
   instagram: '',
   tiktok: '',

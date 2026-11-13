@@ -24,6 +24,8 @@ export type TiendaPublica = {
     portada: string;
     whatsapp: string;
     horario: string;
+    pagos?: string;
+    envios?: string;
     instagram: string;
     facebook: string;
     tiktok: string;

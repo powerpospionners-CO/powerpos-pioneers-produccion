@@ -21,7 +21,9 @@ describe('Catálogo compartido entre Productos y Mi tienda', () => {
     await productos.actualizarImagen(7, 24, 'https://example.com/uploads/productos/cafe.png');
     const catalogo = await tienda.catalogo('mercado');
     expect(catalogo.productos[0]).toMatchObject({ id: 7, precio: 14500, descripcion: 'Café de origen, tostión media', imagen: 'https://example.com/uploads/productos/cafe.png' });
-    expect(await productos.obtener(7, 24)).toMatchObject(catalogo.productos[0]);
+    const { origen, origenId, ...camposCompartidos } = catalogo.productos[0];
+    expect(await productos.obtener(7, 24)).toMatchObject(camposCompartidos);
+    expect(origen).toBe(''); expect(origenId).toBeNull();
   });
   it('vuelve a leer el precio y la imagen al consultar una tienda ya abierta', async () => {
     const { productos, tienda } = preparar();
