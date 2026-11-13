@@ -32,7 +32,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   ).slice(0, 160);
   const url = await urlPublicaTienda(slug);
   return {
-    title: titulo,
+    title: { absolute: titulo },
+    applicationName: tienda.nombre,
+    manifest: null,
+    appleWebApp: { title: tienda.nombre, capable: false },
+    icons: {
+      icon: tienda.logo || "/icons/tienda.svg",
+      apple: tienda.logo || "/icons/tienda.svg",
+    },
     description: descripcion,
     alternates: { canonical: url },
     robots: { index: true, follow: true },
@@ -50,11 +57,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function TiendaPage({ params }: Props) {
   const { slug } = await params;
   const tienda = await cargar(slug);
+  const url = await urlPublicaTienda(slug);
+  const sitio = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: tienda.nombre,
+    url,
+  };
   const datos = {
     "@context": "https://schema.org",
     "@type": "Store",
     name: tienda.nombre,
-    url: await urlPublicaTienda(slug),
+    url,
     ...(tienda.logo ? { image: tienda.logo } : {}),
     ...(tienda.config.descripcion
       ? { description: tienda.config.descripcion }
@@ -71,6 +85,10 @@ export default async function TiendaPage({ params }: Props) {
   };
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonSeguro(sitio) }}
+      />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonSeguro(datos) }}
