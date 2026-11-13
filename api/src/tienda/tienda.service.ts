@@ -8,9 +8,18 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PedidosService } from '../pedidos/pedidos.service';
 import { monto, puntosConfig, SLUGS_RESERVADOS, texto, tiendaConfig } from './reglas';
+import { paletaLogoLocal } from '../empresa/paleta-logo-local';
 
 @Injectable()
 export class TiendaService {
+  private async identidad(empresa: { logo: string | null; tiendaConfig: unknown }) {
+    const config = tiendaConfig(empresa.tiendaConfig);
+    if (config.coloresAutomaticos && !config.paletaLogo && empresa.logo) {
+      const paleta = await paletaLogoLocal(empresa.logo);
+      if (paleta) return { ...config, paletaLogo: paleta, color: paleta.principal };
+    }
+    return config;
+  }
   async resumen(user: any) {
     const pendientes = await this.prisma.pedidoWeb.count({where:{empresaId:user.empresaId,estado:'RECIBIDO',...(user.rol==='CAJERO'?{sucursalId:user.sucursalId}: {})}});
     return {pendientes};
@@ -27,7 +36,7 @@ export class TiendaService {
     if (!empresa) throw new NotFoundException('Empresa no encontrada');
     return {
       slug: empresa.tiendaSlug,
-      tienda: tiendaConfig(empresa.tiendaConfig),
+      tienda: await this.identidad(empresa),
       fidelizacion: puntosConfig(empresa.fidelizacionConfig),
     };
   }
@@ -47,6 +56,9 @@ export class TiendaService {
         throw new BadRequestException('Estado de tienda inválido');
     for (const campo of [
       'titulo',
+      'antetitulo',
+      'portadaEtiqueta',
+      'portadaTexto',
       'descripcion',
       'sobreNosotros',
       'horario',
@@ -131,6 +143,9 @@ export class TiendaService {
       publicada: t.publicada,
       pedidosHabilitados: t.pedidosHabilitados,
       titulo: t.titulo,
+      antetitulo: t.antetitulo,
+      portadaEtiqueta: t.portadaEtiqueta,
+      portadaTexto: t.portadaTexto,
       descripcion: t.descripcion,
       sobreNosotros: t.sobreNosotros,
       color: t.color,
@@ -183,7 +198,7 @@ export class TiendaService {
   }
   async catalogo(slug: string) {
     const e = await this.empresaPublica(slug);
-    const config = tiendaConfig(e.tiendaConfig);
+    const config = await this.identidad(e);
     const productos = await this.prisma.producto.findMany({
       where: { empresaId: e.id, activo: true, categoria: { activo: true } },
       select: {

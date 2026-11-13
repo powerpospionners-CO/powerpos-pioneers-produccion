@@ -48,6 +48,13 @@ export default function MiTienda() {
     } catch (error: any) { setMensaje(error.response?.data?.message || 'No se pudo analizar el logo'); }
     finally { setBusy(false); e.target.value = ''; }
   }
+  async function subirPortada(e: React.ChangeEvent<HTMLInputElement>) {
+    const file=e.target.files?.[0];if(!file)return;
+    setBusy(true);setMensaje('Subiendo imagen de portada…');
+    try {const form=new FormData();form.append('imagen',file);const {data}=await api.post('/empresa/anuncios/imagen',form,{headers:{'Content-Type':'multipart/form-data'}});cambiar('portada',data.imagen);setMensaje('Portada cargada. Guarda los cambios para publicarla en tu tienda.');}
+    catch(error:any){setMensaje(error.response?.data?.message||'No se pudo subir la portada');}
+    finally{setBusy(false);e.target.value='';}
+  }
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -138,6 +145,8 @@ export default function MiTienda() {
                   </section>
                   <section className={card}>
                     <h2 className="text-xl font-bold">Diseño e información</h2>
+                    <p className="text-sm text-gray-400">Todas las tiendas conservan la misma plantilla. Aquí personalizas sus textos, imágenes y colores.</p>
+                    <label className="block">Imagen de portada<input className={input} type="file" accept="image/png,image/jpeg,image/webp" onChange={subirPortada}/><span className="text-sm text-gray-400">Usa una fotografía horizontal con espacio libre a la izquierda para el título. Máximo 8 MB.</span></label>
                     <label className="block">Logo de tu empresa<input className={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={subirLogo} /><span className="text-sm text-gray-400">Sube tu logo para obtener los colores de tu marca. Máximo 8 MB.</span></label>
                     <label className="flex items-center gap-3"><input type="checkbox" checked={config.tienda.coloresAutomaticos !== false} onChange={e => { cambiar('coloresAutomaticos', e.target.checked); if (e.target.checked && config.tienda.paletaLogo) cambiar('color', config.tienda.paletaLogo.principal); }} />Usar automáticamente los colores de mi logo</label>
                     {config.tienda.paletaLogo && <div className="flex gap-3">{Object.values(config.tienda.paletaLogo as Record<string, string>).map((color, i) => <span key={i} className="rounded-lg border border-gray-600 px-4 py-2" style={{borderLeft:`20px solid ${color}`}}>{color}</span>)}</div>}
@@ -153,6 +162,9 @@ export default function MiTienda() {
                     </p>
                     {[
                       ["titulo", "Título principal"],
+                      ["antetitulo", "Frase sobre el título principal"],
+                      ["portadaEtiqueta", "Etiqueta sobre la portada"],
+                      ["portadaTexto", "Texto sobre la portada"],
                       ["descripcion", "Descripción del negocio"],
                       ["sobreNosotros", "Sobre nosotros (historia, qué los hace diferentes, etc.)"],
                       ["horario", "Horario de atención"],
@@ -169,7 +181,7 @@ export default function MiTienda() {
                             maxLength={2000}
                             className={input}
                             rows={k === "sobreNosotros" ? 6 : 4}
-                            value={config.tienda[k]}
+                            value={config.tienda[k] || ""}
                             onChange={(e) => cambiar(k, e.target.value)}
                           />
                         ) : (
@@ -177,7 +189,7 @@ export default function MiTienda() {
                             maxLength={500}
                             className={input}
                             type={k === "portada" ? "url" : "text"}
-                            value={config.tienda[k]}
+                            value={config.tienda[k] || ""}
                             onChange={(e) => cambiar(k, e.target.value)}
                           />
                         )}
