@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { slugDelHost, slugPublico, urlTienda } from "../lib/seoTienda";
+import { urlPublicaTienda } from "../lib/urlPublicaTienda";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const slug = slugDelHost((await headers()).get("host") || "");
   const base =
@@ -22,11 +23,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
   if (!r.ok) throw new Error("No se pudo consultar el mapa de tiendas");
   const tiendas: { slug: string }[] = await r.json();
-  return tiendas
-    .filter((t) => slugPublico(t.slug))
-    .map((t) => ({
-      url: urlTienda(t.slug),
-      changeFrequency: "daily",
-      priority: 1,
-    }));
+  return Promise.all(tiendas.filter(t => slugPublico(t.slug)).map(async t => ({ url: await urlPublicaTienda(t.slug), changeFrequency: 'daily' as const, priority: 1 })));
 }

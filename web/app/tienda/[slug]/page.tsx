@@ -3,7 +3,8 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import TiendaCliente from "./TiendaCliente";
 import type { TiendaPublica } from "../../../lib/tiendaPublica";
-import { jsonSeguro, slugPublico, urlTienda } from "../../../lib/seoTienda";
+import { jsonSeguro, slugPublico } from "../../../lib/seoTienda";
+import { urlPublicaTienda } from "../../../lib/urlPublicaTienda";
 
 export const dynamic = "force-dynamic";
 const cargar = cache(async (slug: string): Promise<TiendaPublica> => {
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     tienda.config.descripcion ||
     `Descubre el catálogo de ${tienda.nombre}. Consulta productos, precios y contacto con el negocio.`
   ).slice(0, 160);
-  const url = urlTienda(slug);
+  const url = await urlPublicaTienda(slug);
   return {
     title: titulo,
     description: descripcion,
@@ -53,7 +54,7 @@ export default async function TiendaPage({ params }: Props) {
     "@context": "https://schema.org",
     "@type": "Store",
     name: tienda.nombre,
-    url: urlTienda(slug),
+    url: await urlPublicaTienda(slug),
     ...(tienda.logo ? { image: tienda.logo } : {}),
     ...(tienda.config.descripcion
       ? { description: tienda.config.descripcion }
