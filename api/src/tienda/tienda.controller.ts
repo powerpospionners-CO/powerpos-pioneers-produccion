@@ -17,6 +17,7 @@ import { PedidosPublicosGuard } from './pedidos-publicos.guard';
 @Controller('tiendas')
 export class TiendaPublicaController {
   constructor(private service: TiendaService) {}
+  @Get('mapa') mapa() { return this.service.mapaPublico(); }
   @Get(':slug') catalogo(@Param('slug') slug: string) {
     return this.service.catalogo(slug);
   }

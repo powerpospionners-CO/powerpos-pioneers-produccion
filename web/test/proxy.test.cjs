@@ -15,6 +15,7 @@ test('los apartados internos se sirven en el dominio de la empresa', () => {
     const r = proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com' + ruta, { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } }));
     assert.equal(r.headers.get('x-middleware-rewrite'), null);
     assert.equal(r.headers.get('x-middleware-next'), '1');
+    assert.equal(r.headers.get('x-robots-tag'), 'noindex, nofollow');
   }
 });
 test('la raíz del dominio de empresa conserva su tienda pública', () => {

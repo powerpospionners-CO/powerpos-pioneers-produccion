@@ -1,0 +1,6 @@
+# Revisar cambios de automatizaciones, dependencias y código de publicación.
+/.github/ @powerpospionners-CO
+**/package.json @powerpospionners-CO
+**/package-lock.json @powerpospionners-CO
+/api/scripts/ @powerpospionners-CO
+/web/next.config.ts @powerpospionners-CO

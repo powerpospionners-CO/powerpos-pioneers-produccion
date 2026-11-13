@@ -13,6 +13,32 @@ import { agregarOrigen, leerOrigenes } from '../productos/origenes.service';
 
 @Injectable()
 export class TiendaService {
+  private mapaCache?: { vence: number; datos: Promise<{ slug: string }[]> };
+  mapaPublico() {
+    if (this.mapaCache && this.mapaCache.vence > Date.now()) return this.mapaCache.datos;
+    const datos = this.construirMapa();
+    this.mapaCache = { vence: Date.now() + 60000, datos };
+    void datos.catch(() => { this.mapaCache = undefined; });
+    return datos;
+  }
+  private async construirMapa() {
+    if (!this.prisma.aislamientoActivo) {
+      const empresas = await this.prisma.control.empresa.findMany({ where: { activo: true }, select: { tiendaSlug: true, tiendaConfig: true } });
+      return empresas.filter(e => tiendaConfig(e.tiendaConfig).publicada && e.tiendaSlug && !SLUGS_RESERVADOS.has(e.tiendaSlug)).map(e => ({ slug: e.tiendaSlug }));
+    }
+    const sedes = await this.prisma.control.baseSede.findMany({ where: { estado: 'ACTIVA' }, select: { slug: true } });
+    const resultado: { slug: string }[] = [];
+    // Publicar solo sedes que realmente mantienen su tienda visible; nunca datos privados.
+    for (const sede of sedes) {
+      if (!sede.slug || SLUGS_RESERVADOS.has(sede.slug)) continue;
+      try {
+        const contexto = await this.prisma.sedePublica(sede.slug);
+        const e = await contexto.cliente.empresa.findUnique({ where: { id: contexto.empresaId }, select: { activo: true, tiendaConfig: true } });
+        if (e?.activo && tiendaConfig(e.tiendaConfig).publicada) resultado.push({ slug: sede.slug });
+      } catch { /* Una sede no disponible no publica información en el mapa. */ }
+    }
+    return resultado;
+  }
   private async identidad(empresa: { logo: string | null; tiendaConfig: unknown }) {
     const config = tiendaConfig(empresa.tiendaConfig);
     if (config.coloresAutomaticos && !config.paletaLogo && empresa.logo) {

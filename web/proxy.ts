@@ -24,6 +24,8 @@ const RUTAS_PANEL = [
 export function proxy(request: NextRequest) {
   const url = request.nextUrl;
   const host = (request.headers.get('host') || '').toLowerCase().split(':')[0];
+  const panel = () => { const respuesta = NextResponse.next(); respuesta.headers.set('X-Robots-Tag', 'noindex, nofollow'); return respuesta; };
+  if (RUTAS_PANEL.some(ruta => url.pathname === ruta || url.pathname.startsWith(`${ruta}/`)) || host === `app.${ROOT_DOMAIN}` && !url.pathname.startsWith('/tienda/')) return panel();
 
   // Vercel preview deployments (*.vercel.app), localhost, IPs, etc.: sin reescritura.
   if (!host.endsWith(`.${ROOT_DOMAIN}`)) {
