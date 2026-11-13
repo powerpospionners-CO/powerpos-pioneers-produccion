@@ -3,6 +3,22 @@ const sharp = sharpModule as unknown as typeof sharpModule.default;
 import { analizarLogo } from './paleta-logo';
 
 describe('colores del logo', () => {
+  it('prioriza la marca aunque el fondo crema ocupe casi toda la imagen', async () => {
+    const marca = await sharp({
+      create: { width: 15, height: 15, channels: 4, background: '#ff6a00' },
+    })
+      .png()
+      .toBuffer();
+    const logo = await sharp({
+      create: { width: 100, height: 100, channels: 4, background: '#fcedd1' },
+    })
+      .composite([{ input: marca, left: 40, top: 40 }])
+      .png()
+      .toBuffer();
+    const color = (await analizarLogo(logo)).principal;
+    expect(parseInt(color.slice(1, 3), 16)).toBeGreaterThan(250);
+    expect(parseInt(color.slice(5, 7), 16)).toBeLessThan(10);
+  });
   it('elige la marca naranja sobre el fondo blanco y negro', async () => {
     const logo = await sharp({
       create: { width: 100, height: 100, channels: 4, background: '#ffffff' },

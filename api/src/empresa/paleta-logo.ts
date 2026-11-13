@@ -32,9 +32,25 @@ export async function analizarLogo(imagen: Buffer): Promise<PaletaLogo> {
     grupo.cantidad++;
     grupos.set(clave, grupo);
   }
-  const colores = [...grupos.values()]
+  const ordenados = [...grupos.values()]
     .sort((a, b) => b.peso - a.peso)
-    .map((g) => g.rgb.map((v) => v / g.peso));
+    .map((g) => ({ rgb: g.rgb.map((v) => v / g.peso), cantidad: g.cantidad }));
+  // El fondo crema/gris suele ocupar más superficie que la marca. Priorizar
+  // los grupos cromáticos significativos; conservar el caso monocromático.
+  const cromaticos = ordenados.filter(({ rgb, cantidad }) => {
+    const max = Math.max(...rgb),
+      min = Math.min(...rgb);
+    return (
+      max > 60 &&
+      max - min >= 50 &&
+      (max - min) / max >= 0.35 &&
+      cantidad >= info.width * info.height * 0.005
+    );
+  });
+  const colores = [
+    ...cromaticos,
+    ...ordenados.filter((c) => !cromaticos.includes(c)),
+  ].map((c) => c.rgb);
   const principal = colores[0] || [40, 40, 40];
   const secundario =
     colores.find(
