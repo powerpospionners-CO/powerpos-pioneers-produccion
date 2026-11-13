@@ -46,7 +46,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         sitemap: `${urlTienda(slug)}sitemap.xml`,
       }
     : {
-        rules: { userAgent: "*", disallow: "/", allow: "/sitemap.xml" },
+        rules: { userAgent: "*", disallow: "/", allow: ["/sitemap.xml", "/tienda/"] },
         sitemap: `https://app.${dominioTiendas}/sitemap.xml`,
       };
 }
