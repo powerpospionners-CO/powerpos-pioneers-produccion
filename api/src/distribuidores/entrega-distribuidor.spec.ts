@@ -8,6 +8,15 @@ function escenario(modalidad:string){
 }
 const actor={id:3,empresaId:2,sucursalId:2,rol:'CAJERO'};
 describe('Entrega de distribuidor a cargo de caja',()=>{
+  it('entrega el peso en gramos al POS, con su precio y factor base sin convertirlo a paquetes', async () => {
+    const { service, tx, pos } = escenario('PAGO_ANTES');
+    const pedido = await tx.pedidoDistribuidor.findFirst();
+    pedido.total = 20000;
+    pedido.detalles = [{ productoId: 5, presentacionId: null, cantidad: 250, factorUnidades: 1, precioUnitario: 80 }];
+    pos.crearEnTransaccion.mockResolvedValue({ id: 10, numero: 'PED-2-1', total: 20000 });
+    await service.entregar(1, { clave: 'entrega-granel', pagos: [{ metodoPago: 'EFECTIVO', monto: 20000 }] }, actor);
+    expect(pos.crearEnTransaccion).toHaveBeenCalledWith(expect.objectContaining({ items: [{ productoId: 5, presentacionId: null, cantidad: 250 }] }), 3, 2, tx, 0, { precios: { '5:0': 80 }, factores: { '5:0': 1 } });
+  });
   it('exige revisar una corrección posterior a la apertura del cobro', async () => {
     const { service, pos, control } = escenario('PAGO_ANTES');
     control.revision = 1;
