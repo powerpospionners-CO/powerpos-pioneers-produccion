@@ -28,6 +28,25 @@ function escenario(stockActualizado = 1) {
 describe('Pedidos de distribuidor', () => {
   const datos = { modalidad:'PAGO_ANTES', clave:'pedido-prueba-1', items: [{ productoId: 5, cantidad: 3 }] };
 
+  it('permite pedir chile por gramos y calcula precio, comisión y existencias con el peso real', async () => {
+    const { tx, service } = escenario();
+    tx.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Chile picoso', precio: 80, ventaGranel: true, unidadGranel: 'kg', stockActual: 1000, disponible: true, controlaStock: true });
+    const resultado = await service.crearPedido({ ...datos, items: [{ productoId: 5, cantidad: 250 }] }, 7, 2, 1, 9);
+    expect(resultado).toMatchObject({ total: 20000, comisionMonto: 2000 });
+    expect(tx.pedidoDistribuidor.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ detalles: { create: [expect.objectContaining({ cantidad: 250, factorUnidades: 1, precioUnitario: 80, subtotal: 20000 })] } }) }));
+    expect(tx.producto.updateMany).not.toHaveBeenCalled();
+    await expect(service.crearPedido({ ...datos, items: [{ productoId: 5, cantidad: 1001 }] }, 7, 2, 1, 9)).rejects.toThrow('Existencias insuficientes');
+  });
+
+  it('conserva las presentaciones empacadas de productos a granel y acumula el stock con los gramos sueltos', async () => {
+    const { tx, service } = escenario();
+    tx.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Chile picoso', precio: 80, ventaGranel: true, stockActual: 700, disponible: true, controlaStock: true });
+    tx.productoPresentacion.findFirst.mockResolvedValue({ id: 2, nombre: 'Bolsa 250 g', factorUnidades: 250, precio: 18000 });
+    const items = [{ productoId: 5, cantidad: 2, presentacionId: 2 }, { productoId: 5, cantidad: 200 }];
+    expect(await service.crearPedido({ ...datos, items }, 7, 2, 1, 9)).toMatchObject({ total: 52000 });
+    await expect(service.crearPedido({ ...datos, items: [...items, { productoId: 5, cantidad: 1 }] }, 7, 2, 1, 9)).rejects.toThrow('Existencias insuficientes');
+  });
+
   it('calcula el total y comisión sin descontar inventario ni inventar dinero recibido', async () => {
     const { tx, service } = escenario();
     const resultado = await service.crearPedido(datos, 7, 2, 1, 9);

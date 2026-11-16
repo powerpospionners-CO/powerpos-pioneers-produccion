@@ -8,12 +8,13 @@ import api from '@/lib/api';
 import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 import { moneda } from '@/lib/formato';
+import { buscarProductosDistribuidor, unidadVentaDistribuidor } from '@/lib/catalogoDistribuidor';
 import { Ban, List, Minus, Pencil, Plus, Search, Trash2, Truck, X } from 'lucide-react';
 
 type Presentacion = { id: number; nombre: string; precio: string; factorUnidades: number };
 type Producto = {
   id: number; nombre: string; precio: string; codigoBarras?: string | null;
-  disponible: boolean; ventaGranel?: boolean;
+  disponible: boolean; ventaGranel?: boolean; unidadGranel?: string | null;
   categoria: { nombre: string };
   presentaciones?: Presentacion[];
 };
@@ -77,24 +78,16 @@ export default function DistribuidorPage() {
     } catch { /* silencioso */ }
   };
 
-  // El catálogo del distribuidor son los mismos productos y precios que
-  // cualquier venta normal — no se incluye venta al granel (pesaje) porque
-  // este flujo es para pedidos armados por cantidades, no para pesar.
-  const resultados = useMemo(() => {
-    if (!busqueda.trim()) return [];
-    const q = busqueda.toLowerCase();
-    return productos
-      .filter((p) => p.disponible && !p.ventaGranel)
-      .filter((p) => p.nombre.toLowerCase().includes(q) || (p.codigoBarras || '').includes(q))
-      .slice(0, 15);
-  }, [productos, busqueda]);
+  const resultados = useMemo(() => buscarProductosDistribuidor(productos, busqueda), [productos, busqueda]);
+  const unidadLinea = (linea: ItemCarrito) => unidadVentaDistribuidor(productos.find(p => p.id === linea.productoId), linea.presentacionId);
+  const maximoLinea = (linea: ItemCarrito) => unidadLinea(linea) ? 999999 : 9999;
 
   const agregar = (producto: Producto, presentacion: Presentacion | null) => {
     const key = `${producto.id}:${presentacion?.id ?? 'base'}`;
     setUltimoAgregado({ key });
     setCarrito((actual) => {
       const existe = actual.find((l) => l.key === key);
-      if (existe) return actual.map((l) => (l.key === key ? { ...l, cantidad: l.cantidad + 1 } : l));
+      if (existe) return actual.map((l) => (l.key === key ? { ...l, cantidad: Math.min(maximoLinea(l), l.cantidad + 1) } : l));
       return [...actual, {
         key, productoId: producto.id, presentacionId: presentacion?.id ?? null,
         nombre: presentacion ? `${producto.nombre} — ${presentacion.nombre}` : producto.nombre,
@@ -106,7 +99,7 @@ export default function DistribuidorPage() {
 
   const cambiarCantidad = (key: string, cantidad: number) => {
     setCantidadesEditadas(actual => { const nuevo = { ...actual }; delete nuevo[key]; return nuevo; });
-    setCarrito((actual) => actual.map((l) => (l.key === key ? { ...l, cantidad: Math.max(1, Math.min(9999, Math.floor(cantidad) || 1)) } : l)));
+    setCarrito((actual) => actual.map((l) => (l.key === key ? { ...l, cantidad: Math.max(1, Math.min(maximoLinea(l), Math.floor(cantidad) || 1)) } : l)));
   };
 
   const quitar = (key: string) => setCarrito((actual) => actual.filter((l) => l.key !== key));
@@ -244,7 +237,7 @@ export default function DistribuidorPage() {
                       {p.presentaciones && p.presentaciones.length > 0 ? (
                         <>
                           <button type="button" onClick={() => { agregar(p, null); setBusqueda(''); }} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-gray-700">
-                            <span>{p.nombre}</span><span className="text-orange-400">{moneda(Number(p.precio))}</span>
+                            <span>{p.nombre}{p.ventaGranel ? ' · A granel' : ''}</span><span className="text-orange-400">{moneda(Number(p.precio))}{unidadVentaDistribuidor(p) ? `/${unidadVentaDistribuidor(p)}` : ''}</span>
                           </button>
                           {p.presentaciones.map((pr) => (
                             <button key={pr.id} type="button" onClick={() => { agregar(p, pr); setBusqueda(''); }} className="flex w-full items-center justify-between rounded px-2 py-1.5 pl-5 text-left text-sm text-gray-300 hover:bg-gray-700">
@@ -254,7 +247,7 @@ export default function DistribuidorPage() {
                         </>
                       ) : (
                         <button type="button" onClick={() => { agregar(p, null); setBusqueda(''); }} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-gray-700">
-                          <span>{p.nombre}</span><span className="text-orange-400">{moneda(Number(p.precio))}</span>
+                          <span>{p.nombre}{p.ventaGranel ? ' · A granel' : ''}</span><span className="text-orange-400">{moneda(Number(p.precio))}{unidadVentaDistribuidor(p) ? `/${unidadVentaDistribuidor(p)}` : ''}</span>
                         </button>
                       )}
                     </div>
@@ -264,20 +257,22 @@ export default function DistribuidorPage() {
             </div>
 
             <div className="mt-4 space-y-2">
+              {carrito.some(l => unidadLinea(l)) && <p className="text-sm text-orange-300">Para productos a granel, escribe el peso en gramos (1 kg = 1000 g) o el volumen en mililitros (1 l = 1000 ml). Las presentaciones empacadas se cuentan por unidad.</p>}
               {!carrito.length && <p className="py-4 text-center text-sm text-gray-500">Busca productos arriba para armar el pedido.</p>}
               {[...carrito].reverse().sort((a, b) => Number(b.key === ultimoAgregado?.key) - Number(a.key === ultimoAgregado?.key)).map((l) => (
                 <div key={l.key} className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 p-3 ${l.key === ultimoAgregado?.key ? 'ring-2 ring-orange-500' : ''}`}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-white">{l.nombre}</p>
-                    <p className="text-xs text-gray-500">{moneda(l.precio)} c/u</p>
+                    <p className="text-xs text-gray-500">{moneda(l.precio)}{unidadLinea(l) ? ` por ${unidadLinea(l) === 'g' ? 'gramo' : 'mililitro'}` : ' c/u'}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" aria-label={`Reducir cantidad de ${l.nombre}`} disabled={l.cantidad <= 1} onClick={() => cambiarCantidad(l.key, l.cantidad - 1)} className="h-10 w-10 rounded-lg bg-gray-800 disabled:opacity-40"><Minus size={18} className="mx-auto" /></button>
-                    <input aria-label={`Cantidad de ${l.nombre}`} type="number" inputMode="numeric" min={1} max={9999} step={1} value={cantidadesEditadas[l.key] ?? l.cantidad} onFocus={e => e.target.select()} onChange={e => {
+                    <input aria-label={`${unidadLinea(l) ? `Cantidad en ${unidadLinea(l)}` : 'Cantidad'} de ${l.nombre}`} type="number" inputMode="numeric" min={1} max={maximoLinea(l)} step={1} value={cantidadesEditadas[l.key] ?? l.cantidad} onFocus={e => e.target.select()} onChange={e => {
                       if (e.target.value === '') { setCantidadesEditadas(actual => ({ ...actual, [l.key]: '' })); return; }
                       cambiarCantidad(l.key, Number(e.target.value));
                     }} onBlur={() => cambiarCantidad(l.key, l.cantidad)} className="h-10 w-16 rounded-lg border border-gray-700 bg-gray-800 text-center text-white" />
-                    <button type="button" aria-label={`Aumentar cantidad de ${l.nombre}`} disabled={l.cantidad >= 9999} onClick={() => cambiarCantidad(l.key, l.cantidad + 1)} className="h-10 w-10 rounded-lg bg-gray-800 disabled:opacity-40"><Plus size={18} className="mx-auto" /></button>
+                    {unidadLinea(l) && <span className="text-xs text-gray-400">{unidadLinea(l)}</span>}
+                    <button type="button" aria-label={`Aumentar cantidad de ${l.nombre}`} disabled={l.cantidad >= maximoLinea(l)} onClick={() => cambiarCantidad(l.key, l.cantidad + 1)} className="h-10 w-10 rounded-lg bg-gray-800 disabled:opacity-40"><Plus size={18} className="mx-auto" /></button>
                   </div>
                   <span className="w-24 shrink-0 text-right font-semibold text-white">{moneda(l.precio * l.cantidad)}</span>
                   <button type="button" onClick={() => quitar(l.key)} className="text-gray-500 hover:text-red-400"><Trash2 size={16} /></button>
@@ -361,7 +356,7 @@ export default function DistribuidorPage() {
                   {detalle.detalles.map((d) => (
                     <div key={d.id} className="rounded-lg border border-gray-800 p-3 text-sm">
                       <div className="flex justify-between text-gray-200">
-                        <span>{d.cantidad}x {d.producto.nombre}{d.presentacionNombre ? ` — ${d.presentacionNombre}` : ''}</span>
+                        <span>{d.cantidad}{unidadVentaDistribuidor(productos.find(p => p.id === d.productoId), d.presentacionId) || 'x'} {d.producto.nombre}{d.presentacionNombre ? ` — ${d.presentacionNombre}` : ''}</span>
                         <strong className="text-white">{moneda(Number(d.subtotal))}</strong>
                       </div>
                       <p className="text-xs text-gray-500">{moneda(Number(d.precioUnitario))} c/u</p>
