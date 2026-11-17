@@ -27,6 +27,12 @@ function escenario(stockActualizado = 1) {
 
 describe('Pedidos de distribuidor', () => {
   const datos = { modalidad:'PAGO_ANTES', clave:'pedido-prueba-1', items: [{ productoId: 5, cantidad: 3 }] };
+  it('rechaza productos agotados aunque tengan desactivado el control de stock', async () => {
+    const { tx, service } = escenario();
+    tx.producto.findFirst.mockResolvedValue({ id: 5, nombre: 'Chile agotado', precio: 80, disponible: true, controlaStock: false, stockActual: 0 });
+    await expect(service.crearPedido(datos, 7, 2, 1, 9)).rejects.toThrow('Existencias insuficientes');
+    expect(tx.pedidoDistribuidor.create).not.toHaveBeenCalled();
+  });
 
   it('permite pedir chile por gramos y calcula precio, comisión y existencias con el peso real', async () => {
     const { tx, service } = escenario();
