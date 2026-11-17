@@ -8,6 +8,28 @@ function escenario(modalidad:string){
 }
 const actor={id:3,empresaId:2,sucursalId:2,rol:'CAJERO'};
 describe('Entrega de distribuidor a cargo de caja',()=>{
+  it.each(['PAGO_ANTES','COBRO_POSTERIOR'])('calcula comisión sobre el total descontado en %s y no descuenta dos veces al reintentar', async modalidad => {
+    const { service, tx, pos, control } = escenario(modalidad);
+    const pedido = await tx.pedidoDistribuidor.findFirst();
+    pedido.comisionPorcentaje = 10;
+    tx.pedidoDistribuidor.update = jest.fn().mockImplementation(({ data }) => { Object.assign(pedido, data); return pedido; });
+    tx.auditoria.create.mockImplementation(({ data }) => { Object.assign(control, data.detalle); });
+    pos.crearEnTransaccion.mockResolvedValue({ id: 10, numero: 'PED-2-1', total: 27000, cuentaCredito: { saldo: modalidad === 'COBRO_POSTERIOR' ? 27000 : 0 } });
+    const datos = { clave: 'entrega-descuento', descuento: 3000, ...(modalidad === 'COBRO_POSTERIOR' ? { condicionPago: 'CREDITO', vencimientoCredito: '2099-01-01' } : { pagos: [{ metodoPago: 'EFECTIVO', monto: 27000 }] }) };
+    await service.entregar(1, datos, actor);
+    expect(pos.crearEnTransaccion).toHaveBeenCalledWith(expect.objectContaining({ descuento: 3000 }), 3, 2, tx, 0, expect.anything());
+    expect(tx.pedidoDistribuidor.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { total: 27000, comisionMonto: 2700 } });
+    expect(control).toMatchObject({ totalAntesDescuento: 30000, descuento: 3000 });
+    await service.entregar(1, datos, actor);
+    expect(pos.crearEnTransaccion).toHaveBeenCalledTimes(1);
+    expect(tx.pedidoDistribuidor.update).toHaveBeenCalledTimes(1);
+    await expect(service.entregar(1, { ...datos, descuento: 2000 }, actor)).rejects.toThrow('ya fue entregado');
+  });
+  it.each([-1, 30000, 31000, NaN, 0.005, '3000'])('rechaza descuento inválido %s antes de crear la venta', async descuento => {
+    const { service, pos } = escenario('PAGO_ANTES');
+    await expect(service.entregar(1, { clave: 'descuento-invalido', descuento, pagos: [{ metodoPago: 'EFECTIVO', monto: 30000 }] }, actor)).rejects.toThrow();
+    expect(pos.crearEnTransaccion).not.toHaveBeenCalled();
+  });
   it('entrega el peso en gramos al POS, con su precio y factor base sin convertirlo a paquetes', async () => {
     const { service, tx, pos } = escenario('PAGO_ANTES');
     const pedido = await tx.pedidoDistribuidor.findFirst();

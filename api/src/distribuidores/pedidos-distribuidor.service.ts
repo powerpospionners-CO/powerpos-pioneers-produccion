@@ -5,6 +5,7 @@ import { bloquearCajaSucursal } from '../caja/caja-lock';
 import { PedidosService } from '../pedidos/pedidos.service';
 import { CONTROL_DISTRIBUIDOR, controlesDistribuidor, gestionPedidos } from './gestion-pedidos';
 import { createHash } from 'node:crypto';
+import { monto } from '../tienda/reglas';
 
 @Injectable()
 export class PedidosDistribuidorService {
@@ -177,13 +178,17 @@ export class PedidosDistribuidorService {
       await bloquearCajaSucursal(tx,p.sucursalId);
       const control = (await controlesDistribuidor(tx,actor.empresaId,[id])).get(id);
       if (!control) throw new BadRequestException('Pedido histórico: requiere conciliación administrativa, no un nuevo cobro.');
-      const solicitud = JSON.stringify({ pagos:datos.pagos || [], condicionPago:datos.condicionPago || 'CONTADO', vencimientoCredito:datos.vencimientoCredito || null, cambio:datos.cambio || 0 });
+      const descuento = monto(datos.descuento ?? 0, 'Descuento', 0, 99999999.99);
+      const solicitud = JSON.stringify({ pagos:datos.pagos || [], condicionPago:datos.condicionPago || 'CONTADO', vencimientoCredito:datos.vencimientoCredito || null, cambio:datos.cambio || 0, ...(descuento > 0 ? { descuento } : {}) });
       if (control.pedidoCajaId) {
         if (control.claveEntrega!==datos.clave || control.solicitudEntrega!==solicitud) throw new BadRequestException('Este pedido ya fue entregado.');
         const venta = await tx.pedido.findFirst({ where:{id:control.pedidoCajaId,sucursal:{empresaId:actor.empresaId}},include:{cuentaCredito:true} });
         return {pedidoCajaId:venta!.id,numero:venta!.numero,saldoPendiente:Number(venta!.cuentaCredito?.saldo || 0)};
       }
       if ((datos.revision ?? 0) !== (control.revision ?? 0)) throw new BadRequestException('El distribuidor modificó este pedido. Cierra el cobro y revisa el pedido actualizado');
+      if (descuento >= Number(p.total)) throw new BadRequestException('El descuento debe ser menor que el total del pedido.');
+      const totalAntesDescuento = Number(p.total);
+      const totalFinal = Math.round((totalAntesDescuento - descuento) * 100) / 100;
       if (!p.distribuidor.activo || p.distribuidor.sucursalId!==p.sucursalId) throw new BadRequestException('El distribuidor no está activo en esta sede.');
       if (control.modalidad==='PAGO_ANTES' && datos.condicionPago==='CREDITO') throw new BadRequestException('Esta modalidad exige el pago completo antes de retirar.');
       const aCredito = datos.condicionPago==='CREDITO';
@@ -198,9 +203,10 @@ export class PedidosDistribuidorService {
       const precios = Object.fromEntries(p.detalles.map(d=>[`${d.productoId}:${d.presentacionId || 0}`,Number(d.precioUnitario)]));
       const factores = Object.fromEntries(p.detalles.map(d=>[`${d.productoId}:${d.presentacionId || 0}`,d.factorUnidades]));
       const claveIdempotencia = createHash('sha256').update(`entrega-distribuidor:${actor.empresaId}:${id}`).digest('hex');
-      const venta = await this.pedidos.crearEnTransaccion({ sucursalId:p.sucursalId,claveIdempotencia,clienteId,metodoPago:datos.metodoPago,pagos:datos.pagos,condicionPago:datos.condicionPago,vencimientoCredito:datos.vencimientoCredito,cambio:datos.cambio,observacion:`Pedido distribuidor ${p.numero} · ${p.distribuidor.nombre}${p.clienteReferencia?` · Cliente: ${p.clienteReferencia}`:''}`,items:p.detalles.map(d=>({productoId:d.productoId,presentacionId:d.presentacionId,cantidad:d.cantidad})) },actor.id,actor.empresaId,tx,0,{precios,factores});
-      if (Math.round(Number(venta.total)*100)!==Math.round(Number(p.total)*100)) throw new BadRequestException('El total del pedido cambió; revisa sus presentaciones antes de entregar.');
-      await tx.auditoria.create({data:{empresaId:actor.empresaId,usuarioId:actor.id,entidad:CONTROL_DISTRIBUIDOR,entidadId:id,accion:'ENTREGAR',detalle:{...control,pedidoCajaId:venta.id,claveEntrega:datos.clave,solicitudEntrega:solicitud,entregadoEn:new Date().toISOString()}}});
+      const venta = await this.pedidos.crearEnTransaccion({ sucursalId:p.sucursalId,claveIdempotencia,clienteId,descuento,metodoPago:datos.metodoPago,pagos:datos.pagos,condicionPago:datos.condicionPago,vencimientoCredito:datos.vencimientoCredito,cambio:datos.cambio,observacion:`Pedido distribuidor ${p.numero} · ${p.distribuidor.nombre}${p.clienteReferencia?` · Cliente: ${p.clienteReferencia}`:''}`,items:p.detalles.map(d=>({productoId:d.productoId,presentacionId:d.presentacionId,cantidad:d.cantidad})) },actor.id,actor.empresaId,tx,0,{precios,factores});
+      if (Math.round(Number(venta.total)*100)!==Math.round(totalFinal*100)) throw new BadRequestException('El total del pedido cambió; revisa sus presentaciones antes de entregar.');
+      if (descuento > 0) await tx.pedidoDistribuidor.update({ where: { id }, data: { total: totalFinal, comisionMonto: Math.round(totalFinal * Number(p.comisionPorcentaje)) / 100 } });
+      await tx.auditoria.create({data:{empresaId:actor.empresaId,usuarioId:actor.id,entidad:CONTROL_DISTRIBUIDOR,entidadId:id,accion:'ENTREGAR',detalle:{...control,totalAntesDescuento,descuento,pedidoCajaId:venta.id,claveEntrega:datos.clave,solicitudEntrega:solicitud,entregadoEn:new Date().toISOString()}}});
       return {pedidoCajaId:venta.id,numero:venta.numero,saldoPendiente:Number((venta as any).cuentaCredito?.saldo || 0)};
     },{timeout:20000});
   }

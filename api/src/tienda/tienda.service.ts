@@ -243,6 +243,9 @@ export class TiendaService {
         precio: true,
         imagen: true,
         disponible: true,
+        stockActual: true,
+        ventaGranel: true,
+        unidadGranel: true,
         categoriaId: true,
         categoria: { select: { nombre: true } },
       },
@@ -329,6 +332,8 @@ export class TiendaService {
       );
     const items = body.items.map((i) => {
       const p = productos.find((p) => p.id === i.productoId)!;
+      if (!Number.isFinite(Number(p.stockActual)) || Number(p.stockActual) < i.cantidad)
+        throw new BadRequestException(`Existencias insuficientes de ${p.nombre}. Actualice el catálogo.`);
       return {
         productoId: p.id,
         nombre: p.nombre,

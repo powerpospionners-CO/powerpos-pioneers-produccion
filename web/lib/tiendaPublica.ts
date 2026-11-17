@@ -5,6 +5,9 @@ export type ProductoPublico = {
   precio: string;
   imagen: string;
   disponible: boolean;
+  stockActual: number;
+  ventaGranel?: boolean;
+  unidadGranel?: string | null;
   categoria: { nombre: string };
   origen?: string;
   presentacion?: string;

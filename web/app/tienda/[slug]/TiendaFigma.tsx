@@ -11,6 +11,7 @@ import {
 } from "react";
 import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
+import { existenciasTienda, puedePedirProducto } from "../../../lib/existenciasTienda";
 import type { TiendaPublica } from "../../../lib/tiendaPublica";
 import { PedidoTienda } from "./PedidoTienda";
 import "./tienda.css";
@@ -25,6 +26,8 @@ type Product = {
   country: string;
   image: string;
   disponible: boolean;
+  stock: number;
+  unidad: string;
   size: string;
   heat: string;
   imagePosition: string;
@@ -139,10 +142,14 @@ function Quantity({
   value,
   onChange,
   compact = false,
+  max = 9999,
+  disabled = false,
 }: {
   value: number;
   onChange: (n: number) => void;
   compact?: boolean;
+  max?: number;
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -152,13 +159,15 @@ function Quantity({
       <button
         onClick={() => onChange(Math.max(1, value - 1))}
         aria-label="Disminuir cantidad"
+        disabled={disabled || value <= 1}
       >
         <Icon name="minus" size={15} />
       </button>
-      <span>{value}</span>
+      <span>{max <= 0 ? 0 : value}</span>
       <button
-        onClick={() => onChange(Math.min(9999, value + 1))}
+        onClick={() => onChange(Math.min(max, value + 1))}
         aria-label="Aumentar cantidad"
+        disabled={disabled || value >= max}
       >
         <Icon name="plus" size={15} />
       </button>
@@ -206,10 +215,12 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
         category: p.categoria.nombre,
         country: p.origen || "",
         size: p.presentacion || "Consultar presentación",
-        heat: p.disponible ? "Disponible para consultar" : "Agotado",
+        heat: p.disponible && Number(p.stockActual) > 0 ? "Disponible para consultar" : "Agotado",
         imagePosition: "center",
         image: p.imagen || "",
-        disponible: p.disponible,
+        disponible: puedePedirProducto(p.stockActual, 1, p.disponible),
+        stock: existenciasTienda(p.stockActual),
+        unidad: p.ventaGranel ? (['l', 'ml'].includes(p.unidadGranel || '') ? 'ml' : 'g') : 'unidades',
       })),
     [tienda.productos],
   );
@@ -260,7 +271,9 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
   const [country, setCountry] = useState("Todos");
   const [sort, setSort] = useState("destacados");
   const [quantities, setQuantities] = useState<Record<number, number>>({});
-  const [selected, setSelected] = useState<Product | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selected = products.find(p => p.id === selectedId) || null;
+  const setSelected = (p: Product | null) => setSelectedId(p?.id ?? null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkout, setCheckout] = useState(false);
@@ -353,7 +366,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
   const currentCart = cart.map((item) => ({
     ...item,
     ...products.find((p) => p.id === item.id),
-    disponible: products.some((p) => p.id === item.id && p.disponible),
+    disponible: products.some((p) => p.id === item.id && puedePedirProducto(p.stock, item.quantity, p.disponible)),
   }));
   const totalCount = currentCart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = currentCart.reduce(
@@ -371,10 +384,10 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
       return found
         ? current.map((item) =>
             item.id === product.id
-              ? { ...item, quantity: Math.min(9999, item.quantity + quantity) }
+              ? { ...item, quantity: Math.min(product.stock, item.quantity + quantity) }
               : item,
           )
-        : [...current, { ...product, quantity }];
+        : [...current, { ...product, quantity: Math.min(product.stock, quantity) }];
     });
     setToast(`${product.name} se agregó al carrito`);
     window.setTimeout(() => setToast(""), 2600);
@@ -382,7 +395,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
 
   const updateCart = (id: number, quantity: number) =>
     setCart((current) =>
-      current.map((item) => (item.id === id ? { ...item, quantity } : item)),
+      current.map((item) => (item.id === id ? { ...item, quantity: Math.max(1, Math.min(products.find(p => p.id === id)?.stock || 0, quantity)) } : item)),
     );
   const removeCart = (id: number) =>
     setCart((current) => current.filter((item) => item.id !== id));
@@ -749,10 +762,13 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                           {product.name}
                         </button>
                         <p>{product.description}</p>
+                        <p>Existencias: <strong>{product.stock} {product.unidad}</strong></p>
                         <div className="product-bottom">
                           <strong>{money(product.price)}</strong>
                           <Quantity
                             compact
+                            max={product.stock}
+                            disabled={!product.disponible}
                             value={quantity}
                             onChange={(n) =>
                               setQuantities((q) => ({ ...q, [product.id]: n }))
@@ -969,7 +985,10 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                   </div>
                 </div>
                 <div className="detail-add">
+                  <p>Existencias: <strong>{selected.stock} {selected.unidad}</strong></p>
                   <Quantity
+                    max={selected.stock}
+                    disabled={!selected.disponible}
                     value={quantities[selected.id] || 1}
                     onChange={(n) =>
                       setQuantities((q) => ({ ...q, [selected.id]: n }))
@@ -1047,6 +1066,8 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                         <small>{money(item.price)} c/u</small>
                         <div className="cart-controls">
                           <Quantity
+                            max={item.stock}
+                            disabled={item.stock <= 0}
                             compact
                             value={item.quantity}
                             onChange={(n) => updateCart(item.id, n)}

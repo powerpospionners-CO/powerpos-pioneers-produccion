@@ -4,7 +4,7 @@ import { TiendaService } from './tienda.service';
 
 describe('Catálogo compartido entre Productos y Mi tienda', () => {
   function preparar() {
-    let producto = { id: 7, empresaId: 24, activo: true, nombre: 'Café', descripcion: 'Molido', precio: 12000, imagen: null as string | null, disponible: true, categoria: { nombre: 'Bebidas', activo: true } };
+    let producto = { id: 7, empresaId: 24, activo: true, nombre: 'Café', descripcion: 'Molido', precio: 12000, imagen: null as string | null, disponible: true, stockActual: 8, ventaGranel: false, unidadGranel: null, categoria: { nombre: 'Bebidas', activo: true } };
     const prisma: any = {
       empresa: { findUnique: jest.fn().mockResolvedValue({ id: 24, activo: true, nombre: 'Mercado', logo: null, tiendaConfig: { publicada: true } }) },
       producto: {
@@ -13,7 +13,7 @@ describe('Catálogo compartido entre Productos y Mi tienda', () => {
         update: jest.fn(({ data }) => { producto = { ...producto, ...data }; return Promise.resolve({ ...producto }); }),
       },
     };
-    return { prisma, productos: new ProductosService(prisma, {} as any), tienda: new TiendaService(prisma, {} as any) };
+    return { prisma, productos: new ProductosService(prisma, {} as any), tienda: new TiendaService(prisma, {} as any), stock: (cantidad: number) => { producto.stockActual = cantidad; } };
   }
   it('publica la misma imagen y los detalles guardados con los endpoints de Productos', async () => {
     const { productos, tienda } = preparar();
@@ -36,5 +36,12 @@ describe('Catálogo compartido entre Productos y Mi tienda', () => {
     await expect(productos.actualizar(7, { precio: 1 }, 99)).rejects.toThrow(NotFoundException);
     await expect(productos.actualizarImagen(7, 99, 'https://example.com/ajena.png')).rejects.toThrow(NotFoundException);
     expect(prisma.producto.update).not.toHaveBeenCalled();
+  });
+  it('publica las existencias actuales y conserva el producto agotado visible con cero', async () => {
+    const { tienda, stock, prisma } = preparar();
+    expect((await tienda.catalogo('mercado')).productos[0].stockActual).toBe(8);
+    expect(prisma.producto.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ stockActual: true, ventaGranel: true, unidadGranel: true }) }));
+    stock(0);
+    expect((await tienda.catalogo('mercado')).productos).toEqual([expect.objectContaining({ id: 7, stockActual: 0 })]);
   });
 });

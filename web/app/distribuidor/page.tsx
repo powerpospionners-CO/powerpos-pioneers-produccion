@@ -22,6 +22,7 @@ type Producto = {
 type ItemCarrito = { key: string; productoId: number; presentacionId: number | null; nombre: string; precio: number; cantidad: number };
 type Pedido = {
   id: number; numero: string; estado: string; total: string; comisionMonto: string; comisionPorcentaje: string;
+  descuento?: number; totalAntesDescuento?: number;
   modalidad?: string; revision?: number; estadoGestion?: string; saldoPendiente?: number; entregado?: boolean; comisionDisponible?: boolean;
   liquidacionId: number | null; clienteReferencia: string | null; creadoEn: string;
 };
@@ -371,6 +372,8 @@ export default function DistribuidorPage() {
                       <p className="text-xs text-gray-500">{moneda(Number(d.precioUnitario))} c/u</p>
                     </div>
                   ))}
+                  {!!detalle.descuento && <p className="text-sm text-orange-300">Descuento al cliente: {moneda(detalle.descuento)}</p>}
+                  <p className="text-sm">Total final: {moneda(Number(detalle.total))} · Comisión ({Number(detalle.comisionPorcentaje)}%): {moneda(Number(detalle.comisionMonto))}</p>
                 </div>
               )}
             </div>
