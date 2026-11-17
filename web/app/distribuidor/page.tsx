@@ -8,13 +8,14 @@ import api from '@/lib/api';
 import { useBorradorVenta, useCampoBorrador } from '@/lib/useBorradorVenta';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
 import { moneda } from '@/lib/formato';
-import { buscarProductosDistribuidor, unidadVentaDistribuidor } from '@/lib/catalogoDistribuidor';
+import { buscarProductosDistribuidor, unidadVentaDistribuidor, tieneExistenciasDistribuidor } from '@/lib/catalogoDistribuidor';
 import { Ban, List, Minus, Pencil, Plus, Search, Trash2, Truck, X } from 'lucide-react';
 
 type Presentacion = { id: number; nombre: string; precio: string; factorUnidades: number };
 type Producto = {
   id: number; nombre: string; precio: string; codigoBarras?: string | null;
   disponible: boolean; ventaGranel?: boolean; unidadGranel?: string | null;
+  stockActual: number;
   categoria: { nombre: string };
   presentaciones?: Presentacion[];
 };
@@ -53,12 +54,16 @@ export default function DistribuidorPage() {
 
   useEffect(() => {
     if (!permitido) return;
-    api.get('/productos').then((r) => setProductos(r.data)).catch(() => undefined);
+    let activo = true;
+    const refrescarProductos = () => api.get('/productos').then(r => { if (activo) setProductos(r.data); }).catch(() => undefined);
+    void refrescarProductos();
+    const productosTimer = setInterval(refrescarProductos, 30000);
+    window.addEventListener('focus', refrescarProductos);
     void cargarClientes();
     api.get('/pedidos-distribuidor/modalidades').then(r=>setCompatible(r.data.flujoCaja===true)).catch(()=>setCompatible(false));
     void cargarPedidos();
     const timer=setInterval(()=>{void cargarPedidos();api.get('/pedidos-distribuidor/modalidades').then(r=>setCompatible(r.data.flujoCaja===true)).catch(()=>setCompatible(false));},5000);
-    return ()=>clearInterval(timer);
+    return ()=>{ activo = false; clearInterval(timer); clearInterval(productosTimer); window.removeEventListener('focus', refrescarProductos); };
   }, [permitido]);
 
   const cargarClientes = async () => {
@@ -83,6 +88,10 @@ export default function DistribuidorPage() {
   const maximoLinea = (linea: ItemCarrito) => unidadLinea(linea) ? 999999 : 9999;
 
   const agregar = (producto: Producto, presentacion: Presentacion | null) => {
+    const unidadesEnCarrito = carrito.filter(l => l.productoId === producto.id).reduce((s, l) => s + l.cantidad * (producto.presentaciones?.find(p => p.id === l.presentacionId)?.factorUnidades ?? 1), 0);
+    if (!tieneExistenciasDistribuidor({ stockActual: Number(producto.stockActual) - unidadesEnCarrito }, presentacion?.factorUnidades ?? 1)) {
+      aviso('No hay existencias suficientes para agregar más de este producto.', 'error'); return;
+    }
     const key = `${producto.id}:${presentacion?.id ?? 'base'}`;
     setUltimoAgregado({ key });
     setCarrito((actual) => {
@@ -239,7 +248,7 @@ export default function DistribuidorPage() {
                           <button type="button" onClick={() => { agregar(p, null); setBusqueda(''); }} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-gray-700">
                             <span>{p.nombre}{p.ventaGranel ? ' · A granel' : ''}</span><span className="text-orange-400">{moneda(Number(p.precio))}{unidadVentaDistribuidor(p) ? `/${unidadVentaDistribuidor(p)}` : ''}</span>
                           </button>
-                          {p.presentaciones.map((pr) => (
+                          {p.presentaciones.filter(pr => tieneExistenciasDistribuidor(p, pr.factorUnidades)).map((pr) => (
                             <button key={pr.id} type="button" onClick={() => { agregar(p, pr); setBusqueda(''); }} className="flex w-full items-center justify-between rounded px-2 py-1.5 pl-5 text-left text-sm text-gray-300 hover:bg-gray-700">
                               <span>— {pr.nombre}</span><span className="text-orange-400">{moneda(Number(pr.precio))}</span>
                             </button>

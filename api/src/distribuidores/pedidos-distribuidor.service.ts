@@ -85,7 +85,8 @@ export class PedidosDistribuidorService {
       for (const item of itemsValidados) {
         const unidades = (unidadesPorProducto.get(item.producto.id) ?? 0) + item.cantidad * item.factorUnidades;
         unidadesPorProducto.set(item.producto.id, unidades);
-        if (item.producto.controlaStock && item.producto.stockActual < unidades) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}`);
+        const stock = Number(item.producto.stockActual);
+        if (!Number.isFinite(stock) || stock < unidades) throw new BadRequestException(`Existencias insuficientes de ${item.producto.nombre}`);
       }
 
       const total = Math.round(subtotal * 100) / 100;
