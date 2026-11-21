@@ -977,7 +977,6 @@ function RestaurantePOS() {
       setUltimoImprimible(data); ultimoImprimibleRef.current = data;
       const comandasElegidas = (esTrailer || modoPreparacion === 'COMANDAS') && imprimirComanda;
       const reciboElegido = !esTrailer || imprimirReciboCliente;
-      setImprimirReciboCliente(true);
       void imprimirDocumentos(data, comandasElegidas, reciboElegido, undefined,
         pago.metodoPago === 'EFECTIVO' || pago.pagos.some(p => p.metodoPago === 'EFECTIVO'));
 
