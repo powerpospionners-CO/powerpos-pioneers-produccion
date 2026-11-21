@@ -1,19 +1,21 @@
 // Arranque exclusivo del sitio de capacitación. Nunca carga .env ni respaldos.
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { validarCapacitacion } = require('../dist/src/seguridad/capacitacion');
+const runtime = path.basename(__dirname) === 'dist' ? __dirname : path.resolve(__dirname, '../dist');
+const proyecto = path.basename(__dirname) === 'dist' ? __dirname : path.resolve(__dirname, '..');
+const { validarCapacitacion } = require(path.join(runtime, 'src/seguridad/capacitacion'));
 const bcrypt = require('bcrypt');
 validarCapacitacion(process.env);
 if (process.env.CAPACITACION !== 'true' || !process.env.CAPACITACION_PASSWORD || process.env.CAPACITACION_PASSWORD.length < 16)
   throw Error('Se requiere el modo y la contraseña exclusivos de capacitación');
-const { PrismaClient } = require('../dist/generated/prisma-mysql');
+const { PrismaClient } = require(path.join(runtime, 'generated/prisma-mysql'));
 const db = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } }, log: [] });
 
 async function preparar() {
   const tablas = await db.$queryRawUnsafe('SHOW TABLES');
   if (!tablas.length) {
     const r = spawnSync(process.execPath, [require.resolve('prisma/build/index.js'), 'db', 'push', '--schema', 'prisma/mysql/schema.prisma', '--skip-generate'], {
-      cwd: path.resolve(__dirname, '..'), stdio: 'inherit', env: { ...process.env, MYSQL_DATABASE_URL: process.env.DATABASE_URL },
+      cwd: proyecto, stdio: 'inherit', env: { ...process.env, MYSQL_DATABASE_URL: process.env.DATABASE_URL },
     });
     if (r.status !== 0) throw Error('No se pudo preparar el esquema de capacitación');
   }
@@ -57,7 +59,7 @@ async function preparar() {
   });
   console.log('Capacitación inicializada con datos ficticios; impresión física mediante agente propio.');
 }
-preparar().then(async()=>{await db.$disconnect(); require('../dist/src/main');}).catch(async e=>{
+preparar().then(async()=>{await db.$disconnect(); require(path.join(runtime, 'src/main'));}).catch(async e=>{
   console.error('No se inició capacitación:', ['La base contiene información ajena a capacitación','La capacitación no admite conexiones a sedes externas'].includes(e.message)?e.message:e.code||e.name);
   await db.$disconnect(); process.exitCode=1;
 });
