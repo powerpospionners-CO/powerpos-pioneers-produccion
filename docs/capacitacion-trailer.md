@@ -36,7 +36,7 @@ Usar una copia separada de `api/agente-impresion` en el computador del restauran
 
 Completar la IP privada de la impresora o el nombre compartido USB cuando esté conectada. El agente requiere Node.js instalado. Antes de usar las dos sesiones, comprobar a qué entorno está conectada cada copia del agente. Los tickets, comandas y cierres enviados por la API de pruebas llevan `PRUEBA / CAPACITACION` y `SIN VALIDEZ COMERCIAL`.
 
-La salida física, alimentación y corte de papel solo se verifican al conectar la impresora en el negocio. El formato usa el flujo de estaciones del Trailer (plancha y vaporera) y papel de 80 mm.
+La salida física, alimentación y corte de papel solo se verifican al conectar la impresora en el negocio. El formato usa el flujo de estaciones del Trailer (plancha y fritos) y papel de 80 mm.
 
 ## Recorrido sugerido
 

@@ -140,12 +140,12 @@ describe('ImpresionService', () => {
     process.env.ESC_POS_ENABLED = 'true'; process.env.IMPRESION_MODO = 'agente';
     const eventos = { enviarYEsperar: jest.fn().mockResolvedValue({ ok: true }) };
     const service = new ImpresionService(undefined, eventos as any);
-    const comandas = [{ numero: '42', ladoNombre: 'PLANCHA', detalles: [{ cantidad: 1, producto: { nombre: 'AREPA BURGER SENCILLA' } }] }, { numero: '42', ladoNombre: 'VAPORERA', detalles: [{ cantidad: 1, producto: { nombre: 'PERRO SENCILLO' } }] }];
+    const comandas = [{ numero: '42', ladoNombre: 'PLANCHA', detalles: [{ cantidad: 1, producto: { nombre: 'AREPA BURGER SENCILLA' } }] }, { numero: '42', ladoNombre: 'FRITOS', detalles: [{ cantidad: 1, producto: { nombre: 'PERRO SENCILLO' } }] }];
     const resultado = await service.imprimirComandas(comandas, 1);
-    expect(resultado).toEqual({ impreso: true, modo: 'agente', estaciones: ['PLANCHA', 'VAPORERA'] });
+    expect(resultado).toEqual({ impreso: true, modo: 'agente', estaciones: ['PLANCHA', 'FRITOS'] });
     expect(eventos.enviarYEsperar).toHaveBeenCalledTimes(1);
     const bytes = eventos.enviarYEsperar.mock.calls[0][2] as Buffer;
-    for (const texto of ['PLANCHA', 'VAPORERA', 'AREPA BURGER SENCILLA', 'PERRO SENCILLO']) expect(bytes.toString('ascii')).toContain(texto);
+    for (const texto of ['PLANCHA', 'FRITOS', 'AREPA BURGER SENCILLA', 'PERRO SENCILLO']) expect(bytes.toString('ascii')).toContain(texto);
     const corte = Buffer.from([0x1d, 0x56, 0x41, 0x03]);
     const primero = bytes.indexOf(corte), segundo = bytes.indexOf(corte, primero + corte.length);
     expect(primero).toBeGreaterThan(0); expect(segundo).toBeGreaterThan(primero); expect(bytes.indexOf(corte, segundo + corte.length)).toBe(-1);
@@ -166,7 +166,7 @@ describe('ImpresionService', () => {
     const eventos={enviarYEsperar:jest.fn().mockResolvedValue({ok:true})};
     const service=new ImpresionService(prisma as any,eventos as any);
     const logo=jest.spyOn(service as any,'generarLogoEscPos').mockRejectedValue(new Error('No se debe descargar'));
-    await service.imprimirComandas([{numero:'42',ladoNombre:'PLANCHA',detalles:[{cantidad:1,producto:{nombre:'Hamburguesa'}}]},{numero:'42',ladoNombre:'VAPORERA',detalles:[{cantidad:1,producto:{nombre:'Perro'}}]}],1,true);
+    await service.imprimirComandas([{numero:'42',ladoNombre:'PLANCHA',detalles:[{cantidad:1,producto:{nombre:'Hamburguesa'}}]},{numero:'42',ladoNombre:'FRITOS',detalles:[{cantidad:1,producto:{nombre:'Perro'}}]}],1,true);
     expect(logo).not.toHaveBeenCalled();expect(prisma.empresa.findUnique).toHaveBeenCalledTimes(1);
     const bytes=eventos.enviarYEsperar.mock.calls[0][2] as Buffer;
     expect(bytes.indexOf(Buffer.from([27,112,0,25,250]))).toBeLessThan(bytes.indexOf(Buffer.from('PLANCHA')));

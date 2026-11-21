@@ -4,7 +4,7 @@ import api from '@/lib/api';
 import { prepararComandas } from '@/lib/comandas';
 
 type Producto = { id: number; nombre: string; categoria?: { nombre: string }; aceptaAdicionales?: boolean };
-const LADOS = [['PLANCHA', 'Plancha'], ['VAPORERA', 'Vaporera'], ['SIN_COMANDA', 'Sin comanda'], ['AUTO', 'Automático']];
+const LADOS = [['PLANCHA', 'Plancha'], ['VAPORERA', 'Fritos'], ['SIN_COMANDA', 'Sin comanda'], ['AUTO', 'Automático']];
 
 export default function ConfiguracionComandas({ productos }: { productos: Producto[] }) {
   const [base, setBase] = useState<Record<string, string>>({});
@@ -37,7 +37,7 @@ export default function ConfiguracionComandas({ productos }: { productos: Produc
     finally { setOcupado(false); }
   };
   return <section aria-label="Distribución de comandas" className="mb-6 space-y-4 rounded-xl border border-orange-500/40 bg-gray-900 p-4 text-white">
-    <h3 className="text-lg font-bold">Productos por lado: Plancha y Vaporera</h3>
+    <h3 className="text-lg font-bold">Productos por lado: Plancha y Fritos</h3>
     <p className="text-sm text-gray-300">Asigna un lado por producto o selecciona varios para agruparlos. Las bebidas pueden quedar en «Sin comanda». Los productos en Automático conservan la clasificación sugerida hasta que les asignes un lado.</p>
     {mensaje && <p role="status" className="text-orange-200">{mensaje}</p>}
     {!cargado && <button type="button" onClick={() => void cargar()} className="min-h-12 rounded bg-gray-700 px-4">Reintentar carga</button>}
@@ -51,7 +51,7 @@ export default function ConfiguracionComandas({ productos }: { productos: Produc
       <div className="flex flex-wrap items-center gap-2"><span>{seleccion.length} seleccionados</span><select aria-label="Lado para productos seleccionados" value={lado} onChange={e => setLado(e.target.value)} className="min-h-12 rounded-lg bg-gray-800 px-3">{LADOS.map(([id,nombre]) => <option key={id} value={id}>{nombre}</option>)}</select><button type="button" disabled={!seleccion.length} onClick={() => asignar(seleccion,lado)} className="min-h-12 rounded-lg bg-orange-600 px-4 disabled:opacity-40">Asignar a seleccionados</button></div>
       <div className="max-h-96 overflow-auto rounded-lg border border-gray-700"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-gray-800"><tr><th className="p-3">Elegir</th><th className="p-3">Producto</th><th className="p-3">Lado de preparación</th></tr></thead><tbody>{visibles.map(p => {
         const automatico = prepararComandas({detalles:[{producto:p,cantidad:1}]},1)[0]?.ladoNombre || 'SIN_COMANDA';
-        return <tr key={p.id} className="border-t border-gray-800"><td className="p-3"><input type="checkbox" aria-label={`Seleccionar ${p.nombre}`} checked={seleccion.includes(p.id)} onChange={e => setSeleccion(prev => e.target.checked ? [...prev,p.id] : prev.filter(id => id !== p.id))} className="h-6 w-6 accent-orange-500"/></td><td className="p-3">{p.nombre}<span className="block text-xs text-gray-400">{p.categoria?.nombre}</span></td><td className="p-3"><select aria-label={`Lado de ${p.nombre}`} value={elegido(p)} onChange={e => asignar([p.id],e.target.value)} className="min-h-12 w-full rounded-lg bg-gray-800 px-3">{LADOS.map(([id,nombre]) => <option key={id} value={id}>{id === 'AUTO' ? `Automático (${LADOS.find(([valor])=>valor===automatico)?.[1]})` : nombre}</option>)}</select></td></tr>;
+        return <tr key={p.id} className="border-t border-gray-800"><td className="p-3"><input type="checkbox" aria-label={`Seleccionar ${p.nombre}`} checked={seleccion.includes(p.id)} onChange={e => setSeleccion(prev => e.target.checked ? [...prev,p.id] : prev.filter(id => id !== p.id))} className="h-6 w-6 accent-orange-500"/></td><td className="p-3">{p.nombre}<span className="block text-xs text-gray-400">{p.categoria?.nombre}</span></td><td className="p-3"><select aria-label={`Lado de ${p.nombre}`} value={elegido(p)} onChange={e => asignar([p.id],e.target.value)} className="min-h-12 w-full rounded-lg bg-gray-800 px-3">{LADOS.map(([id,nombre]) => <option key={id} value={id}>{id === 'AUTO' ? `Automático (${LADOS.find(([valor])=>valor===(automatico === 'FRITOS' ? 'VAPORERA' : automatico))?.[1]})` : nombre}</option>)}</select></td></tr>;
       })}</tbody></table></div>
       <div className="flex flex-wrap items-center gap-3"><button type="button" disabled={!Object.keys(cambios).length} onClick={() => void guardar()} className="min-h-12 rounded-lg bg-orange-500 px-5 font-bold disabled:opacity-40">{ocupado ? 'Guardando…' : 'Guardar distribución'}</button><span className="text-sm text-gray-400">{Object.keys(cambios).length} productos con cambios pendientes</span></div>
     </fieldset>

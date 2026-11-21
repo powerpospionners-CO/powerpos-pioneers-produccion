@@ -99,7 +99,7 @@ function RestaurantePOS() {
   const [modoPreparacion, setModoPreparacion] = useState<'KDS' | 'COMANDAS'>(usuario?.modoPreparacion || 'KDS');
   const esTrailer = usuario?.empresaId === 1;
   const [imprimirComanda, setImprimirComanda] = useState(true);
-  const [imprimirReciboCliente, setImprimirReciboCliente] = useState(false);
+  const [imprimirReciboCliente, setImprimirReciboCliente] = useState(true);
   const [ultimoImprimible, setUltimoImprimible] = useState<any>(null);
   const [estadoImpresion, setEstadoImpresion] = useState('');
   const [imprimiendo, setImprimiendo] = useState(false);
@@ -107,7 +107,7 @@ function RestaurantePOS() {
   const trabajosImpresion = useRef(0);
   const ultimoImprimibleRef = useRef<any>(null);
   const [fallosImpresion, setFallosImpresion] = useState<{ clave: string; pedido: any; mensaje: string; comandas: boolean; recibo: boolean; estacion?: string }[]>([]);
-  useEffect(() => { setImprimirComanda(true); setImprimirReciboCliente(false); setUltimoImprimible(null); ultimoImprimibleRef.current = null; setFallosImpresion([]); setEstadoImpresion(''); }, [usuario?.empresaId]);
+  useEffect(() => { setImprimirComanda(true); setImprimirReciboCliente(true); setUltimoImprimible(null); ultimoImprimibleRef.current = null; setFallosImpresion([]); setEstadoImpresion(''); }, [usuario?.empresaId]);
   const [ultimoPedido, setUltimoPedido] = useState<string | null>(null);
   const canalPantalla = useRef<BroadcastChannel | null>(null);
 
@@ -977,7 +977,7 @@ function RestaurantePOS() {
       setUltimoImprimible(data); ultimoImprimibleRef.current = data;
       const comandasElegidas = (esTrailer || modoPreparacion === 'COMANDAS') && imprimirComanda;
       const reciboElegido = !esTrailer || imprimirReciboCliente;
-      setImprimirReciboCliente(false);
+      setImprimirReciboCliente(true);
       void imprimirDocumentos(data, comandasElegidas, reciboElegido, undefined,
         pago.metodoPago === 'EFECTIVO' || pago.pagos.some(p => p.metodoPago === 'EFECTIVO'));
 
@@ -1035,7 +1035,7 @@ function RestaurantePOS() {
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false)} className="min-h-12 rounded-lg bg-orange-600 px-4 disabled:opacity-50">Volver a imprimir comandas</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'PLANCHA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Plancha</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'VAPORERA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Vaporera</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'FRITOS')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Fritos</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, false, true)} className="min-h-12 rounded-lg bg-gray-700 px-4 disabled:opacity-50">Imprimir recibo del cliente</button>
           </div>
         </section>}
