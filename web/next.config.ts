@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // El plan compartido limita procesos e hilos; compilar con un solo trabajador.
+  experimental: { cpus: 1 },
   async headers() {
     return [{ source: '/:path*', headers: [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
