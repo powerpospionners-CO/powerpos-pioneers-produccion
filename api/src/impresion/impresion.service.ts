@@ -5,6 +5,7 @@ import { ImpresionEventosService } from './impresion-eventos.service';
 import { reciboTrailer } from './recibo-trailer';
 import { codificarLogoEscPos } from './logo-escpos';
 import { prepararEnEscritorio } from './transporte-escritorio';
+import { marcarImpresionCapacitacion } from '../seguridad/capacitacion';
 
 const sharp: typeof import('sharp').default = require('sharp');
 
@@ -66,6 +67,7 @@ export class ImpresionService {
     port?: number,
     timeoutAgenteMs?: number,
   ): Promise<string | null> {
+    if (tipo !== 'CAJON') datos = marcarImpresionCapacitacion(datos);
     if (prepararEnEscritorio(tipo, datos)) return null;
     if (this.modoAgente()) {
       if (!this.eventos) return 'Agente de impresión no disponible en este servidor';

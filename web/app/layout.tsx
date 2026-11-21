@@ -35,6 +35,7 @@ export default function RootLayout({
       className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
+        {process.env.NEXT_PUBLIC_CAPACITACION === 'true' && <div role="status" style={{background:'#fbbf24',color:'#111827',padding:'12px',textAlign:'center',fontWeight:800}}>ENTORNO DE PRUEBAS / CAPACITACIÓN — DATOS FICTICIOS — SIN VALIDEZ COMERCIAL</div>}
         <RegistroServiceWorker />
         <ThemeProvider><NotificacionesProvider>{children}</NotificacionesProvider></ThemeProvider>
         <TecladoTactilEmpresa />
