@@ -12,17 +12,17 @@ export function prepararComandas(pedido: any, empresaId: number | undefined, cat
     let lado: string;
     const asignada = empresaId === 1 ? asignaciones[producto.id ?? original.productoId] : undefined;
     if (asignada === 'SIN_COMANDA') continue;
-    if (asignada === 'PLANCHA' || asignada === 'VAPORERA') lado = asignada === 'VAPORERA' ? 'FRITOS' : asignada;
+    if (asignada === 'PLANCHA' || asignada === 'VAPORERA') lado = asignada;
     else if (empresaId === 1) {
       // La familia del catálogo manda; los nombres resuelven categorías genéricas (Lado 1/2).
       const clasificar = (texto: string) => /hamburg|chuzo|arepa\s*(burg|hamb)|quesadill/.test(texto) ? 'PLANCHA'
-        : /perro|choriz|suiz|salchipap|batata|frit/.test(texto) ? 'FRITOS' : null;
+        : /perro|choriz|suiz|salchipap|batata|frit/.test(texto) ? 'VAPORERA' : null;
       const destino = clasificar(categoria) || clasificar(nombre);
       if (destino) lado = destino;
       else {
         if (/bebida|gaseosa|refresco/.test(categoria) || /^(gaseosa|coca.?cola|pepsi|postobon|agua\b)/.test(nombre)) continue;
         if (producto.aceptaAdicionales === false) continue;
-        lado = /lado\s*2/.test(categoria) ? 'FRITOS' : 'PLANCHA';
+        lado = /lado\s*2/.test(categoria) ? 'VAPORERA' : 'PLANCHA';
       }
     } else {
       if (!categoria.includes('bebida') && producto.aceptaAdicionales === false) continue;

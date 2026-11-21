@@ -1035,7 +1035,7 @@ function RestaurantePOS() {
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false)} className="min-h-12 rounded-lg bg-orange-600 px-4 disabled:opacity-50">Volver a imprimir comandas</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'PLANCHA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Plancha</button>
-            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'FRITOS')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Fritos</button>
+            <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, true, false, 'VAPORERA')} className="min-h-12 rounded-lg border border-orange-500 px-4 disabled:opacity-50">Solo comanda de Vaporera</button>
             <button type="button" disabled={imprimiendo || loading} onClick={() => void imprimirDocumentos(ultimoImprimible, false, true)} className="min-h-12 rounded-lg bg-gray-700 px-4 disabled:opacity-50">Imprimir recibo del cliente</button>
           </div>
         </section>}

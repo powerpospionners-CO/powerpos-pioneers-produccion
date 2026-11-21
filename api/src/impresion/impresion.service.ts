@@ -137,7 +137,7 @@ export class ImpresionService {
   /** Un solo envío al agente/puerto para que las estaciones no se interrumpan. */
   async imprimirComandas(comandas: any[], empresaId: number, abrirCajon = false) {
     if (empresaId !== 1 || !Array.isArray(comandas) || comandas.length < 1 || comandas.length > 2 ||
-      comandas.some(c => !['PLANCHA', 'FRITOS', 'VAPORERA', 'PERROS Y FRITURAS'].includes(c?.ladoNombre) || !Array.isArray(c.detalles) || !c.detalles.length) ||
+      comandas.some(c => !['PLANCHA', 'VAPORERA', 'PERROS Y FRITURAS'].includes(c?.ladoNombre) || !Array.isArray(c.detalles) || !c.detalles.length) ||
       new Set(comandas.map(c => c.ladoNombre)).size !== comandas.length)
       throw new BadRequestException('Selecciona una o las dos estaciones del Trailer para imprimir.');
     if (String(process.env.ESC_POS_ENABLED).toLowerCase() !== 'true')

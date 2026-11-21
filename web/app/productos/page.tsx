@@ -927,7 +927,7 @@ export default function ProductosPage() {
           </div>
         </div>
 
-        {puedeConfigurarComandas && <div className="mb-4"><button type="button" onClick={() => setMostrarComandas(v => !v)} className="min-h-12 rounded-lg bg-orange-600 px-5 font-semibold text-white">{mostrarComandas ? 'Cerrar distribución de comandas' : 'Plancha y fritos · agrupar productos'}</button></div>}
+        {puedeConfigurarComandas && <div className="mb-4"><button type="button" onClick={() => setMostrarComandas(v => !v)} className="min-h-12 rounded-lg bg-orange-600 px-5 font-semibold text-white">{mostrarComandas ? 'Cerrar distribución de comandas' : 'Plancha y vaporera · agrupar productos'}</button></div>}
         {puedeConfigurarComandas && mostrarComandas && <ConfiguracionComandas productos={productos} />}
         {/* Chips de categorías */}
         {categorias.length > 0 && (
