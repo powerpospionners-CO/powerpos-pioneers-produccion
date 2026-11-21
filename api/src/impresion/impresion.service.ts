@@ -391,7 +391,7 @@ export class ImpresionService {
 
   private async formatearComanda(pedido: any, empresaId: number, datosEmpresa?: any) {
     const empresa = datosEmpresa === undefined ? await this.obtenerEmpresa(empresaId) : datosEmpresa;
-    if (empresaId === 1) return this.formatearComandaGrandeTrailer(pedido, empresa);
+    if (empresaId === 1) return this.formatearComandaGrandeTrailer(pedido);
     const nombre = (empresa?.nombre || 'MI EMPRESA').toUpperCase();
     const nit = empresa?.nit ? `NIT: ${empresa.nit}` : 'NIT: N/A';
     const direccion = empresa?.direccion ? `DIR: ${empresa.direccion}` : 'DIR: N/A';
@@ -457,7 +457,7 @@ export class ImpresionService {
     return this.aBufferAscii(lineas);
   }
 
-  private formatearComandaGrandeTrailer(pedido: any, empresa: any) {
+  private formatearComandaGrandeTrailer(pedido: any) {
     // Papel de 80 mm: fuente A de 48 columnas, doble ancho y doble alto = 24.
     // Se envuelve el texto completo para no perder cambios ni nombres largos.
     const ancho = 24;
@@ -478,17 +478,9 @@ export class ImpresionService {
       }
     };
     const separador = () => lineas.push('-'.repeat(ancho) + '\n');
-    texto((empresa?.nombre || 'MI EMPRESA').toUpperCase());
-    texto('COMANDA');
-    if (pedido.ladoNombre) texto(pedido.ladoNombre);
-    texto(`PEDIDO ${pedido.numero}`);
-    separador();
-    texto(empresa?.nit ? `NIT: ${empresa.nit}` : 'NIT: N/A');
-    texto(empresa?.direccion ? `DIR: ${empresa.direccion}` : 'DIR: N/A');
-    texto(empresa?.telefono ? `TEL: ${empresa.telefono}` : 'TEL: N/A');
-    texto(`CLIENTE: ${pedido?.cliente?.nombre || 'GENERAL'}`);
-    texto(pedido?.cliente?.telefono ? `TEL: ${pedido.cliente.telefono}` : 'TEL: NO REGISTRADO');
-    texto(this.fechaBogota(new Date()));
+    // Exclusivo del Trailer: nombre del cliente y productos de esta estación.
+    // Las estaciones se conservan en el trabajo, sin encabezados comerciales en papel.
+    texto(pedido?.cliente?.nombre || 'GENERAL');
     separador();
     for (const detalle of pedido.detalles || []) {
       texto(`${detalle.cantidad}x ${detalle.producto?.nombre || 'Producto'}`);
@@ -497,7 +489,6 @@ export class ImpresionService {
       if (detalle.observacion) texto(`NOTA: ${detalle.observacion}`);
       lineas.push('\n');
     }
-    if (pedido.observacion) { separador(); texto(`NOTA: ${pedido.observacion}`); }
     separador();
     lineas.push(NEGRITA_OFF, Buffer.from([0x1d, 0x21, 0x00]), '\n');
     return this.aBufferAscii(lineas);

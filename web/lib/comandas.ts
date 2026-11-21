@@ -16,7 +16,7 @@ export function prepararComandas(pedido: any, empresaId: number | undefined, cat
     else if (empresaId === 1) {
       // La familia del catálogo manda; los nombres resuelven categorías genéricas (Lado 1/2).
       const clasificar = (texto: string) => /hamburg|chuzo|arepa\s*(burg|hamb)|quesadill/.test(texto) ? 'PLANCHA'
-        : /perro|choriz|suiz|salchipap|batata/.test(texto) ? 'VAPORERA' : null;
+        : /perro|choriz|suiz|salchipap|batata|frit/.test(texto) ? 'VAPORERA' : null;
       const destino = clasificar(categoria) || clasificar(nombre);
       if (destino) lado = destino;
       else {
