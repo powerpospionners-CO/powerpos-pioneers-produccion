@@ -3,6 +3,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const runtime = path.basename(__dirname) === 'dist' ? __dirname : path.resolve(__dirname, '../dist');
 const proyecto = path.basename(__dirname) === 'dist' ? __dirname : path.resolve(__dirname, '..');
+// Limitar el motor de base de datos antes de crear el primer cliente del arranque.
+require(path.join(runtime, 'src/runtime-limits'));
 const { validarCapacitacion } = require(path.join(runtime, 'src/seguridad/capacitacion'));
 const bcrypt = require('bcrypt');
 validarCapacitacion(process.env);
