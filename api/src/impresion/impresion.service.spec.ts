@@ -127,13 +127,15 @@ describe('ImpresionService', () => {
     expect(direccionImpresora!.split('\n').every((linea) => linea.length <= 32)).toBe(true);
   });
 
-  it('identifica la estación del Trailer y conserva las instrucciones de cocina en ESC/POS', async () => {
+  it('imprime solo cliente y productos en Trailer, conservando instrucciones sin datos comerciales', async () => {
     const service = new ImpresionService();
-    const datos = { numero: '42', ladoNombre: 'PERROS Y FRITURAS', detalles: [{ cantidad: 2, producto: { nombre: 'Perro' }, exclusiones: ['cebolla'], adicionales: [{ nombre: 'Queso', cantidad: 2 }], observacion: '[Para llevar] Sin sal' }] };
-    const contenido = (await (service as any).formatearComanda(datos, 1)).toString('ascii');
-    for (const texto of ['PERROS Y FRITURAS', '2x Perro', 'SIN: cebolla', 'Queso x2', '[Para llevar] Sin sal']) expect(contenido.replace(/\s+/g, ' ')).toContain(texto);
-    const otraEmpresa = (await (service as any).formatearComanda(datos, 2)).toString('ascii');
-    expect(otraEmpresa).not.toContain('PERROS Y FRITURAS');
+    const empresa = { nombre:'NEGOCIO PRIVADO', nit:'NIT-PRIVADO', direccion:'DIRECCION PRIVADA', telefono:'TELEFONO NEGOCIO' };
+    const datos = { numero: 'PEDIDO-PRIVADO', ladoNombre: 'VAPORERA', cliente:{nombre:'Ana Perez',telefono:'TELEFONO CLIENTE'},total:987654, detalles: [{ cantidad: 2, producto: { nombre: 'Perro' }, exclusiones: ['cebolla'], adicionales: [{ nombre: 'Queso', cantidad: 2 }], observacion: '[Para llevar] Sin sal' }] };
+    const contenido = (await (service as any).formatearComanda(datos, 1, empresa)).toString('ascii');
+    for (const texto of ['Ana Perez', '2x Perro', 'SIN: cebolla', 'Queso x2', '[Para llevar] Sin sal']) expect(contenido.replace(/\s+/g, ' ')).toContain(texto);
+    for (const dato of [...Object.values(empresa),'TELEFONO CLIENTE','PEDIDO-PRIVADO','VAPORERA','COMANDA','987654','NIT:','DIR:','TEL:']) expect(contenido).not.toContain(dato);
+    const otraEmpresa = (await (service as any).formatearComanda(datos, 2, empresa)).toString('ascii');
+    for(const dato of ['NEGOCIO PRIVADO','PEDIDO-PRIVADO','TELEFONO CLIENTE']) expect(otraEmpresa).toContain(dato);
   });
 
   it('envía Plancha y Vaporera en un solo trabajo con dos cortes de papel', async () => {
@@ -145,7 +147,7 @@ describe('ImpresionService', () => {
     expect(resultado).toEqual({ impreso: true, modo: 'agente', estaciones: ['PLANCHA', 'VAPORERA'] });
     expect(eventos.enviarYEsperar).toHaveBeenCalledTimes(1);
     const bytes = eventos.enviarYEsperar.mock.calls[0][2] as Buffer;
-    for (const texto of ['PLANCHA', 'VAPORERA', 'AREPA BURGER SENCILLA', 'PERRO SENCILLO']) expect(bytes.toString('ascii')).toContain(texto);
+    for (const texto of ['AREPA BURGER SENCILLA', 'PERRO SENCILLO']) expect(bytes.toString('ascii')).toContain(texto);
     const corte = Buffer.from([0x1d, 0x56, 0x41, 0x03]);
     const primero = bytes.indexOf(corte), segundo = bytes.indexOf(corte, primero + corte.length);
     expect(primero).toBeGreaterThan(0); expect(segundo).toBeGreaterThan(primero); expect(bytes.indexOf(corte, segundo + corte.length)).toBe(-1);
@@ -169,7 +171,7 @@ describe('ImpresionService', () => {
     await service.imprimirComandas([{numero:'42',ladoNombre:'PLANCHA',detalles:[{cantidad:1,producto:{nombre:'Hamburguesa'}}]},{numero:'42',ladoNombre:'VAPORERA',detalles:[{cantidad:1,producto:{nombre:'Perro'}}]}],1,true);
     expect(logo).not.toHaveBeenCalled();expect(prisma.empresa.findUnique).toHaveBeenCalledTimes(1);
     const bytes=eventos.enviarYEsperar.mock.calls[0][2] as Buffer;
-    expect(bytes.indexOf(Buffer.from([27,112,0,25,250]))).toBeLessThan(bytes.indexOf(Buffer.from('PLANCHA')));
+    expect(bytes.indexOf(Buffer.from([27,112,0,25,250]))).toBeLessThan(bytes.indexOf(Buffer.from('Hamburguesa')));
     expect(eventos.enviarYEsperar).toHaveBeenCalledTimes(1);
     expect(eventos.enviarYEsperar.mock.calls[0][3]).toBe(15000);
   });
