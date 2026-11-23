@@ -22,6 +22,7 @@ const ITEMS = [
   { href: '/auditoria', label: 'Auditoría', icon: BookOpen },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
   { href: '/clientes', label: 'Clientes', icon: Users },
+  { href: '/personal', label: 'Personal y pagos', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
   { href: '/compras', label: 'Compras', icon: ShoppingCart },
   { href: '/administracion', label: 'Administración', icon: Wallet },
@@ -48,6 +49,7 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/productos': 'productos',
   '/inventario': 'inventario',
   '/clientes': 'clientes',
+  '/personal': 'financiero',
   '/financiero': 'financiero',
   '/compras': 'financiero',
   '/administracion': 'financiero',
@@ -113,6 +115,7 @@ export default function Navbar() {
     if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;
     if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
+    if (item.href === '/personal' && usuario?.rol !== 'ADMIN_EMPRESA') return false;
     if (item.href === '/suscripcion') return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/distribuidor') return usuario?.rol === 'DISTRIBUIDOR' && distribuidoresHabilitado;
     if (usuario?.rol === 'DOMICILIARIO') return item.href === '/domicilios';

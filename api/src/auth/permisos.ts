@@ -1,5 +1,6 @@
 // Los permisos individuales solo restringen; nunca amplían el plan o el rol.
 export const RUTAS_MODULO: Array<[string, string]> = [
+  ['/personal', 'financiero'],
   ['/pedidos/estadisticas', 'dashboard'],
   ['/administracion', 'financiero'],
   ['/pedidos', 'pos'],

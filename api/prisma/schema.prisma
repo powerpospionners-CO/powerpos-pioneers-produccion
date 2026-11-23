@@ -3,6 +3,25 @@ generator client {
   binaryTargets = ["native", "windows"]
 }
 
+// Expediente privado: datos cifrados y separados de archivos públicos y auditoría general.
+model PersonalRegistro {
+  id String @id @db.VarChar(36)
+  empresaId Int
+  sucursalId Int
+  tipo String @db.VarChar(24)
+  referenciaId String? @db.VarChar(191)
+  llave String? @db.VarChar(128)
+  estado String @db.VarChar(32)
+  datos Json
+  version Int @default(1)
+  creadoPor Int
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  @@unique([empresaId, sucursalId, tipo, llave])
+  @@index([empresaId, sucursalId, tipo, referenciaId])
+  @@map("personal_registros")
+}
+
 // Canal compartido y trabajos reclamados una sola vez entre procesos.
 model EventoSistema {
   id String @id @default(uuid())

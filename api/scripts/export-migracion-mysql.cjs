@@ -38,6 +38,17 @@ async function extraer(db, seleccion = modelos, motor = 'postgresql') {
     let cantidad = 0;
     for (const modelo of seleccion) {
       const fields = modelo.fields.filter(f => f.kind !== 'object');
+      // La tabla privada es aditiva y se habilita por sede. Una sede que aún no
+      // ha usado Personal sigue teniendo un respaldo completo del resto de datos.
+      if (modelo.name === 'PersonalRegistro') {
+        const existe = await tx.$queryRawUnsafe(mysql
+          ? "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='personal_registros'"
+          : "SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='personal_registros'");
+        if (!existe.length) {
+          tablas[modelo.name] = { campos: fields.map(f => ({ nombre:f.name,tipo:f.type,lista:f.isList })), filas:[] };
+          continue;
+        }
+      }
       // Mantener decimales y timestamps como texto evita perder precisión.
       const columnas = fields.map(f => {
         const columna = identificador(f.dbName || f.name);

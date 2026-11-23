@@ -168,6 +168,8 @@ export class FinancieroService {
   }
 
   private async validarMovimientoAdministrativo(tx: import('@prisma/client').Prisma.TransactionClient, id: number) {
+    const movimiento = await tx.movimientoFinanciero.findUnique({where:{id},select:{comprobante:true}});
+    if (movimiento?.comprobante?.startsWith('personal-pago:')) throw new ForbiddenException('Este pago laboral conserva evidencia inmutable y no se puede editar ni eliminar desde Financiero');
     const [abono, conciliacion] = await Promise.all([
       tx.abonoAdministrativo.findUnique({ where: { movimientoId: id }, select: { id: true } }),
       tx.conciliacionAdministrativa.findUnique({ where: { movimientoId: id }, select: { id: true } }),

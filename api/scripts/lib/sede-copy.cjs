@@ -6,6 +6,10 @@ const q = name => { if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw Error('Ide
 const campos = model => model.fields.filter(f=>f.kind!=='object');
 const relaciones = model => model.fields.filter(f=>f.kind==='object'&&f.relationFromFields?.length);
 async function leerModelo(db,model,where={}) {
+  if(model.name==='PersonalRegistro'){
+    const existe=await db.$queryRawUnsafe("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='personal_registros'");
+    if(!existe.length)return [];
+  }
   const select = campos(model).map(f=>`${q(f.dbName||f.name)}${['Decimal','DateTime','Json','BigInt'].includes(f.type)?'::text':''} AS ${q(f.name)}`).join(',');
   const keys=Object.keys(where);
   const filter=keys.length?' WHERE '+keys.map((key,i)=>`${q(key)}=$${i+1}`).join(' AND '):'';
