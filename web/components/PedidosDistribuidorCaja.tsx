@@ -4,9 +4,10 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { moneda } from '@/lib/formato';
 import { generarClaveVenta } from '@/lib/colaOfflineVentas';
+import RevisionPedidoDistribuidor from './RevisionPedidoDistribuidor';
 import ModalCobro, { PagoConfirmado } from './ModalCobro';
 
-type Pedido = { id:number;numero:string;total:string;descuento?:number;descuentoAplicado?:number;revision?:number;modalidad:string;estadoGestion:string;saldoPendiente:number|null;entregado:boolean;numeroCaja?:string;clienteReferencia?:string;distribuidor:{nombre:string;codigo:string};detalles:{id:number;cantidad:number;presentacionNombre?:string;producto:{nombre:string};subtotal:string}[] };
+type Pedido = { id:number;numero:string;total:string;descuento?:number;descuentoAplicado?:number;revision?:number;modalidad:string;estadoGestion:string;motivoRevision?:string|null;saldoPendiente:number|null;entregado:boolean;numeroCaja?:string;clienteReferencia?:string;distribuidor:{nombre:string;codigo:string};detalles:{id:number;cantidad:number;presentacionNombre?:string;producto:{nombre:string};subtotal:string}[] };
 type Solicitud = { ruta:string;datos:Record<string,any> };
 export default function PedidosDistribuidorCaja({onCambio}:{onCambio:()=>void}) {
   const usuario=useAuthStore(s=>s.usuario);
@@ -46,10 +47,11 @@ export default function PedidosDistribuidorCaja({onCambio}:{onCambio:()=>void}) 
   if(!habilitado)return null;
   const porRetirar=pedidos.filter(p=>p.estadoGestion==='PENDIENTE_RETIRO');
   const porPagar=pedidos.filter(p=>p.estadoGestion==='PENDIENTE_PAGO');
+  const porRevisar=pedidos.filter(p=>p.estadoGestion==='EN_REVISION');
   const historicos=pedidos.filter(p=>p.estadoGestion==='HISTORICO');
   const visibles=pedidos.filter(p=>todos||['PENDIENTE_RETIRO','PENDIENTE_PAGO','EN_REVISION','HISTORICO'].includes(p.estadoGestion));
   return <section aria-label="Pedidos de distribuidores en caja" className="my-4 rounded-xl border border-orange-500/40 bg-gray-900 p-4 text-white">
-    <button className="flex w-full flex-wrap items-center justify-between gap-2 text-left font-semibold text-orange-300" onClick={()=>setAbierto(v=>!v)}>Pedidos de distribuidores <span aria-live="polite" className="text-sm">{porRetirar.length} por retirar · {porPagar.length} por pagar{historicos.length?` · ${historicos.length} anteriores por revisar`:''} {abierto?'▴':'▾'}</span></button>
+    <button className="flex w-full flex-wrap items-center justify-between gap-2 text-left font-semibold text-orange-300" onClick={()=>setAbierto(v=>!v)}>Pedidos de distribuidores <span aria-live="polite" className="text-sm">{porRetirar.length} por retirar · {porPagar.length} por pagar{porRevisar.length?` · ${porRevisar.length} por revisar`:''}{historicos.length?` · ${historicos.length} anteriores por revisar`:''} {abierto?'▴':'▾'}</span></button>
     {pendiente&&<div className="mt-3 rounded-lg border border-amber-500 p-3 text-amber-200">Hay una operación pendiente de confirmar.<button disabled={ocupado} className="ml-3 underline" onClick={()=>ejecutar(pendiente.ruta,pendiente.datos)}>Reintentar la misma operación</button></div>}
     {error&&<p role="alert" className="mt-3 text-red-300">{error}</p>}{mensaje&&<p role="status" className="mt-3 text-green-300">{mensaje}</p>}
     {recibo&&<button disabled={ocupado} onClick={imprimir} className="mt-2 text-sm text-orange-300 underline">Imprimir recibo de la última entrega</button>}
@@ -60,6 +62,8 @@ export default function PedidosDistribuidorCaja({onCambio}:{onCambio:()=>void}) 
         <div className="flex flex-wrap justify-between gap-2"><strong>{p.numero} · {p.distribuidor.nombre}</strong><strong>{moneda(Number(p.total))}</strong></div>
         <p className="mt-1 text-sm text-gray-300">Cliente: {p.clienteReferencia||'Sin referencia'} · {p.modalidad==='PAGO_ANTES'?'Pagar antes de retirar':p.modalidad==='COBRO_POSTERIOR'?'Retirar y pagar después':'Pedido histórico'}</p>
         <p className="mt-1 text-sm text-amber-200">{p.estadoGestion.replaceAll('_',' ')}{p.saldoPendiente!==null?` · Por entregar a caja: ${moneda(p.saldoPendiente)}`:''}{p.numeroCaja?` · Venta ${p.numeroCaja}`:''}</p>
+        {p.motivoRevision&&<p className="mt-2 text-sm text-amber-200">{p.motivoRevision}. El administrador puede abrir la revisión.</p>}
+        {p.estadoGestion!=='ANULADO'&&<RevisionPedidoDistribuidor pedidoId={p.id} onCancelado={async()=>{setMensaje('Pedido cancelado y conservado en el historial.');await cargar();onCambio();}}/>}
         {p.estadoGestion==='HISTORICO'&&<p className="mt-2 text-sm text-gray-400">Este pedido se registró antes del control de caja. Administración debe confirmar si la mercancía y el dinero ya fueron entregados antes de registrar otro cobro o liquidar su comisión.</p>}
         <details className="mt-2 text-sm"><summary className="cursor-pointer text-orange-300">Ver mercancía del pedido</summary><ul className="mt-2 space-y-1">{p.detalles.map(d=><li key={d.id}>{d.cantidad} × {d.producto.nombre}{d.presentacionNombre?` · ${d.presentacionNombre}`:''} · {moneda(Number(d.subtotal))}</li>)}</ul></details>
         {p.estadoGestion==='PENDIENTE_RETIRO'&&<>

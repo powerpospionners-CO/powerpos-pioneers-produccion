@@ -296,6 +296,33 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(Number((await db.caja.findUnique({where:{id:cajaHistorica.id}})).diferencia),10000);
     console.log('PASS conciliación de pago histórico: solo administrador, motivo obligatorio, efectivo esperado corregido, conteo y retiro conservados y reintento sin doble descuento');
 
+    // Cerrar el pedido del distribuidor después de anular la venta, incluso con caja cerrada.
+    const cajaRevision=(await http.post('/caja/abrir').set('Authorization',token).send({montoInicial:50000}).expect(201)).body;
+    const pedidoRevision=(await http.post('/pedidos-distribuidor').set('Authorization',sesionDist).send({clave:randomUUID(),modalidad:'PAGO_ANTES',clienteReferencia:'Venta cancelada de prueba',items:[{productoId:mercanciaDist.id,cantidad:1}]}).expect(201)).body;
+    const entregaRevision=(await http.post(`/pedidos-distribuidor/${pedidoRevision.id}/entregar`).set('Authorization',token).send({clave:randomUUID(),pagos:[{metodoPago:'EFECTIVO',monto:Number(pedidoRevision.total)}]}).expect(201)).body;
+    const rutaRevision=`/pedidos-distribuidor/${pedidoRevision.id}/revision-administrativa`,rutaCancelar=`/pedidos-distribuidor/${pedidoRevision.id}/cancelar-revisado`;
+    await http.get(rutaRevision).set('Authorization',sesionPaula).expect(403);
+    await http.get(rutaRevision).set('Authorization',sesionDist).expect(403);
+    const revisionActiva=(await http.get(rutaRevision).set('Authorization',token).expect(200)).body;
+    assert.equal(revisionActiva.puedeCancelar,false);
+    await http.patch(rutaCancelar).set('Authorization',token).send({motivo:'No se debe cerrar una venta activa',revision:revisionActiva.revision,confirmado:true}).expect(400);
+    await http.patch(`/pedidos/${entregaRevision.pedidoCajaId}/estado`).set('Authorization',token).send({estado:'ANULADO'}).expect(200);
+    await http.post(`/caja/${cajaRevision.id}/cerrar`).set('Authorization',token).send({montoFinal:50000,montoRetirado:0}).expect(201);
+    const stockTrasAnular=(await db.producto.findUnique({where:{id:mercanciaDist.id}})).stockActual;
+    const movimientosTrasAnular=await db.movimientoFinanciero.count({where:{pedidoId:entregaRevision.pedidoCajaId}});
+    await http.patch(rutaCancelar).set('Authorization',token).send({motivo:'Revisión anterior a la anulación',revision:revisionActiva.revision,confirmado:true}).expect(409);
+    const revisionCancelada=(await http.get(rutaRevision).set('Authorization',token).expect(200)).body;
+    assert.equal(revisionCancelada.venta.estado,'ANULADO');assert.equal(revisionCancelada.puedeCancelar,true);
+    const cierreRevision={motivo:'La venta ya fue cancelada y se revisó el comprobante',revision:revisionCancelada.revision,confirmado:true};
+    await http.patch(rutaCancelar).set('Authorization',sesionPaula).send(cierreRevision).expect(403);
+    await Promise.all([http.patch(rutaCancelar).set('Authorization',token).send(cierreRevision).expect(200),http.patch(rutaCancelar).set('Authorization',token).send(cierreRevision).expect(200)]);
+    const pedidoCerrado=(await http.get(`/pedidos-distribuidor/${pedidoRevision.id}`).set('Authorization',token).expect(200)).body;
+    assert.equal(pedidoCerrado.estadoGestion,'ANULADO');assert.equal(pedidoCerrado.comisionDisponible,false);
+    assert.equal((await db.producto.findUnique({where:{id:mercanciaDist.id}})).stockActual,stockTrasAnular);
+    assert.equal(await db.movimientoFinanciero.count({where:{pedidoId:entregaRevision.pedidoCajaId}}),movimientosTrasAnular);
+    assert.equal(await db.auditoria.count({where:{empresaId:empresa.id,entidad:'PEDIDO_DISTRIBUIDOR',entidadId:pedidoRevision.id,accion:'ANULAR'}}),1);
+    console.log('PASS revisión administrativa distribuidor: venta anulada, caja cerrada, cancelación concurrente única, sin nuevo stock, reembolso ni comisión');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);
