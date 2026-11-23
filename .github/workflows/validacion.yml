@@ -49,9 +49,15 @@ jobs:
       - run: node test/pos-integracion.cjs
         env:
           POS_TEST_DATABASE_URL: postgresql://pruebas:solo_ci@127.0.0.1:55439/powerpos_pos_test
+      - run: node test/personal-integracion.cjs
+        env:
+          POS_TEST_DATABASE_URL: postgresql://pruebas:solo_ci@127.0.0.1:55439/powerpos_pos_test
       - run: npm run build:mysql
       - run: npx prisma db push --schema prisma/mysql/schema.prisma --skip-generate
       - run: node test/pos-integracion.cjs
+        env:
+          POS_TEST_DATABASE_URL: mysql://root:solo_ci@127.0.0.1:55440/powerpos_pos_test
+      - run: node test/personal-integracion.cjs
         env:
           POS_TEST_DATABASE_URL: mysql://root:solo_ci@127.0.0.1:55440/powerpos_pos_test
       - run: node scripts/probar-restauracion-mysql.cjs

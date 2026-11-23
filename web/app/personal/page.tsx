@@ -1,0 +1,1000 @@
+"use client";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import api from "@/lib/api";
+import AuthGuard from "@/components/AuthGuard";
+import Navbar from "@/components/Navbar";
+import { useAuthStore } from "@/store/authStore";
+
+type Registro = {
+  id: string;
+  tipo: string;
+  estado: string;
+  datos: Record<string, any>;
+}; // Las estructuras documentales provienen del expediente cifrado.
+type Campo = {
+  name: string;
+  label: string;
+  type?: string;
+  options?: { value: string; label: string }[];
+  value?: string | boolean;
+  optional?: boolean;
+};
+const money = (n: number) =>
+  new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP" }).format(
+    (n || 0) / 100,
+  );
+const estado = (s: string) => s.replaceAll("_", " ");
+const hoy = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+const boton =
+  "rounded-lg bg-orange-600 px-4 py-2 text-white disabled:opacity-40";
+const control =
+  "w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-white";
+function Formulario({
+  title,
+  campos,
+  onSubmit,
+}: {
+  title: string;
+  campos: Campo[];
+  onSubmit: (d: Record<string, any>) => Promise<void>;
+}) {
+  const operacion = useRef("");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget),
+      d: Record<string, any> = {};
+    setBusy(true);
+    setError("");
+    try {
+      for (const c of campos) {
+        const v = fd.get(c.name);
+        if (c.type === "checkbox") d[c.name] = v === "on";
+        else if (c.type === "file") {
+          if (v instanceof File && v.size) {
+            const upload = new FormData();
+            upload.append("archivo", v);
+            d[c.name] = (
+              await api.post("/personal/archivos", upload, {
+                headers: { "Content-Type": "multipart/form-data" },
+              })
+            ).data.id;
+          }
+        } else d[c.name] = v || undefined;
+      }
+      operacion.current ||= crypto.randomUUID();
+      d.idempotencia = operacion.current;
+      await onSubmit(d);
+      operacion.current = "";
+    } catch (e: any) {
+      setError(
+        String(e.response?.data?.message || e.message || "No se pudo guardar"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-4 rounded-xl border border-gray-800 bg-gray-900 p-5"
+    >
+      <h2 className="text-xl font-semibold">{title}</h2>
+      <fieldset disabled={busy} className="grid gap-4 md:grid-cols-2">
+        {campos.map((c) => (
+          <label
+            key={c.name}
+            className={
+              c.type === "textarea" || c.type === "checkbox"
+                ? "md:col-span-2 text-sm"
+                : "text-sm"
+            }
+          >
+            {c.type === "checkbox" ? (
+              <span className="flex gap-3">
+                <input
+                  name={c.name}
+                  type="checkbox"
+                  required={!c.optional}
+                  defaultChecked={c.value === true}
+                />
+                {c.label}
+              </span>
+            ) : (
+              <>
+                {c.label}
+                {c.type === "textarea" ? (
+                  <textarea
+                    className={control}
+                    name={c.name}
+                    required={!c.optional}
+                    defaultValue={String(c.value || "")}
+                    rows={4}
+                  />
+                ) : c.options ? (
+                  <select
+                    className={control}
+                    name={c.name}
+                    required={!c.optional}
+                    defaultValue={String(c.value || "")}
+                  >
+                    <option value="">Selecciona</option>
+                    {c.options.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className={control}
+                    name={c.name}
+                    type={c.type || "text"}
+                    required={!c.optional}
+                    defaultValue={
+                      c.type === "file" ? undefined : String(c.value || "")
+                    }
+                    accept={c.type === "file" ? "application/pdf" : undefined}
+                    step={c.type === "number" ? "0.01" : undefined}
+                    min={c.type === "number" ? "0" : undefined}
+                    autoComplete={
+                      c.type === "password" ? "current-password" : undefined
+                    }
+                  />
+                )}
+              </>
+            )}
+          </label>
+        ))}
+      </fieldset>
+      {error && (
+        <p role="alert" className="text-red-300">
+          {error}
+        </p>
+      )}
+      <button className={boton} disabled={busy}>
+        {busy ? "Guardando…" : "Guardar"}
+      </button>
+    </form>
+  );
+}
+export default function Personal() {
+  return (
+    <AuthGuard>
+      <Contenido />
+    </AuthGuard>
+  );
+}
+function Contenido() {
+  const usuario = useAuthStore((s) => s.usuario),
+    [data, setData] = useState<any>(null),
+    [error, setError] = useState(""),
+    [mensaje, setMensaje] = useState(""),
+    [tab, setTab] = useState("empleados"),
+    [editar, setEditar] = useState<Registro | null>(null),
+    [accion, setAccion] = useState<Registro | null>(null),
+    [historial, setHistorial] = useState<any>(null),
+    [ocupado, setOcupado] = useState(false),
+    [conceptos, setConceptos] = useState([
+      {
+        tipo: "DEVENGADO",
+        nombre: "Salario del periodo",
+        monto: "",
+        fundamento: "",
+        soporteId: "",
+      },
+    ]);
+  const cargar = useCallback(async () => {
+    try {
+      setData((await api.get("/personal")).data);
+      setError("");
+    } catch (e: any) {
+      setError(
+        String(e.response?.data?.message || "No fue posible cargar Personal"),
+      );
+    }
+  }, []);
+  useEffect(() => {
+    if (usuario?.rol === "ADMIN_EMPRESA") void cargar();
+  }, [cargar, usuario?.rol]);
+  async function guardar(ruta: string, d: Record<string, any>, patch = false) {
+    setMensaje("");
+    await (patch ? api.patch(ruta, d) : api.post(ruta, d));
+    setMensaje("Guardado.");
+    setEditar(null);
+    setAccion(null);
+    await cargar();
+  }
+  async function ejecutar(
+    fn: () => Promise<any>,
+    ok = "Operación completada.",
+  ) {
+    setOcupado(true);
+    setMensaje("");
+    setError("");
+    try {
+      await fn();
+      setMensaje(ok);
+      await cargar();
+    } catch (e: any) {
+      setError(String(e.response?.data?.message || e.message));
+    } finally {
+      setOcupado(false);
+    }
+  }
+  async function descargar(id: string, tipo = "paquete") {
+    const r = await api.get(`/personal/${id}/${tipo}`, {
+        responseType: "blob",
+      }),
+      url = URL.createObjectURL(r.data),
+      a = document.createElement("a");
+    a.href = url;
+    a.download =
+      tipo === "documento" ? "documento.pdf" : "documento-laboral.zip";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+  const empleados: Registro[] = data?.empleados || [],
+    periodos: Registro[] = data?.periodos || [],
+    pagos: Registro[] = data?.pagos || [],
+    plantillas: Registro[] = data?.plantillas || [],
+    contratos: Registro[] = data?.contratos || [];
+  const opciones = empleados.map((e) => ({
+    value: e.id,
+    label: e.datos.nombre + (e.estado === "RETIRADO" ? " (retirado)" : ""),
+  }));
+  const camposEmpleado: Campo[] = [
+    { name: "nombre", label: "Nombre completo", value: editar?.datos.nombre },
+    {
+      name: "identificacion",
+      label: "Identificación",
+      value: editar?.datos.identificacion,
+    },
+    { name: "cargo", label: "Cargo", value: editar?.datos.cargo },
+    {
+      name: "email",
+      label: "Correo personal del empleado (él debe controlarlo)",
+      type: "email",
+      value: editar?.datos.email,
+    },
+    {
+      name: "ingreso",
+      label: "Fecha real de ingreso",
+      type: "date",
+      value: editar?.datos.ingreso,
+    },
+    {
+      name: "salario",
+      label: "Salario mensual pactado (COP)",
+      type: "number",
+      value: editar ? String(editar.datos.salarioCentavos / 100) : "",
+    },
+    {
+      name: "frecuencia",
+      label: "Frecuencia de pago",
+      options: ["QUINCENAL", "MENSUAL", "SEMANAL"].map((value) => ({
+        value,
+        label: value,
+      })),
+      value: editar?.datos.frecuencia,
+    },
+    {
+      name: "activo",
+      label: "Empleado activo",
+      type: "checkbox",
+      optional: true,
+      value: editar ? editar.estado === "ACTIVO" : true,
+    },
+  ];
+  return (
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-gray-950 p-4 text-gray-100 md:p-8">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <h1 className="text-3xl font-bold">Personal y pagos</h1>
+          <p className="text-gray-400">
+            Expedientes privados de esta sede. Registra los pagos reales,
+            entrega su soporte y permite que cada empleado confirme o presente
+            diferencias.
+          </p>
+          {usuario?.rol !== "ADMIN_EMPRESA" ? (
+            <p role="alert">
+              Solo el administrador de la empresa puede acceder a estos
+              expedientes.
+            </p>
+          ) : (
+            <>
+              {error && (
+                <p role="alert" className="rounded-lg bg-red-950 p-4">
+                  {error}
+                </p>
+              )}
+              {mensaje && (
+                <p role="status" className="rounded-lg bg-green-950 p-4">
+                  {mensaje}
+                </p>
+              )}
+              {data && (
+                <>
+                  <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-4 text-sm">
+                    Nómina electrónica DIAN: <strong>sin conectar</strong>. Los
+                    comprobantes internos no acreditan transmisión DIAN. Los
+                    conceptos deben revisarse con el responsable de nómina y los
+                    contratos con asesoría jurídica.{" "}
+                    {!data.correoConfigurado && (
+                      <p className="mt-2">
+                        Correo institucional pendiente de configurar: aún no se
+                        pueden enviar invitaciones ni códigos.
+                      </p>
+                    )}
+                  </div>
+                  <nav
+                    aria-label="Secciones de Personal"
+                    className="flex flex-wrap gap-2"
+                  >
+                    {[
+                      ["empleados", "Empleados"],
+                      ["pagos", "Periodos y pagos"],
+                      ["contratos", "Contratos"],
+                      ["config", "Privacidad"],
+                    ].map(([v, l]) => (
+                      <button
+                        key={v}
+                        className={
+                          tab === v
+                            ? boton
+                            : "rounded-lg border border-gray-700 px-4 py-2"
+                        }
+                        onClick={() => {
+                          setTab(v);
+                          setAccion(null);
+                          setHistorial(null);
+                        }}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </nav>
+                  {tab === "config" && (
+                    <Formulario
+                      key={data.config?.version || "config"}
+                      title="Aviso de privacidad del empleador"
+                      campos={[
+                        {
+                          name: "responsable",
+                          label: "Razón social y responsable del tratamiento",
+                          value: data.config?.responsable,
+                        },
+                        {
+                          name: "correo",
+                          label:
+                            "Correo para consultas, correcciones y reclamaciones",
+                          type: "email",
+                          value: data.config?.correo,
+                        },
+                        {
+                          name: "politica",
+                          label:
+                            "Aviso revisado: finalidades laborales, derechos, canal de atención, acceso, conservación y entrega de copias",
+                          type: "textarea",
+                          value: data.config?.politica,
+                        },
+                        {
+                          name: "acepta",
+                          label:
+                            "He revisado el aviso aplicable a mi empresa y brindaré una alternativa en papel, sin impedir la contratación.",
+                          type: "checkbox",
+                        },
+                      ]}
+                      onSubmit={(d) => guardar("/personal/configuracion", d)}
+                    />
+                  )}
+                  {tab === "empleados" && (
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <section className="space-y-3">
+                        <h2 className="text-xl font-semibold">
+                          Empleados de la sede
+                        </h2>
+                        {!empleados.length && (
+                          <p>
+                            Aún no hay empleados. Configura primero Privacidad.
+                          </p>
+                        )}
+                        {empleados.map((e) => (
+                          <article
+                            className="rounded-xl border border-gray-800 p-4"
+                            key={e.id}
+                          >
+                            <strong>{e.datos.nombre}</strong>
+                            <p>
+                              {e.datos.cargo} · {estado(e.estado)}
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              {e.datos.email} · {money(e.datos.salarioCentavos)}
+                            </p>
+                            <button
+                              className="mt-2 text-orange-400 underline"
+                              onClick={() => setEditar(e)}
+                            >
+                              Editar expediente
+                            </button>
+                          </article>
+                        ))}
+                        {editar && (
+                          <button onClick={() => setEditar(null)}>
+                            Cancelar edición
+                          </button>
+                        )}
+                      </section>
+                      <Formulario
+                        key={editar?.id || "nuevo"}
+                        title={
+                          editar ? "Editar empleado" : "Registrar empleado"
+                        }
+                        campos={camposEmpleado}
+                        onSubmit={(d) =>
+                          guardar(
+                            `/personal/empleados${editar ? "/" + editar.id : ""}`,
+                            d,
+                            !!editar,
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                  {tab === "pagos" && (
+                    <>
+                      <div className="grid gap-6 lg:grid-cols-2">
+                        <section className="space-y-4">
+                          <h2 className="text-xl">Conceptos del periodo</h2>
+                          <p className="text-sm text-gray-400">
+                            Valores del periodo, no del mes completo. Incluye
+                            las novedades, aportes y retenciones que determine
+                            el responsable de nómina. No se calculan
+                            automáticamente.
+                          </p>
+                          {conceptos.map((c, i) => (
+                            <div
+                              key={i}
+                              className="space-y-2 rounded-lg border border-gray-700 p-3"
+                            >
+                              <label>
+                                Tipo
+                                <select
+                                  className={control}
+                                  value={c.tipo}
+                                  onChange={(e) =>
+                                    setConceptos((cs) =>
+                                      cs.map((x, j) =>
+                                        j === i
+                                          ? { ...x, tipo: e.target.value }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  <option>DEVENGADO</option>
+                                  <option>DEDUCCION</option>
+                                </select>
+                              </label>
+                              {(
+                                [
+                                  "nombre",
+                                  "monto",
+                                  ...(c.tipo === "DEDUCCION"
+                                    ? ["fundamento"]
+                                    : []),
+                                ] as const
+                              ).map((k) => (
+                                <label className="block" key={k}>
+                                  {k === "monto"
+                                    ? "Importe COP"
+                                    : k === "nombre"
+                                      ? "Concepto"
+                                      : "Fundamento legal o autorización expresa"}
+                                  <input
+                                    className={control}
+                                    value={c[k as keyof typeof c]}
+                                    onChange={(e) =>
+                                      setConceptos((cs) =>
+                                        cs.map((x, j) =>
+                                          j === i
+                                            ? { ...x, [k]: e.target.value }
+                                            : x,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              ))}
+                              {c.tipo === "DEDUCCION" && (
+                                <label className="block">
+                                  Soporte PDF de la deducción
+                                  <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f)
+                                        void ejecutar(async () => {
+                                          const fd = new FormData();
+                                          fd.append("archivo", f);
+                                          const r = await api.post(
+                                            "/personal/archivos",
+                                            fd,
+                                            {
+                                              headers: {
+                                                "Content-Type":
+                                                  "multipart/form-data",
+                                              },
+                                            },
+                                          );
+                                          setConceptos((cs) =>
+                                            cs.map((x, j) =>
+                                              j === i
+                                                ? { ...x, soporteId: r.data.id }
+                                                : x,
+                                            ),
+                                          );
+                                        }, "Soporte adjuntado.");
+                                    }}
+                                  />
+                                  {c.soporteId && <span> Adjuntado</span>}
+                                </label>
+                              )}
+                              <button
+                                className="text-red-300"
+                                onClick={() =>
+                                  setConceptos((cs) =>
+                                    cs.filter((_, j) => j !== i),
+                                  )
+                                }
+                              >
+                                Quitar concepto
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            className={boton}
+                            onClick={() =>
+                              setConceptos((cs) => [
+                                ...cs,
+                                {
+                                  tipo: "DEVENGADO",
+                                  nombre: "",
+                                  monto: "",
+                                  fundamento: "",
+                                  soporteId: "",
+                                },
+                              ])
+                            }
+                          >
+                            Agregar concepto
+                          </button>
+                        </section>
+                        <Formulario
+                          title="Crear periodo revisado"
+                          campos={[
+                            {
+                              name: "empleadoId",
+                              label: "Empleado",
+                              options: opciones,
+                            },
+                            { name: "desde", label: "Desde", type: "date" },
+                            { name: "hasta", label: "Hasta", type: "date" },
+                            {
+                              name: "fechaProgramada",
+                              label: "Fecha programada del pago",
+                              type: "date",
+                            },
+                            {
+                              name: "revisado",
+                              label:
+                                "El responsable de nómina revisó los conceptos, novedades y fundamentos de cada deducción.",
+                              type: "checkbox",
+                            },
+                          ]}
+                          onSubmit={(d) =>
+                            guardar("/personal/periodos", { ...d, conceptos })
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-6 lg:grid-cols-2">
+                        <Formulario
+                          title="Registrar pago o abono real"
+                          campos={[
+                            {
+                              name: "periodoId",
+                              label: "Periodo pendiente",
+                              options: periodos
+                                .filter(
+                                  (p) =>
+                                    p.datos.pagadoCentavos <
+                                    p.datos.totalCentavos,
+                                )
+                                .map((p) => ({
+                                  value: p.id,
+                                  label: `${p.datos.empleado.nombre}: ${p.datos.desde} – ${p.datos.hasta} · saldo ${money(p.datos.totalCentavos - p.datos.pagadoCentavos)}`,
+                                })),
+                            },
+                            {
+                              name: "monto",
+                              label: "Importe efectivamente pagado COP",
+                              type: "number",
+                            },
+                            {
+                              name: "fechaPago",
+                              label: "Fecha real de pago",
+                              type: "date",
+                              value: hoy(),
+                            },
+                            {
+                              name: "medio",
+                              label: "Medio de pago",
+                              options: ["EFECTIVO", "TRANSFERENCIA"].map(
+                                (value) => ({ value, label: value }),
+                              ),
+                            },
+                            {
+                              name: "soporteId",
+                              label:
+                                "Soporte PDF (obligatorio en transferencia)",
+                              type: "file",
+                              optional: true,
+                            },
+                          ]}
+                          onSubmit={(d) =>
+                            guardar("/personal/pagos", {
+                              ...d,
+                              idempotencia: d.idempotencia,
+                            })
+                          }
+                        />
+                        <section className="space-y-3">
+                          <h2 className="text-xl">Saldo por periodo</h2>
+                          {periodos.map((p) => (
+                            <article
+                              className="rounded-lg border border-gray-800 p-3"
+                              key={p.id}
+                            >
+                              <strong>{p.datos.empleado.nombre}</strong>
+                              <p>
+                                {p.datos.desde} al {p.datos.hasta}
+                              </p>
+                              <p>
+                                Neto {money(p.datos.totalCentavos)} · registrado{" "}
+                                {money(p.datos.pagadoCentavos)} · saldo{" "}
+                                {money(
+                                  p.datos.totalCentavos -
+                                    p.datos.pagadoCentavos,
+                                )}
+                              </p>
+                            </article>
+                          ))}
+                        </section>
+                      </div>
+                    </>
+                  )}
+                  {tab === "contratos" && (
+                    <>
+                      <div className="grid gap-6 lg:grid-cols-2">
+                        <Formulario
+                          title="Subir plantilla revisada"
+                          campos={[
+                            {
+                              name: "nombre",
+                              label: "Nombre y versión de la plantilla",
+                            },
+                            {
+                              name: "archivoId",
+                              label: "Plantilla original PDF (hasta 5 MB)",
+                              type: "file",
+                            },
+                            {
+                              name: "revisadaPor",
+                              label: "Nombre del asesor jurídico que la revisó",
+                            },
+                            {
+                              name: "revisadaEn",
+                              label: "Fecha real de revisión",
+                              type: "date",
+                            },
+                            {
+                              name: "alcance",
+                              label: "Alcance de revisión y condiciones de uso",
+                              type: "textarea",
+                            },
+                            {
+                              name: "revisada",
+                              label:
+                                "La plantilla fue revisada jurídicamente; subirla no genera un contrato firmado.",
+                              type: "checkbox",
+                            },
+                          ]}
+                          onSubmit={(d) => guardar("/personal/plantillas", d)}
+                        />
+                        <section className="space-y-3">
+                          <h2 className="text-xl">Plantillas revisadas</h2>
+                          {plantillas.map((p) => (
+                            <article
+                              className="rounded-lg border border-gray-800 p-4"
+                              key={p.id}
+                            >
+                              <strong>{p.datos.nombre}</strong>
+                              <p>
+                                {p.datos.revisadaPor} · {p.datos.revisadaEn}
+                              </p>
+                              <button
+                                className="text-orange-400 underline"
+                                onClick={() =>
+                                  void ejecutar(() =>
+                                    descargar(p.id, "documento"),
+                                  )
+                                }
+                              >
+                                Descargar original
+                              </button>
+                            </article>
+                          ))}
+                          <p className="text-sm text-gray-400">
+                            Completa el PDF para cada empleado y haz revisar su
+                            texto antes de cargarlo. La firma registrará la
+                            fecha real; no se puede firmar retroactivamente ni
+                            hacer renunciar al trabajador a sus derechos.
+                          </p>
+                        </section>
+                      </div>
+                      <Formulario
+                        title="Registrar contrato completo revisado"
+                        campos={[
+                          {
+                            name: "empleadoId",
+                            label: "Empleado",
+                            options: opciones,
+                          },
+                          {
+                            name: "plantillaId",
+                            label: "Plantilla revisada utilizada",
+                            options: plantillas.map((p) => ({
+                              value: p.id,
+                              label: p.datos.nombre,
+                            })),
+                          },
+                          {
+                            name: "archivoId",
+                            label:
+                              "Contrato individual completo PDF (hasta 5 MB)",
+                            type: "file",
+                          },
+                          {
+                            name: "tipo",
+                            label: "Modalidad",
+                            options: [
+                              { value: "INDEFINIDO", label: "Indefinido" },
+                              { value: "FIJO", label: "Término fijo" },
+                              { value: "OBRA_LABOR", label: "Obra o labor" },
+                            ],
+                          },
+                          {
+                            name: "inicio",
+                            label: "Inicio real pactado",
+                            type: "date",
+                          },
+                          {
+                            name: "fin",
+                            label: "Fin (obligatorio para término fijo)",
+                            type: "date",
+                            optional: true,
+                          },
+                          {
+                            name: "obra",
+                            label:
+                              "Obra o labor precisa (obligatoria para esa modalidad)",
+                            type: "textarea",
+                            optional: true,
+                          },
+                          {
+                            name: "funciones",
+                            label: "Funciones revisadas",
+                            type: "textarea",
+                          },
+                          { name: "lugar", label: "Lugar de trabajo" },
+                          {
+                            name: "salario",
+                            label: "Salario mensual pactado COP",
+                            type: "number",
+                          },
+                          {
+                            name: "revisadaPor",
+                            label:
+                              "Responsable de revisión del contrato individual",
+                          },
+                          {
+                            name: "revisado",
+                            label:
+                              "El PDF individual coincide con estos datos y ha sido revisado jurídicamente, incluyendo modalidad, plazos, remuneración, jornada, prestaciones y anexos aplicables.",
+                            type: "checkbox",
+                          },
+                        ]}
+                        onSubmit={(d) => guardar("/personal/contratos", d)}
+                      />
+                    </>
+                  )}
+                  {(tab === "pagos" || tab === "contratos") && (
+                    <section className="space-y-3">
+                      <h2 className="text-xl">
+                        {tab === "pagos"
+                          ? "Comprobantes de pagos"
+                          : "Contratos individuales"}
+                      </h2>
+                      {(tab === "pagos" ? pagos : contratos).map((r) => (
+                        <article
+                          className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-800 p-4"
+                          key={r.id}
+                        >
+                          <div>
+                            <strong>{r.datos.empleado.nombre}</strong>
+                            <p>
+                              {r.tipo === "PAGO"
+                                ? money(r.datos.montoCentavos)
+                                : r.datos.tipo}{" "}
+                              · {estado(r.estado)}
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              {r.datos.fechaPago || r.datos.inicio}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-sm">
+                            <button
+                              disabled={ocupado}
+                              onClick={() =>
+                                void ejecutar(() =>
+                                  descargar(r.id, "documento"),
+                                )
+                              }
+                            >
+                              Leer PDF
+                            </button>
+                            <button
+                              disabled={ocupado}
+                              onClick={() =>
+                                void ejecutar(() => descargar(r.id))
+                              }
+                            >
+                              Descargar evidencias
+                            </button>
+                            <button
+                              disabled={ocupado}
+                              onClick={() =>
+                                void ejecutar(async () =>
+                                  setHistorial(
+                                    (
+                                      await api.get(
+                                        `/personal/${r.id}/historial`,
+                                      )
+                                    ).data,
+                                  ),
+                                )
+                              }
+                            >
+                              Historial
+                            </button>
+                            {r.estado === "PENDIENTE_EMPLEADOR" && (
+                              <button
+                                className="text-orange-400"
+                                onClick={() => setAccion(r)}
+                              >
+                                Firmar como empleador
+                              </button>
+                            )}
+                            {[
+                              "REGISTRADO_SIN_CONFIRMAR",
+                              "PENDIENTE_EMPLEADO",
+                            ].includes(r.estado) && (
+                              <button
+                                className="text-orange-400"
+                                disabled={ocupado}
+                                onClick={() =>
+                                  void ejecutar(
+                                    () => api.post(`/personal/${r.id}/invitar`),
+                                    "Invitación enviada al correo del empleado. El código no es visible para el administrador.",
+                                  )
+                                }
+                              >
+                                Enviar al empleado
+                              </button>
+                            )}
+                            {[
+                              "FIRMADO",
+                              "RECIBIDO_FIRMADO",
+                              "EN_REVISION",
+                            ].includes(r.estado) && (
+                              <button
+                                disabled={ocupado}
+                                onClick={() =>
+                                  void ejecutar(
+                                    () => api.post(`/personal/${r.id}/copia`),
+                                    "Copia enviada al correo autorizado.",
+                                  )
+                                }
+                              >
+                                Reenviar copia
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </section>
+                  )}
+                  {accion && (
+                    <Formulario
+                      key={accion.id}
+                      title={`Firma del empleador: ${accion.datos.empleado.nombre}`}
+                      campos={[
+                        {
+                          name: "nombre",
+                          label: "Nombre del representante autorizado",
+                        },
+                        {
+                          name: "identificacion",
+                          label: "Identificación del representante",
+                        },
+                        {
+                          name: "facultad",
+                          label: "Calidad o facultad de representación",
+                        },
+                        {
+                          name: "password",
+                          label: "Tu contraseña actual de PowerPOS",
+                          type: "password",
+                        },
+                        {
+                          name: "acepta",
+                          label:
+                            "He leído el PDF exacto, tengo facultad para representar al empleador y acepto su contenido. La fecha de firma es la actual.",
+                          type: "checkbox",
+                        },
+                      ]}
+                      onSubmit={(d) =>
+                        guardar(`/personal/${accion.id}/firma-empleador`, d)
+                      }
+                    />
+                  )}
+                  {historial && (
+                    <section className="rounded-xl border border-gray-700 p-4">
+                      <h2 className="text-xl">Historial protegido</h2>
+                      {Object.entries(historial).map(([k, rs]) => (
+                        <div key={k}>
+                          <h3 className="mt-3 font-semibold capitalize">{k}</h3>
+                          {(rs as Registro[]).map((r) => (
+                            <p key={r.id} className="py-1 text-sm">
+                              {r.datos.fecha} ·{" "}
+                              {r.datos.accion ||
+                                r.datos.calidad ||
+                                estado(r.estado)}{" "}
+                              {r.datos.nombre || ""} {r.datos.reclamo || ""}{" "}
+                              {r.datos.pendiente ? " · entrega pendiente" : ""}
+                            </p>
+                          ))}
+                        </div>
+                      ))}
+                    </section>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    La vista muestra hasta los últimos 500 registros por
+                    sección. No borres expedientes al retirar a una persona;
+                    conserva los soportes conforme a la política de tu empresa.
+                    El empleado puede optar por documentos en papel y pedir
+                    copias.
+                  </p>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+    </>
+  );
+}

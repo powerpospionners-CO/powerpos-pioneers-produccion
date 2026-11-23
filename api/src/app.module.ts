@@ -37,9 +37,11 @@ import { HealthController } from './health/health.controller';
 import { ActividadInterceptor } from './auditoria/actividad.interceptor';
 import { AccesoBarrasModule } from './acceso-barras/acceso-barras.module';
 import { AccesoGastosModule } from './acceso-gastos/acceso-gastos.module';
+import { PersonalModule } from './personal/personal.module';
 
 @Module({
   imports: [
+    PersonalModule,
     AccesoBarrasModule,
     AccesoGastosModule,
     EventosModule,

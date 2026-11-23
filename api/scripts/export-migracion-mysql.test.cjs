@@ -3,6 +3,16 @@ const assert = require('node:assert/strict');
 const { randomBytes } = require('node:crypto');
 const { cifrar, descifrar, extraer } = require('./export-migracion-mysql.cjs');
 
+test('respalda una sede que aún no habilitó Personal sin consultar su tabla ausente',async()=>{
+  const consultas=[];
+  const db={$transaction:async(fn)=>fn({$queryRawUnsafe:async(sql)=>{consultas.push(sql);return []},$executeRawUnsafe:async()=>{}})};
+  const modelo={name:'PersonalRegistro',dbName:'personal_registros',fields:[{name:'id',kind:'scalar',type:'String'}]};
+  const r=await extraer(db,[modelo],'mysql');
+  assert.deepEqual(r.tablas.PersonalRegistro.filas,[]);
+  assert.equal(consultas.length,1);
+  assert.match(consultas[0],/information_schema/);
+});
+
 test('respalda MySQL con paginación y preserva decimales, JSON y fechas como texto', async () => {
   const consultas = [];
   let lote = 0;
