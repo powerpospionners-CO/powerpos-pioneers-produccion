@@ -23,6 +23,13 @@ export function secciones(valor: any, campo: string, max = 30) {
 export function datosContrato(d: any) {
   if (!['INDEFINIDO', 'FIJO', 'OBRA_LABOR'].includes(d.tipo))
     throw new BadRequestException('Selecciona una modalidad laboral');
+  const fechaCelebracion = d.fechaCelebracion
+    ? fecha(d.fechaCelebracion)
+    : hoy();
+  if (fechaCelebracion > hoy())
+    throw new BadRequestException(
+      'La fecha declarada de celebración no puede ser futura; las firmas conservan su fecha real',
+    );
   const inicio = fecha(d.inicio),
     fin = d.tipo === 'FIJO' ? fecha(d.fin) : null;
   if (fin && fin < inicio)
@@ -45,7 +52,11 @@ export function datosContrato(d: any) {
     );
   return {
     empleadoId: texto(d.empleadoId, 'empleado', 36),
+    razonSocial: d.razonSocial
+      ? texto(d.razonSocial, 'nombre legal del empleador', 300)
+      : null,
     tipo: d.tipo,
+    fechaCelebracion,
     inicio,
     fin,
     obra:
@@ -87,13 +98,14 @@ export function datosContrato(d: any) {
 }
 export function variablesContrato(d: any) {
   return {
-    empresa: d.empresa.nombre,
+    empresa: d.razonSocial || d.empresa.nombre,
     nit: d.empresa.nit,
     empleado: d.empleado.nombre,
     documento: d.empleado.identificacion,
     cargo: d.cargo,
     salario: `COP ${(d.salarioCentavos / 100).toFixed(2)}`,
     inicio: d.inicio,
+    fechaCelebracion: d.fechaCelebracion || d.fechaElaboracion,
     fin: d.fin || 'No aplica',
     lugar: d.lugarServicio,
   };

@@ -6,6 +6,8 @@ import {
 import { pdfContrato } from './contrato-editor.service';
 export const ejemploContrato = {
   empleadoId: 'empleado',
+  razonSocial: 'EMPLEADOR LEGAL FICTICIO',
+  fechaCelebracion: '2026-11-23',
   tipo: 'INDEFINIDO',
   inicio: '2026-11-23',
   domicilioEmpleado: 'Pereira, domicilio ficticio',
@@ -58,6 +60,9 @@ describe('Editor de contratos', () => {
         especieDetalle: 'Concepto de prueba',
       }),
     ).toThrow('50 %');
+    expect(() =>
+      datosContrato({ ...ejemploContrato, fechaCelebracion: '2999-01-01' }),
+    ).toThrow();
     expect(datosContrato(ejemploContrato).salarioCentavos).toBe(200000000);
   });
   it('solo sustituye variables conocidas sin ejecutar instrucciones', () => {
@@ -67,7 +72,7 @@ describe('Editor de contratos', () => {
       empleado: { nombre: 'Ana de prueba', identificacion: '456' },
     };
     expect(resolverTexto('{{empleado}} / {{empresa}}', d)).toBe(
-      'Ana de prueba / Empresa de prueba',
+      'Ana de prueba / EMPLEADOR LEGAL FICTICIO',
     );
     expect(() => resolverTexto('{{constructor}}', d)).toThrow();
     expect(() => resolverTexto('{{empleado', d)).toThrow();

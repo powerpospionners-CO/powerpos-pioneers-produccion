@@ -403,7 +403,12 @@ export class PersonalService {
     if (centavos(d.salario) <= 0)
       throw new BadRequestException('El salario debe ser positivo');
     const datos = {
-      empresa,
+      empresa: {
+        ...empresa,
+        nombreLegal: d.razonSocial
+          ? texto(d.razonSocial, 'nombre legal del empleador', 300)
+          : empresa.nombre,
+      },
       empleado: e.datos,
       empleadoId: e.id,
       plantillaId: p.id,
@@ -867,7 +872,7 @@ export class PersonalService {
       p.moveDown()
         .fontSize(10)
         .text(
-          `Estado: ${doc.estado}\nReferencia: ${doc.id}\nEmpresa: ${doc.datos.empresa?.nombre}\nNIT: ${doc.datos.empresa?.nit}\nEmpleado: ${doc.datos.empleado?.nombre}\nIdentificacion: ${doc.datos.empleado?.identificacion}`,
+          `Estado: ${doc.estado}\nReferencia: ${doc.id}\nEmpresa: ${doc.datos.empresa?.nombreLegal || doc.datos.empresa?.nombre}\nNIT: ${doc.datos.empresa?.nit}\nEmpleado: ${doc.datos.empleado?.nombre}\nIdentificacion: ${doc.datos.empleado?.identificacion}`,
         );
       if (doc.tipo === 'PAGO')
         p.moveDown().text(

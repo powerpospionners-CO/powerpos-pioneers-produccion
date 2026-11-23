@@ -15,8 +15,10 @@ const button =
   "rounded-lg bg-orange-600 px-4 py-2 text-white disabled:opacity-40";
 const inicial = {
   empleadoId: "",
+  razonSocial: "",
   tipo: "INDEFINIDO",
   inicio: "",
+  fechaCelebracion: "",
   fin: "",
   obra: "",
   domicilioEmpleado: "",
@@ -37,6 +39,16 @@ const inicial = {
     "La duración, los preavisos y la terminación se sujetan a la modalidad pactada y a las disposiciones laborales aplicables, sin renuncia a los derechos mínimos del trabajador.",
 };
 const campos = [
+  [
+    "fechaCelebracion",
+    "Fecha declarada de celebración del acuerdo (las firmas conservarán su fecha real)",
+    "date",
+  ],
+  [
+    "razonSocial",
+    "Nombre completo o razón social legal del empleador según su RUT (puede diferir de la marca)",
+    "text",
+  ],
   ["inicio", "Inicio pactado", "date"],
   ["domicilioEmpleado", "Domicilio del trabajador", "text"],
   ["domicilioEmpresa", "Domicilio del empleador", "text"],

@@ -27,7 +27,7 @@ export async function pdfContrato(
         bufferPages: true,
         info: {
           Title: 'Contrato individual de trabajo',
-          Author: d.empresa.nombre,
+          Author: d.razonSocial || d.empresa.nombre,
         },
       }),
       chunks: Buffer[] = [];
@@ -58,11 +58,11 @@ export async function pdfContrato(
     }
     seccion(
       '1. Identificación y domicilio de las partes',
-      `Empleador: ${d.empresa.nombre}. NIT: ${d.empresa.nit}. Domicilio: ${d.domicilioEmpresa}.\nTrabajador: ${d.empleado.nombre}. Identificación: ${d.empleado.identificacion}. Domicilio: ${d.domicilioEmpleado}.`,
+      `Empleador: ${d.razonSocial || d.empresa.nombre}. NIT: ${d.empresa.nit}. Domicilio: ${d.domicilioEmpresa}.\nTrabajador: ${d.empleado.nombre}. Identificación: ${d.empleado.identificacion}. Domicilio: ${d.domicilioEmpleado}.`,
     );
     seccion(
       '2. Celebración, contratación y servicio',
-      `Lugar de celebración: ${d.lugarCelebracion}. Fecha real de elaboración: ${d.fechaElaboracion}. La fecha de cada firma será la registrada al realizarla.\nLugar de contratación: ${d.lugarContratacion}. Lugar de prestación del servicio: ${d.lugarServicio}.`,
+      `Lugar de celebración: ${d.lugarCelebracion}. Fecha de celebración declarada: ${d.fechaCelebracion || d.fechaElaboracion}. Fecha real de elaboración: ${d.fechaElaboracion}. La fecha de cada firma será la registrada al realizarla.\nLugar de contratación: ${d.lugarContratacion}. Lugar de prestación del servicio: ${d.lugarServicio}.`,
     );
     seccion(
       '3. Naturaleza del trabajo',
@@ -128,6 +128,7 @@ export class ContratoEditorService {
         'cargo',
         'salario',
         'inicio',
+        'fechaCelebracion',
         'fin',
         'lugar',
       ],
@@ -203,6 +204,7 @@ export class ContratoEditorService {
       const payload = {
         ...datos,
         modeloId: d.modeloId || null,
+        razonSocial: datos.razonSocial || empresa.nombre,
         empresa,
         empleado: empleado.datos,
         empleadoHuella: hash(JSON.stringify(empleado.datos)),
@@ -381,6 +383,7 @@ export class ContratoEditorService {
         a,
         {
           empleadoId: e.id,
+          razonSocial: r.datos.razonSocial || r.datos.empresa.nombre,
           plantillaId: plantilla.id,
           archivoId: archivo.id,
           tipo: r.datos.tipo,
