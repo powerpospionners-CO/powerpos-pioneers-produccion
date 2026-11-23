@@ -6,11 +6,16 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
 } from 'node:crypto';
 
 export const hash = (valor: string | Buffer) =>
   createHash('sha256').update(valor).digest('hex');
+export const indiceEmpleado = (documento: string) =>
+  createHmac('sha256', clavePersonal())
+    .update('personal-identificacion:' + documento)
+    .digest('hex');
 export function texto(valor: unknown, campo: string, max = 200) {
   if (
     typeof valor !== 'string' ||
@@ -81,7 +86,7 @@ export function descifrar(datos: any, identidad: string): any {
   }
 }
 export const identidad = (r: any) =>
-  `${r.empresaId}:${r.sucursalId}:${r.tipo}:${r.id}:${r.version}`;
+  `${r.empresaId}:${r.sucursalId}:${r.tipo}:${r.id}:${r.estado}:${r.version}:${r.referenciaId || ''}:${r.llave || ''}:${r.creadoPor}`;
 export const hoy = () =>
   new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',

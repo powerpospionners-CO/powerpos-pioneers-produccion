@@ -5,11 +5,31 @@ import {
   fecha,
   centavos,
   validarPeriodo,
+  identidad,
 } from './personal.reglas';
 describe('Expedientes privados laborales', () => {
   const anterior = process.env.PERSONAL_ENCRYPTION_KEY;
   beforeAll(() => {
     process.env.PERSONAL_ENCRYPTION_KEY = randomBytes(32).toString('hex');
+  });
+  it('no permite alterar el estado o reasignar la evidencia a otro documento sin invalidar el cifrado', () => {
+    const r = {
+        empresaId: 1,
+        sucursalId: 2,
+        id: 'uuid',
+        tipo: 'FIRMA',
+        estado: 'EMPLEADO',
+        version: 1,
+        referenciaId: 'documento-a',
+        llave: null,
+        creadoPor: 0,
+      },
+      e = cifrar({ fecha: '2026-11-23' }, identidad(r));
+    expect(() =>
+      descifrar(e, identidad({ ...r, referenciaId: 'documento-b' })),
+    ).toThrow();
+    expect(() => descifrar(e, identidad({ ...r, estado: 'OTRO' }))).toThrow();
+    expect(() => descifrar(e, identidad({ ...r, creadoPor: 99 }))).toThrow();
   });
   afterAll(() => {
     if (anterior) process.env.PERSONAL_ENCRYPTION_KEY = anterior;

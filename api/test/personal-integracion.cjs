@@ -440,6 +440,6 @@ const { AppModule } = require('../dist/src/app.module'),
     if (app) await app.close();
   }
 })().catch((e) => {
-  console.error(e.message);
+  console.error(e.stack);
   process.exitCode = 1;
 });

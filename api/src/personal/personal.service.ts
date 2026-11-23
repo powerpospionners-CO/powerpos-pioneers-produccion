@@ -8,7 +8,14 @@ import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import * as nodemailer from 'nodemailer';
 import * as bcrypt from 'bcrypt';
 import { PersonalStore, ActorPersonal } from './personal.store';
-import { centavos, fecha, hash, hoy, texto } from './personal.reglas';
+import {
+  centavos,
+  fecha,
+  hash,
+  hoy,
+  texto,
+  indiceEmpleado,
+} from './personal.reglas';
 import { FinancieroService } from '../financiero/financiero.service';
 import { validarPeriodo } from './personal.reglas';
 const PDFDocument = require('pdfkit');
@@ -58,6 +65,7 @@ export class PersonalService {
   }
   async empleado(a: ActorPersonal, d: any, id?: string) {
     await this.store.preparar();
+    if (id) await this.store.obtener(a, id, 'EMPLEADO');
     if (!(await this.config(a)))
       throw new BadRequestException(
         'Configura primero el aviso de privacidad de la empresa',
@@ -120,7 +128,7 @@ export class PersonalService {
         a,
         'EMPLEADO',
         datos,
-        { llave: hash(datos.identificacion) },
+        { llave: indiceEmpleado(datos.identificacion) },
         tx,
       );
       await this.store.evento(a, creado.id, 'CREAR_EMPLEADO', {}, tx);

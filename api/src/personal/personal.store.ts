@@ -90,7 +90,7 @@ export class PersonalStore {
     estado = r.estado,
     tx?: any,
   ) {
-    const nuevo = { ...r, version: r.version + 1 };
+    const nuevo = { ...r, estado, version: r.version + 1 };
     const actualizado = await this.db(tx).personalRegistro.updateMany({
       where: { id: r.id, ...this.scope(a), version: r.version },
       data: {
