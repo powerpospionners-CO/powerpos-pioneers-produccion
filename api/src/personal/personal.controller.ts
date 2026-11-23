@@ -25,6 +25,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { contextoSede } from '../prisma/sede-context';
 import { PersonalService } from './personal.service';
+import { ContratoEditorService } from './contrato-editor.service';
 
 function descargar(res: Response, bytes: Buffer, nombre: string, mime: string) {
   res.set({
@@ -40,7 +41,84 @@ function descargar(res: Response, bytes: Buffer, nombre: string, mime: string) {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN_EMPRESA')
 export class PersonalController {
-  constructor(private service: PersonalService) {}
+  constructor(
+    private service: PersonalService,
+    private editor: ContratoEditorService,
+  ) {}
+  @Get('editor') @Header('Cache-Control', 'no-store, private') editorInicio(
+    @Request() r: any,
+  ) {
+    return this.editor.inicio(r.user);
+  }
+  @Post('editor/modelos') modelo(@Request() r: any, @Body() d: any) {
+    return this.editor.modelo(r.user, d);
+  }
+  @Post('editor/borradores') borrador(@Request() r: any, @Body() d: any) {
+    return this.editor.guardar(r.user, d);
+  }
+  @Patch('editor/borradores/:id') borradorEditar(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Body() d: any,
+  ) {
+    return this.editor.guardar(r.user, d, id);
+  }
+  @Post('editor/borradores/:id/revisar') revisarBorrador(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Body() d: any,
+  ) {
+    return this.editor.revisar(r.user, id, d);
+  }
+  @Post('editor/borradores/:id/emitir') emitirBorrador(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Body() d: any,
+  ) {
+    return this.editor.emitir(r.user, id, d);
+  }
+  @Get('editor/borradores/:id/historial')
+  @Header('Cache-Control', 'no-store, private')
+  versiones(@Request() r: any, @Param('id') id: string) {
+    return this.editor.historial(r.user, id);
+  }
+  @Get('editor/borradores/:id/pdf') async borradorPdf(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    descargar(
+      res,
+      await this.editor.vista(r.user, id),
+      'borrador-contrato.pdf',
+      'application/pdf',
+    );
+  }
+  @Get('editor/borradores/:id/versiones/:version/pdf') async versionPdf(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Param('version') version: string,
+    @Res() res: Response,
+  ) {
+    descargar(
+      res,
+      await this.editor.vista(r.user, id, Number(version)),
+      'version-anterior-contrato.pdf',
+      'application/pdf',
+    );
+  }
+  @Get('editor/borradores/:id/revisado') async revisadoPdf(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    descargar(
+      res,
+      await this.editor.originalRevisado(r.user, id),
+      'contrato-original-revisado.pdf',
+      'application/pdf',
+    );
+  }
   @Get() @Header('Cache-Control', 'no-store, private') inicio(
     @Request() r: any,
   ) {

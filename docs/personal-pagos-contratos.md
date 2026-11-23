@@ -17,11 +17,17 @@ La alternativa en papel es obligatoria cuando el trabajador no puede o no desea 
 
 ## Contratos
 
-Se carga la plantilla PDF y se identifica al asesor que la revisó, fecha y alcance. Luego se carga el PDF individual completo, con anexos incorporados, y se declara su revisión jurídica. **El sistema no crea texto contractual ni verifica que el asesor realmente haya revisado el contenido.** Los campos resumidos deben coincidir con el original y no lo sustituyen.
+En **Contratos → Crear contrato en el sistema** el administrador redacta el documento: domicilios de ambas partes, lugares de celebración, contratación y servicio, cargo y funciones, remuneración y periodicidad, componente en especie, jornada, descansos, modalidad, duración y terminación. Los datos se basan en el artículo 39 del Código Sustantivo del Trabajo; completarlos no acredita por sí solo la legalidad de lo pactado.
+
+Puede guardar modelos propios de cláusulas y anexos de texto. Las variables admitidas se sustituyen con los datos de la empresa y del empleado, sin ejecutar código ni HTML. Los modelos se conservan como registros nuevos; aplicarlos copia el texto al borrador y no modifica contratos anteriores. Los anexos de texto se incorporan al mismo PDF; para anexos externos escaneados, utiliza la carga externa del PDF completo.
+
+El flujo es **borrador → revisión jurídica de esa versión → emisión del original → firma del empleador → firma del trabajador**. Guardar cambios conserva la versión anterior e invalida la revisión. Otro empleado exige un nuevo borrador. Si cambian los datos de las partes después de la revisión, se bloquea la emisión hasta guardar y revisar nuevamente. La emisión concurrente devuelve el mismo contrato y conserva exactamente los bytes revisados del original. El borrador no se presenta como firmado y las fechas reales de elaboración/firma se distinguen del inicio pactado.
+
+Se mantiene la carga de plantillas y contratos externos en PDF. **El sistema no comprueba que el asesor realmente haya revisado el texto ni reemplaza su criterio jurídico.**
 
 El representante autorizado lee el original y confirma su contraseña actual, identidad y facultad. Solo después se permite la invitación al empleado. El original se conserva con SHA-256, firmado mediante evidencias separadas; no se modifica el PDF tras la aceptación. La firma no es una firma digital certificada ni usa biometría. La verificación de correo demuestra control del buzón en ese momento; el empleador debe identificar al trabajador y garantizar que nadie más controla ese correo.
 
-Se admite indefinido, término fijo y obra/labor. Se exige fecha final para fijo y descripción precisa para obra/labor. La validación de fijo considera el máximo de cuatro años usando los contratos fijos registrados del trabajador; no interpreta excepciones, transiciones o reingresos. Debe revisarlo el asesor. Cargar documentos hoy no subsana retroactivamente omisiones de contratos escritos ni períodos de prueba. No se permite editar o borrar originales/pagos firmados desde la interfaz; los errores requieren un procedimiento documentado de ajuste que conserve la evidencia y revisión de su efecto contable.
+Se admite indefinido, término fijo y obra/labor. Se exige fecha final para fijo y descripción precisa para obra/labor. La validación de fijo considera el máximo de cuatro años usando los contratos fijos registrados del trabajador; no inicia el cómputo antes del 25 de junio de 2025, fecha de entrada en vigor de la Ley 2466. No decide si un reingreso constituye una relación nueva ni calcula todas las prórrogas o preavisos; debe revisarlo el asesor. Cargar documentos hoy no subsana retroactivamente omisiones de contratos escritos ni períodos de prueba. No se permite editar o borrar originales/pagos firmados desde la interfaz; los errores requieren un procedimiento documentado de ajuste que conserve la evidencia y revisión de su efecto contable.
 
 ## Requisitos jurídicos utilizados
 
