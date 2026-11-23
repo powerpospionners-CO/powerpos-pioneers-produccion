@@ -446,6 +446,7 @@ const { AppModule } = require('../dist/src/app.module'),
     );
     // Creación íntegra del contrato desde el editor, con versión y original inmutable.
     const contenidoEditor = {
+      razonSocial: 'Empleador legal ficticio SAS',
       empleadoId: empleado.id,
       tipo: 'INDEFINIDO',
       inicio: '2026-11-23',
@@ -561,6 +562,14 @@ const { AppModule } = require('../dist/src/app.module'),
     ]);
     assert.equal(emitido1.body.id, emitido2.body.id);
     assert.equal(emitido1.body.estado, 'PENDIENTE_EMPLEADOR');
+    assert.equal(
+      emitido1.body.datos.empresa.nombreLegal,
+      'Empleador legal ficticio SAS',
+    );
+    assert.notEqual(
+      emitido1.body.datos.empresa.nombre,
+      emitido1.body.datos.empresa.nombreLegal,
+    );
     assert.deepEqual(
       await personal.original(actor, emitido1.body.id),
       bytesRevisados,
