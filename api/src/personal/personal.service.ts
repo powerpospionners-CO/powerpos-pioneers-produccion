@@ -30,12 +30,25 @@ export class PersonalService {
   ) {}
   async inicio(a: ActorPersonal) {
     await this.store.preparar();
+    const entregas = await this.store.listar(a, 'ENTREGA');
+    const conEntrega = (docs: any[]) =>
+      docs.map((doc) => {
+        const ultima = entregas.find((e: any) => e.referenciaId === doc.id);
+        return {
+          ...doc,
+          copia: ultima
+            ? ultima.datos.pendiente
+              ? 'PENDIENTE'
+              : 'ENVIADA'
+            : 'SIN_ENVIO_REGISTRADO',
+        };
+      });
     return {
       empleados: await this.store.listar(a, 'EMPLEADO'),
       periodos: await this.store.listar(a, 'PERIODO'),
-      pagos: await this.store.listar(a, 'PAGO'),
+      pagos: conEntrega(await this.store.listar(a, 'PAGO')),
       plantillas: await this.store.listar(a, 'PLANTILLA'),
-      contratos: await this.store.listar(a, 'CONTRATO'),
+      contratos: conEntrega(await this.store.listar(a, 'CONTRATO')),
       config: await this.config(a),
       correoConfigurado: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
       nominaDian: {
@@ -513,8 +526,7 @@ export class PersonalService {
     }
   }
   async invitar(a: ActorPersonal, id: string) {
-    const doc = await this.store.obtener(a, id),
-      empleado = await this.store.obtener(a, doc.datos.empleadoId, 'EMPLEADO');
+    const doc = await this.store.obtener(a, id);
     if (
       !['PAGO', 'CONTRATO'].includes(doc.tipo) ||
       !['REGISTRADO_SIN_CONFIRMAR', 'PENDIENTE_EMPLEADO'].includes(doc.estado)
@@ -522,6 +534,11 @@ export class PersonalService {
       throw new BadRequestException(
         'Este documento no admite una nueva solicitud de firma',
       );
+    const empleado = await this.store.obtener(
+      a,
+      doc.datos.empleadoId,
+      'EMPLEADO',
+    );
     const config = await this.config(a);
     if (!config)
       throw new BadRequestException('Configura el aviso de privacidad');
@@ -827,11 +844,11 @@ export class PersonalService {
       p.moveDown()
         .fontSize(10)
         .text(
-          `Estado: ${doc.estado}\nReferencia: ${doc.id}\nEmpresa: ${doc.datos.empresa?.nombre}\nEmpleado: ${doc.datos.empleado?.nombre}\nIdentificacion: ${doc.datos.empleado?.identificacion}`,
+          `Estado: ${doc.estado}\nReferencia: ${doc.id}\nEmpresa: ${doc.datos.empresa?.nombre}\nNIT: ${doc.datos.empresa?.nit}\nEmpleado: ${doc.datos.empleado?.nombre}\nIdentificacion: ${doc.datos.empleado?.identificacion}`,
         );
       if (doc.tipo === 'PAGO')
         p.moveDown().text(
-          `Periodo: ${doc.datos.desde} al ${doc.datos.hasta}\nFecha real del pago: ${doc.datos.fechaPago}\nImporte de este abono: COP ${(doc.datos.montoCentavos / 100).toFixed(2)}\nMedio: ${doc.datos.medio}\nEste comprobante no acredita transmision DIAN.`,
+          `Periodo: ${doc.datos.desde} al ${doc.datos.hasta}\nFecha real del pago: ${doc.datos.fechaPago}\nImporte de este abono: COP ${(doc.datos.montoCentavos / 100).toFixed(2)}\nNeto del periodo: COP ${(doc.datos.netoPeriodoCentavos / 100).toFixed(2)}\nAbonos anteriores registrados: COP ${(doc.datos.pagadoAnteriorCentavos / 100).toFixed(2)}\nSaldo tras este abono: COP ${(doc.datos.saldoTrasAbonoCentavos / 100).toFixed(2)}\nMedio: ${doc.datos.medio}\nEste comprobante no acredita transmision DIAN.`,
         );
       if (doc.tipo === 'PAGO') {
         p.moveDown().text(
@@ -853,7 +870,9 @@ export class PersonalService {
         );
       for (const r of reclamos)
         p.moveDown().text(`RECLAMACION: ${r.reclamo}\nFecha: ${r.fecha}`);
-      p.moveDown().text(ACEPTACION);
+      p.moveDown().text(
+        'Este documento solo tiene confirmacion del trabajador cuando existen evidencias de su firma. Conservar un comprobante no implica renuncia a derechos laborales ni impide presentar diferencias.',
+      );
       p.end();
     });
     return { doc, pdf, firmas, reclamos };

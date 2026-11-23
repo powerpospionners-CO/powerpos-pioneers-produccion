@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import { useAuthStore } from "@/store/authStore";
 
 type Registro = {
+  copia?: string;
   id: string;
   tipo: string;
   estado: string;
@@ -844,6 +845,16 @@ function Contenido() {
                             </p>
                             <p className="text-sm text-gray-400">
                               {r.datos.fechaPago || r.datos.inicio}
+                            </p>
+                            <p
+                              className={
+                                r.copia === "PENDIENTE"
+                                  ? "text-sm text-amber-300"
+                                  : "text-sm text-gray-400"
+                              }
+                            >
+                              Copia por correo:{" "}
+                              {estado(r.copia || "SIN_ENVIO_REGISTRADO")}
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-3 text-sm">

@@ -233,6 +233,11 @@ export default function FirmaLaboral() {
                     <strong>{money(d.montoCentavos)}</strong>
                   </p>
                   <p>Medio registrado: {d.medio}</p>
+                  <p>
+                    Neto del periodo: {money(d.netoPeriodoCentavos)}. Abonos
+                    anteriores registrados: {money(d.pagadoAnteriorCentavos)}.
+                    Saldo tras este abono: {money(d.saldoTrasAbonoCentavos)}.
+                  </p>
                   <table className="w-full text-left">
                     <thead>
                       <tr>
