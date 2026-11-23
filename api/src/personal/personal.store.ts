@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -30,6 +31,15 @@ export class PersonalStore {
     return tx || this.prisma;
   }
   scope(a: ActorPersonal) {
+    if (
+      !Number.isSafeInteger(a.empresaId) ||
+      a.empresaId < 1 ||
+      !Number.isSafeInteger(a.sucursalId) ||
+      a.sucursalId < 1
+    )
+      throw new ForbiddenException(
+        'Selecciona una sede válida para acceder al expediente',
+      );
     return { empresaId: a.empresaId, sucursalId: a.sucursalId };
   }
   abrir(r: any) {
