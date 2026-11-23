@@ -587,13 +587,21 @@ export class PersonalService {
   async acceso(a: ActorPersonal, token: string) {
     if (!/^[a-f0-9]{64}$/.test(token))
       throw new ForbiddenException('Enlace no válido');
-    const r = await this.store.db().personalRegistro.findFirst({
-      where: {
-        ...this.store.scope(a),
-        tipo: 'INVITACION',
-        llave: hash(token),
-      },
-    });
+    const r = await this.store
+      .db()
+      .personalRegistro.findFirst({
+        where: {
+          ...this.store.scope(a),
+          tipo: 'INVITACION',
+          llave: hash(token),
+        },
+      })
+      .catch((error: any) => {
+        // Sin primer acceso administrativo no puede existir ninguna invitación.
+        // No crear tablas a partir de peticiones públicas ni filtrar errores internos.
+        if (error?.code === 'P2021') return null;
+        throw error;
+      });
     if (!r) throw new ForbiddenException('Enlace no válido');
     const i = this.store.abrir(r);
     if (i.datos.vence < Date.now() || i.estado === 'ENTREGA_FALLIDA')

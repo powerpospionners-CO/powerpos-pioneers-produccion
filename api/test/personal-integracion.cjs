@@ -103,6 +103,17 @@ const { AppModule } = require('../dist/src/app.module'),
         .expect(201)
     ).body.access_token;
     await auth(http.get('/personal'), 'Bearer ' + ct).expect(403);
+    // Simular una sede recién desplegada, exclusivamente en la base efímera.
+    assert.equal(
+      await db.personalRegistro.count(),
+      0,
+      'La tabla de prueba debe estar vacía antes del ensayo de primer uso',
+    );
+    await db.$executeRawUnsafe('DROP TABLE personal_registros');
+    await http
+      .post(`/personal-firma/${a.e.id}/${a.s.id}/vista`)
+      .send({ token: '0'.repeat(64) })
+      .expect(403);
     await auth(http.get('/personal')).expect(200);
     await auth(http.post('/personal/configuracion'))
       .send({
