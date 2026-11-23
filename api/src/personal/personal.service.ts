@@ -351,22 +351,25 @@ export class PersonalService {
     });
     return r;
   }
-  async contrato(a: ActorPersonal, d: any) {
-    await this.store.preparar();
+  async contrato(a: ActorPersonal, d: any, tx?: any) {
+    if (!tx) await this.store.preparar();
     const e = await this.store.obtener(
         a,
         texto(d.empleadoId, 'empleado', 36),
         'EMPLEADO',
+        tx,
       ),
       p = await this.store.obtener(
         a,
         texto(d.plantillaId, 'plantilla', 36),
         'PLANTILLA',
+        tx,
       ),
       archivo = await this.store.obtener(
         a,
         texto(d.archivoId, 'contrato completo en PDF', 36),
         'ARCHIVO',
+        tx,
       );
     if (p.estado !== 'REVISADA' || d.revisado !== true)
       throw new BadRequestException(
@@ -376,20 +379,20 @@ export class PersonalService {
       throw new BadRequestException('Selecciona un tipo de contrato laboral');
     const inicio = fecha(d.inicio),
       fin = d.tipo === 'FIJO' ? fecha(d.fin) : null;
-    const anteriores = await this.store.listar(a, 'CONTRATO', e.id);
+    const anteriores = await this.store.listar(a, 'CONTRATO', e.id, tx);
     const primero = anteriores
       .filter((r: any) => r.datos.tipo === 'FIJO')
       .reduce(
         (min: string, r: any) => (r.datos.inicio < min ? r.datos.inicio : min),
         inicio,
       );
-    const limite = new Date(primero);
+    const limite = new Date(primero < '2025-06-25' ? '2025-06-25' : primero);
     limite.setUTCFullYear(limite.getUTCFullYear() + 4);
     if (fin && (fin < inicio || Date.parse(fin) > limite.getTime()))
       throw new BadRequestException(
         'El término fijo acumulado supera cuatro años o las fechas son inválidas; requiere revisión jurídica',
       );
-    const empresa = await this.store.prisma.empresa.findUnique({
+    const empresa = await this.store.db(tx).empresa.findUnique({
       where: { id: a.empresaId },
       select: { nombre: true, nit: true, direccion: true },
     });
@@ -421,13 +424,25 @@ export class PersonalService {
       documentoHash: archivo.datos.sha256,
       aviso: ACEPTACION,
     };
-    const r = await this.store.crear(a, 'CONTRATO', datos, {
-      referenciaId: e.id,
-      estado: 'PENDIENTE_EMPLEADOR',
-    });
-    await this.store.evento(a, r.id, 'CREAR_CONTRATO', {
-      revisadaPor: datos.revisadaPor,
-    });
+    const r = await this.store.crear(
+      a,
+      'CONTRATO',
+      datos,
+      {
+        referenciaId: e.id,
+        estado: 'PENDIENTE_EMPLEADOR',
+      },
+      tx,
+    );
+    await this.store.evento(
+      a,
+      r.id,
+      'CREAR_CONTRATO',
+      {
+        revisadaPor: datos.revisadaPor,
+      },
+      tx,
+    );
     return r;
   }
   async firmarEmpleador(a: ActorPersonal, id: string, d: any) {

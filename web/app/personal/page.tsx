@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
+import EditorContratos from "@/components/EditorContratos";
 import { useAuthStore } from "@/store/authStore";
 
 type Registro = {
@@ -680,147 +681,158 @@ function Contenido() {
                   )}
                   {tab === "contratos" && (
                     <>
-                      <div className="grid gap-6 lg:grid-cols-2">
+                      <EditorContratos
+                        empleados={empleados}
+                        onEmitido={cargar}
+                      />
+                      <details className="rounded-xl border border-gray-700 p-4">
+                        <summary className="cursor-pointer font-semibold">
+                          Cargar plantillas o contratos externos en PDF
+                        </summary>
+                        <div className="grid gap-6 lg:grid-cols-2">
+                          <Formulario
+                            title="Subir plantilla revisada"
+                            campos={[
+                              {
+                                name: "nombre",
+                                label: "Nombre y versión de la plantilla",
+                              },
+                              {
+                                name: "archivoId",
+                                label: "Plantilla original PDF (hasta 5 MB)",
+                                type: "file",
+                              },
+                              {
+                                name: "revisadaPor",
+                                label:
+                                  "Nombre del asesor jurídico que la revisó",
+                              },
+                              {
+                                name: "revisadaEn",
+                                label: "Fecha real de revisión",
+                                type: "date",
+                              },
+                              {
+                                name: "alcance",
+                                label:
+                                  "Alcance de revisión y condiciones de uso",
+                                type: "textarea",
+                              },
+                              {
+                                name: "revisada",
+                                label:
+                                  "La plantilla fue revisada jurídicamente; subirla no genera un contrato firmado.",
+                                type: "checkbox",
+                              },
+                            ]}
+                            onSubmit={(d) => guardar("/personal/plantillas", d)}
+                          />
+                          <section className="space-y-3">
+                            <h2 className="text-xl">Plantillas revisadas</h2>
+                            {plantillas.map((p) => (
+                              <article
+                                className="rounded-lg border border-gray-800 p-4"
+                                key={p.id}
+                              >
+                                <strong>{p.datos.nombre}</strong>
+                                <p>
+                                  {p.datos.revisadaPor} · {p.datos.revisadaEn}
+                                </p>
+                                <button
+                                  className="text-orange-400 underline"
+                                  onClick={() =>
+                                    void ejecutar(() =>
+                                      descargar(p.id, "documento"),
+                                    )
+                                  }
+                                >
+                                  Descargar original
+                                </button>
+                              </article>
+                            ))}
+                            <p className="text-sm text-gray-400">
+                              Completa el PDF para cada empleado y haz revisar
+                              su texto antes de cargarlo. La firma registrará la
+                              fecha real; no se puede firmar retroactivamente ni
+                              hacer renunciar al trabajador a sus derechos.
+                            </p>
+                          </section>
+                        </div>
                         <Formulario
-                          title="Subir plantilla revisada"
+                          title="Registrar contrato completo revisado"
                           campos={[
                             {
-                              name: "nombre",
-                              label: "Nombre y versión de la plantilla",
+                              name: "empleadoId",
+                              label: "Empleado",
+                              options: opciones,
+                            },
+                            {
+                              name: "plantillaId",
+                              label: "Plantilla revisada utilizada",
+                              options: plantillas.map((p) => ({
+                                value: p.id,
+                                label: p.datos.nombre,
+                              })),
                             },
                             {
                               name: "archivoId",
-                              label: "Plantilla original PDF (hasta 5 MB)",
+                              label:
+                                "Contrato individual completo PDF (hasta 5 MB)",
                               type: "file",
                             },
                             {
-                              name: "revisadaPor",
-                              label: "Nombre del asesor jurídico que la revisó",
+                              name: "tipo",
+                              label: "Modalidad",
+                              options: [
+                                { value: "INDEFINIDO", label: "Indefinido" },
+                                { value: "FIJO", label: "Término fijo" },
+                                { value: "OBRA_LABOR", label: "Obra o labor" },
+                              ],
                             },
                             {
-                              name: "revisadaEn",
-                              label: "Fecha real de revisión",
+                              name: "inicio",
+                              label: "Inicio real pactado",
                               type: "date",
                             },
                             {
-                              name: "alcance",
-                              label: "Alcance de revisión y condiciones de uso",
-                              type: "textarea",
+                              name: "fin",
+                              label: "Fin (obligatorio para término fijo)",
+                              type: "date",
+                              optional: true,
                             },
                             {
-                              name: "revisada",
+                              name: "obra",
                               label:
-                                "La plantilla fue revisada jurídicamente; subirla no genera un contrato firmado.",
+                                "Obra o labor precisa (obligatoria para esa modalidad)",
+                              type: "textarea",
+                              optional: true,
+                            },
+                            {
+                              name: "funciones",
+                              label: "Funciones revisadas",
+                              type: "textarea",
+                            },
+                            { name: "lugar", label: "Lugar de trabajo" },
+                            {
+                              name: "salario",
+                              label: "Salario mensual pactado COP",
+                              type: "number",
+                            },
+                            {
+                              name: "revisadaPor",
+                              label:
+                                "Responsable de revisión del contrato individual",
+                            },
+                            {
+                              name: "revisado",
+                              label:
+                                "El PDF individual coincide con estos datos y ha sido revisado jurídicamente, incluyendo modalidad, plazos, remuneración, jornada, prestaciones y anexos aplicables.",
                               type: "checkbox",
                             },
                           ]}
-                          onSubmit={(d) => guardar("/personal/plantillas", d)}
+                          onSubmit={(d) => guardar("/personal/contratos", d)}
                         />
-                        <section className="space-y-3">
-                          <h2 className="text-xl">Plantillas revisadas</h2>
-                          {plantillas.map((p) => (
-                            <article
-                              className="rounded-lg border border-gray-800 p-4"
-                              key={p.id}
-                            >
-                              <strong>{p.datos.nombre}</strong>
-                              <p>
-                                {p.datos.revisadaPor} · {p.datos.revisadaEn}
-                              </p>
-                              <button
-                                className="text-orange-400 underline"
-                                onClick={() =>
-                                  void ejecutar(() =>
-                                    descargar(p.id, "documento"),
-                                  )
-                                }
-                              >
-                                Descargar original
-                              </button>
-                            </article>
-                          ))}
-                          <p className="text-sm text-gray-400">
-                            Completa el PDF para cada empleado y haz revisar su
-                            texto antes de cargarlo. La firma registrará la
-                            fecha real; no se puede firmar retroactivamente ni
-                            hacer renunciar al trabajador a sus derechos.
-                          </p>
-                        </section>
-                      </div>
-                      <Formulario
-                        title="Registrar contrato completo revisado"
-                        campos={[
-                          {
-                            name: "empleadoId",
-                            label: "Empleado",
-                            options: opciones,
-                          },
-                          {
-                            name: "plantillaId",
-                            label: "Plantilla revisada utilizada",
-                            options: plantillas.map((p) => ({
-                              value: p.id,
-                              label: p.datos.nombre,
-                            })),
-                          },
-                          {
-                            name: "archivoId",
-                            label:
-                              "Contrato individual completo PDF (hasta 5 MB)",
-                            type: "file",
-                          },
-                          {
-                            name: "tipo",
-                            label: "Modalidad",
-                            options: [
-                              { value: "INDEFINIDO", label: "Indefinido" },
-                              { value: "FIJO", label: "Término fijo" },
-                              { value: "OBRA_LABOR", label: "Obra o labor" },
-                            ],
-                          },
-                          {
-                            name: "inicio",
-                            label: "Inicio real pactado",
-                            type: "date",
-                          },
-                          {
-                            name: "fin",
-                            label: "Fin (obligatorio para término fijo)",
-                            type: "date",
-                            optional: true,
-                          },
-                          {
-                            name: "obra",
-                            label:
-                              "Obra o labor precisa (obligatoria para esa modalidad)",
-                            type: "textarea",
-                            optional: true,
-                          },
-                          {
-                            name: "funciones",
-                            label: "Funciones revisadas",
-                            type: "textarea",
-                          },
-                          { name: "lugar", label: "Lugar de trabajo" },
-                          {
-                            name: "salario",
-                            label: "Salario mensual pactado COP",
-                            type: "number",
-                          },
-                          {
-                            name: "revisadaPor",
-                            label:
-                              "Responsable de revisión del contrato individual",
-                          },
-                          {
-                            name: "revisado",
-                            label:
-                              "El PDF individual coincide con estos datos y ha sido revisado jurídicamente, incluyendo modalidad, plazos, remuneración, jornada, prestaciones y anexos aplicables.",
-                            type: "checkbox",
-                          },
-                        ]}
-                        onSubmit={(d) => guardar("/personal/contratos", d)}
-                      />
+                      </details>
                     </>
                   )}
                   {(tab === "pagos" || tab === "contratos") && (

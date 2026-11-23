@@ -444,6 +444,137 @@ const { AppModule } = require('../dist/src/app.module'),
         .body.firmas[0].datos.calidad,
       'EMPLEADOR',
     );
+    // Creación íntegra del contrato desde el editor, con versión y original inmutable.
+    const contenidoEditor = {
+      empleadoId: empleado.id,
+      tipo: 'INDEFINIDO',
+      inicio: '2026-11-23',
+      domicilioEmpleado: 'Domicilio ficticio del trabajador',
+      domicilioEmpresa: 'Domicilio ficticio del empleador',
+      lugarCelebracion: 'Pereira',
+      lugarContratacion: 'Pereira',
+      lugarServicio: 'Sede de prueba',
+      cargo: 'Auxiliar',
+      funciones: 'Funciones de prueba',
+      salario: '2000000',
+      frecuencia: 'QUINCENAL',
+      formaPago: 'Transferencia autorizada',
+      jornada: 'Jornada revisada por el asesor',
+      descansos: 'Descansos y turnos revisados',
+      especieMonto: '0',
+      terminacion: 'Causales y procedimientos legales aplicables',
+      clausulas: [
+        { titulo: 'Partes', contenido: '{{empresa}} y {{empleado}}' },
+      ],
+      anexos: [{ titulo: 'Funciones', contenido: 'Anexo de texto de prueba' }],
+    };
+    await auth(http.get('/personal/editor'), 'Bearer ' + ct).expect(403);
+    let borrador = (
+      await auth(http.post('/personal/editor/borradores'))
+        .send(contenidoEditor)
+        .expect(201)
+    ).body;
+    await auth(
+      http.get(`/personal/editor/borradores/${borrador.id}/pdf`),
+      b.token,
+    ).expect(404);
+    await auth(http.post(`/personal/editor/borradores/${borrador.id}/emitir`))
+      .send({ versionEsperada: borrador.version, acepta: true })
+      .expect(409);
+    const revisionEditor = {
+      revisadaPor: 'Asesor ficticio',
+      revisadaEn: '2026-11-23',
+      alcance:
+        'Datos, modalidad, jornada, salario, cláusulas y anexos revisados.',
+      acepta: true,
+    };
+    borrador = (
+      await auth(
+        http.post(`/personal/editor/borradores/${borrador.id}/revisar`),
+      )
+        .send({ ...revisionEditor, versionEsperada: borrador.version })
+        .expect(201)
+    ).body;
+    const versionRevisada = borrador.version;
+    borrador = (
+      await auth(http.patch(`/personal/editor/borradores/${borrador.id}`))
+        .send({
+          ...contenidoEditor,
+          funciones: 'Funciones corregidas',
+          versionEsperada: versionRevisada,
+        })
+        .expect(200)
+    ).body;
+    assert.equal(borrador.estado, 'BORRADOR');
+    assert(!borrador.datos.revision);
+    await auth(http.post(`/personal/editor/borradores/${borrador.id}/emitir`))
+      .send({ versionEsperada: versionRevisada, acepta: true })
+      .expect(409);
+    await auth(http.patch(`/personal/editor/borradores/${borrador.id}`))
+      .send({ ...contenidoEditor, versionEsperada: versionRevisada })
+      .expect(409);
+    borrador = (
+      await auth(
+        http.post(`/personal/editor/borradores/${borrador.id}/revisar`),
+      )
+        .send({ ...revisionEditor, versionEsperada: borrador.version })
+        .expect(201)
+    ).body;
+    await auth(http.patch(`/personal/empleados/${empleado.id}`))
+      .send({
+        ...empleado.datos,
+        salario: '2000000',
+        cargo: 'Auxiliar actualizado',
+      })
+      .expect(200);
+    await auth(http.post(`/personal/editor/borradores/${borrador.id}/emitir`))
+      .send({ versionEsperada: borrador.version, acepta: true })
+      .expect(409);
+    borrador = (
+      await auth(http.patch(`/personal/editor/borradores/${borrador.id}`))
+        .send({ ...contenidoEditor, versionEsperada: borrador.version })
+        .expect(200)
+    ).body;
+    borrador = (
+      await auth(
+        http.post(`/personal/editor/borradores/${borrador.id}/revisar`),
+      )
+        .send({ ...revisionEditor, versionEsperada: borrador.version })
+        .expect(201)
+    ).body;
+    await auth(
+      http.get(`/personal/editor/borradores/${borrador.id}/versiones/1/pdf`),
+    ).expect(200);
+    const bytesRevisados = await app
+      .get(
+        require('../dist/src/personal/contrato-editor.service')
+          .ContratoEditorService,
+      )
+      .originalRevisado(actor, borrador.id);
+    const [emitido1, emitido2] = await Promise.all([
+      auth(http.post(`/personal/editor/borradores/${borrador.id}/emitir`))
+        .send({ versionEsperada: borrador.version, acepta: true })
+        .expect(201),
+      auth(http.post(`/personal/editor/borradores/${borrador.id}/emitir`))
+        .send({ versionEsperada: borrador.version, acepta: true })
+        .expect(201),
+    ]);
+    assert.equal(emitido1.body.id, emitido2.body.id);
+    assert.equal(emitido1.body.estado, 'PENDIENTE_EMPLEADOR');
+    assert.deepEqual(
+      await personal.original(actor, emitido1.body.id),
+      bytesRevisados,
+    );
+    await auth(http.patch(`/personal/editor/borradores/${borrador.id}`))
+      .send({ ...contenidoEditor, versionEsperada: borrador.version })
+      .expect(400);
+    assert(
+      (
+        await auth(
+          http.get(`/personal/editor/borradores/${borrador.id}/historial`),
+        ).expect(200)
+      ).body.length >= 3,
+    );
     console.log(
       `Personal: aislamiento, cifrado, pagos concurrentes e idempotentes, evidencia financiera protegida, OTP, copias y contratos revisados OK (${mysql ? 'MariaDB' : 'PostgreSQL'}).`,
     );
