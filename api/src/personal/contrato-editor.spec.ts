@@ -51,6 +51,13 @@ describe('Editor de contratos', () => {
         especieDetalle: '',
       }),
     ).toThrow();
+    expect(() =>
+      datosContrato({
+        ...ejemploContrato,
+        especieMonto: '1500000',
+        especieDetalle: 'Concepto de prueba',
+      }),
+    ).toThrow('50 %');
     expect(datosContrato(ejemploContrato).salarioCentavos).toBe(200000000);
   });
   it('solo sustituye variables conocidas sin ejecutar instrucciones', () => {

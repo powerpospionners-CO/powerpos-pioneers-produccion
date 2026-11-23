@@ -31,6 +31,10 @@ export function datosContrato(d: any) {
     especieCentavos = centavos(d.especieMonto || '0');
   if (salarioCentavos <= 0)
     throw new BadRequestException('El salario debe ser positivo');
+  if (especieCentavos > Math.floor(salarioCentavos / 2))
+    throw new BadRequestException(
+      'El salario en especie no puede exceder el 50 % del total; el límite más restrictivo aplicable al salario mínimo requiere revisión',
+    );
   if (!['SEMANAL', 'QUINCENAL', 'MENSUAL'].includes(d.frecuencia))
     throw new BadRequestException('Revisa la periodicidad de pago');
   const clausulas = secciones(d.clausulas || [], 'cláusulas'),

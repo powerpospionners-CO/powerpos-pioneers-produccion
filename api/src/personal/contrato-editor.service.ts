@@ -70,7 +70,7 @@ export async function pdfContrato(
     );
     seccion(
       '4. Remuneración, forma y periodos de pago',
-      `Salario básico mensual pactado: COP ${(d.salarioCentavos / 100).toFixed(2)}. Periodicidad: ${d.frecuencia}. Forma de pago: ${d.formaPago}.\nValor mensual estimado del componente en especie: COP ${(d.especieCentavos / 100).toFixed(2)}. ${d.especieDetalle}\nLos conceptos, deducciones y novedades legales deben reflejarse en la liquidación correspondiente; este contrato no constituye un recibo de pago.`,
+      `Salario básico mensual total pactado (dinero más especie): COP ${(d.salarioCentavos / 100).toFixed(2)}. Componente en dinero: COP ${((d.salarioCentavos - d.especieCentavos) / 100).toFixed(2)}. Periodicidad: ${d.frecuencia}. Forma de pago: ${d.formaPago}.\nComponente mensual en especie, incluido en el total: COP ${(d.especieCentavos / 100).toFixed(2)}. ${d.especieDetalle}\nLos conceptos, deducciones y novedades legales deben reflejarse en la liquidación correspondiente; este contrato no constituye un recibo de pago.`,
     );
     seccion(
       '5. Jornada y descansos',

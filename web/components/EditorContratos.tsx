@@ -45,7 +45,11 @@ const campos = [
   ["lugarServicio", "Lugar de prestación del servicio", "text"],
   ["cargo", "Cargo", "text"],
   ["funciones", "Naturaleza del trabajo y funciones", "textarea"],
-  ["salario", "Salario básico mensual pactado COP", "number"],
+  [
+    "salario",
+    "Salario básico mensual total COP (incluye el componente en especie)",
+    "number",
+  ],
   ["formaPago", "Forma de pago del salario", "textarea"],
   [
     "jornada",
@@ -206,9 +210,9 @@ export default function EditorContratos({
       a = document.createElement("a");
     a.href = url;
     a.download =
-      tipo === "pdf"
-        ? "borrador-contrato.pdf"
-        : "contrato-original-revisado.pdf";
+      tipo === "revisado"
+        ? "contrato-original-revisado.pdf"
+        : "borrador-contrato.pdf";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
