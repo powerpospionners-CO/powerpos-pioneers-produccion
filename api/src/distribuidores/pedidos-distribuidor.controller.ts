@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { PedidosDistribuidorService } from './pedidos-distribuidor.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,6 +14,15 @@ export class PedidosDistribuidorController {
 
   @Get('modalidades')
   modalidades() { return { flujoCaja: true, modalidades: ['PAGO_ANTES','COBRO_POSTERIOR'] }; }
+
+  @Get(':id/revision-administrativa')
+  @Roles('ADMIN_EMPRESA')
+  @Header('Cache-Control','no-store, private')
+  revisar(@Param('id') id:string,@Request() req:any){return this.service.revisarAdministrador(Number(id),req.user);}
+
+  @Patch(':id/cancelar-revisado')
+  @Roles('ADMIN_EMPRESA')
+  cancelarRevisado(@Param('id') id:string,@Body() body:any,@Request() req:any){return this.service.cancelarRevisado(Number(id),body,req.user);}
 
   @Post(':id/entregar')
   @Roles('CAJERO','ADMIN_EMPRESA','GERENTE')

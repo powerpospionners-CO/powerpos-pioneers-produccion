@@ -18,6 +18,7 @@ export async function gestionPedidos(db: any, empresaId: number, pedidos: any[])
     const revision = !!control.pedidoCajaId && (!venta || venta.estado === 'ANULADO' || venta.devueltoTotal || venta.operacionesCaja.length > 0);
     const saldo = p.estado === 'ANULADO' ? 0 : venta ? Number(venta.cuentaCredito?.saldo ?? 0) : Number(p.total);
     const estado = p.estado === 'ANULADO' ? 'ANULADO' : revision ? 'EN_REVISION' : !control.pedidoCajaId ? 'PENDIENTE_RETIRO' : saldo > 0 ? 'PENDIENTE_PAGO' : 'PAGADO';
-    return { ...p, descuento: Number(control.descuento || 0), totalAntesDescuento: control.totalAntesDescuento ?? Number(p.total), modalidad: control.modalidad, revision: control.revision ?? 0, estadoGestion: estado, saldoPendiente: saldo, entregado: !!control.pedidoCajaId, pedidoCajaId: control.pedidoCajaId || null, numeroCaja: venta?.numero || null, comisionDisponible: estado === 'PAGADO' };
+    const motivoRevision=estado!=='EN_REVISION'?null:!venta?'La venta vinculada no fue encontrada':venta.estado==='ANULADO'?'La venta vinculada fue anulada':venta.devueltoTotal?'La venta tiene devolución total':'La venta tiene devoluciones que requieren revisión';
+    return { ...p, motivoRevision, descuento: Number(control.descuento || 0), totalAntesDescuento: control.totalAntesDescuento ?? Number(p.total), modalidad: control.modalidad, revision: control.revision ?? 0, estadoGestion: estado, saldoPendiente: estado==='EN_REVISION'?null:saldo, entregado: !!control.pedidoCajaId, pedidoCajaId: control.pedidoCajaId || null, numeroCaja: venta?.numero || null, comisionDisponible: estado === 'PAGADO' };
   });
 }

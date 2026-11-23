@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { bloquearCajaSucursal } from '../caja/caja-lock';
 import { PedidosService } from '../pedidos/pedidos.service';
@@ -286,6 +286,197 @@ export class PedidosDistribuidorService {
       });
 
       return tx.pedidoDistribuidor.update({ where: { id }, data: { estado: 'ANULADO' } });
+    });
+  }
+
+  private validarAdministrador(
+    actor: { rol: string; empresaId: number; sucursalId?: number },
+    id: number,
+  ) {
+    if (actor.rol !== 'ADMIN_EMPRESA')
+      throw new ForbiddenException(
+        'Solo el administrador de la empresa puede cerrar esta revisión',
+      );
+    if (
+      !Number.isSafeInteger(id) ||
+      id < 1 ||
+      !Number.isSafeInteger(actor.sucursalId) ||
+      !actor.sucursalId ||
+      actor.sucursalId < 1
+    )
+      throw new BadRequestException('Selecciona una sede y un pedido válidos');
+  }
+
+  private async cargarRevision(
+    db: any,
+    id: number,
+    actor: { empresaId: number; sucursalId?: number },
+  ) {
+    const p = await db.pedidoDistribuidor.findFirst({
+      where: { id, empresaId: actor.empresaId, sucursalId: actor.sucursalId },
+      include: {
+        distribuidor: { select: { codigo: true, nombre: true } },
+        detalles: { include: { producto: { select: { nombre: true } } } },
+      },
+    });
+    if (!p)
+      throw new NotFoundException(
+        'Pedido no encontrado en esta empresa y sede',
+      );
+    const control = (
+      await controlesDistribuidor(db, actor.empresaId, [id])
+    ).get(id);
+    const venta = control?.pedidoCajaId
+      ? await db.pedido.findFirst({
+          where: {
+            id: control.pedidoCajaId,
+            sucursalId: p.sucursalId,
+            sucursal: { empresaId: actor.empresaId },
+          },
+          include: {
+            cuentaCredito: true,
+            pagos: true,
+            operacionesCaja: {
+              where: { tipo: 'DEVOLUCION' },
+              orderBy: { id: 'asc' },
+              select: { id: true, monto: true, motivo: true, creadoEn: true },
+            },
+          },
+        })
+      : null;
+    let bloqueo: string | null = null;
+    if (p.estado === 'ANULADO')
+      bloqueo = 'El pedido ya está cancelado y se conserva en el historial.';
+    else if (p.liquidacionId)
+      bloqueo =
+        'La comisión ya fue liquidada. Primero debe conciliarse esa liquidación; no se modificará un pago de comisión automáticamente.';
+    else if (!control)
+      bloqueo =
+        'Pedido histórico sin control de caja. Requiere conciliación del inventario y dinero antes de cancelarlo.';
+    else if (control.pedidoCajaId && !venta)
+      bloqueo =
+        'No se encontró la venta en esta sede. Se requiere conciliación; no se presumirá que fue cancelada.';
+    else if (venta && venta.estado !== 'ANULADO' && !venta.devueltoTotal)
+      bloqueo =
+        'La venta vinculada sigue activa o tiene una devolución parcial. Completa su anulación o devolución total desde la gestión de ventas antes de cerrar el pedido del distribuidor.';
+    else if (venta?.cuentaCredito && Number(venta.cuentaCredito.saldo) !== 0)
+      bloqueo =
+        'La cuenta de crédito aún tiene saldo. Concilia el crédito antes de cancelar el pedido.';
+    const revision = createHash('sha256')
+      .update(
+        JSON.stringify([
+          p.id,
+          p.estado,
+          p.liquidacionId,
+          String(p.total),
+          String(p.comisionMonto),
+          control || null,
+          venta
+            ? [
+                venta.id,
+                venta.estado,
+                venta.devueltoTotal,
+                String(venta.cuentaCredito?.saldo || 0),
+                venta.operacionesCaja.map((o: any) => o.id),
+              ]
+            : null,
+        ]),
+      )
+      .digest('hex');
+    return {
+      pedido: p,
+      venta: venta
+        ? {
+            id: venta.id,
+            numero: venta.numero,
+            estado: venta.estado,
+            devueltoTotal: venta.devueltoTotal,
+            total: String(venta.total),
+            metodoPago: venta.metodoPago,
+            saldoCredito: venta.cuentaCredito
+              ? Number(venta.cuentaCredito.saldo)
+              : null,
+            pagos: venta.pagos.map((x: any) => ({
+              metodoPago: x.metodoPago,
+              monto: String(x.monto),
+            })),
+            devoluciones: venta.operacionesCaja,
+          }
+        : null,
+      puedeCancelar: !bloqueo,
+      bloqueo,
+      revision,
+      controlRegistrado: !!control,
+      efecto:
+        'Solo se cierra el pedido del distribuidor. No se repone inventario ni se registra un nuevo cobro o reembolso. La comisión pendiente queda excluida de liquidación.',
+    };
+  }
+
+  async revisarAdministrador(
+    id: number,
+    actor: { id: number; rol: string; empresaId: number; sucursalId?: number },
+  ) {
+    this.validarAdministrador(actor, id);
+    return this.prisma.$transaction((tx) => this.cargarRevision(tx, id, actor));
+  }
+
+  async cancelarRevisado(
+    id: number,
+    datos: any,
+    actor: { id: number; rol: string; empresaId: number; sucursalId?: number },
+  ) {
+    this.validarAdministrador(actor, id);
+    const motivo = typeof datos.motivo === 'string' ? datos.motivo.trim() : '';
+    if (motivo.length < 10 || motivo.length > 1000)
+      throw new BadRequestException(
+        'Escribe el motivo de cancelación, entre 10 y 1000 caracteres',
+      );
+    if (
+      typeof datos.revision !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(datos.revision) ||
+      datos.confirmado !== true
+    )
+      throw new BadRequestException(
+        'Revisa el pedido y confirma su cancelación',
+      );
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(73111, ${actor.empresaId}::integer)`;
+      await bloquearCajaSucursal(tx, actor.sucursalId!);
+      const actual = await this.cargarRevision(tx, id, actor);
+      // Una respuesta perdida no debe repetir efectos ni escribir otra cancelación.
+      if (actual.pedido.estado === 'ANULADO')
+        return { id, estado: 'ANULADO', yaCancelado: true };
+      if (actual.revision !== datos.revision)
+        throw new ConflictException(
+          'El pedido o su venta cambió. Revisa la información actualizada antes de cancelar',
+        );
+      if (!actual.puedeCancelar) throw new BadRequestException(actual.bloqueo!);
+      await tx.pedidoDistribuidor.update({
+        where: { id },
+        data: { estado: 'ANULADO' },
+      });
+      await tx.auditoria.create({
+        data: {
+          empresaId: actor.empresaId,
+          usuarioId: actor.id,
+          entidad: 'PEDIDO_DISTRIBUIDOR',
+          entidadId: id,
+          accion: 'ANULAR',
+          detalle: {
+            numero: actual.pedido.numero,
+            motivo,
+            origen: 'REVISION_ADMINISTRATIVA',
+            pedidoCajaId: actual.venta?.id || null,
+            estadoVenta: actual.venta?.estado || null,
+            devueltoTotal: actual.venta?.devueltoTotal || false,
+            total: Number(actual.pedido.total),
+            comisionExcluida: Number(actual.pedido.comisionMonto),
+            inventarioModificado: false,
+            movimientoFinancieroCreado: false,
+          },
+        },
+      });
+      return { id, estado: 'ANULADO', yaCancelado: false };
     });
   }
 }
