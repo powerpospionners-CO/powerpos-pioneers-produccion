@@ -359,7 +359,7 @@ export class PedidosDistribuidorService {
     else if (venta && venta.estado !== 'ANULADO' && !venta.devueltoTotal)
       bloqueo =
         'La venta vinculada sigue activa o tiene una devolución parcial. Completa su anulación o devolución total desde la gestión de ventas antes de cerrar el pedido del distribuidor.';
-    else if (venta && Number(venta.cuentaCredito?.saldo || 0) > 0)
+    else if (venta?.cuentaCredito && Number(venta.cuentaCredito.saldo) !== 0)
       bloqueo =
         'La cuenta de crédito aún tiene saldo. Concilia el crédito antes de cancelar el pedido.';
     const revision = createHash('sha256')

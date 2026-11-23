@@ -110,6 +110,7 @@ describe('Revisión administrativa de pedidos de distribuidores', () => {
       'parcial',
       'liquidada',
       'credito',
+      'creditoInconsistente',
       'faltante',
     ]) {
       const { service, pedido, venta, tx } = caso();
@@ -120,6 +121,7 @@ describe('Revisión administrativa de pedidos de distribuidores', () => {
       }
       if (condicion === 'liquidada') pedido.liquidacionId = 5;
       if (condicion === 'credito') venta.cuentaCredito = { saldo: 100 };
+      if (condicion === 'creditoInconsistente') venta.cuentaCredito = { saldo: -100 };
       if (condicion === 'faltante') tx.pedido.findFirst.mockResolvedValue(null);
       const r = await service.revisarAdministrador(1, actor);
       expect(r.puedeCancelar).toBe(false);
