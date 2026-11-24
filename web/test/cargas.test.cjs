@@ -27,19 +27,23 @@ test("solo archivos activan el procesamiento y las cargas paralelas se cierran d
   assert.equal(c.contieneArchivo(texto), true);
   let avisos = 0;
   const dejar = c.observarCargas(() => avisos++);
-  const a = c.iniciarCarga(),
-    b = c.iniciarCarga();
+  const a = c.iniciarCarga(0),
+    b = c.iniciarCarga(0);
   c.terminarCarga(a);
   assert.equal(c.estadoCargas().activas, 1);
   c.terminarCarga(a, true);
   assert.equal(c.estadoCargas().fallos, 0);
   c.terminarCarga(b, true);
-  assert.deepEqual(c.estadoCargas(), { activas: 0, fallos: 1 });
+  assert.deepEqual(c.estadoCargas(), { activas: 0, fallos: 1, guardados: 0 });
   assert.equal(avisos, 4);
   dejar();
-  c.iniciarCarga();
+  c.iniciarCarga(0);
   assert.equal(avisos, 4);
-  assert.deepEqual(c.estadoCargasServidor(), { activas: 0, fallos: 0 });
+  assert.deepEqual(c.estadoCargasServidor(), {
+    activas: 0,
+    fallos: 0,
+    guardados: 0,
+  });
 });
 test("el cliente real de API cierra el procesamiento al responder y al fallar, sin tráfico externo", async () => {
   const axios = require("axios");
@@ -85,6 +89,12 @@ test("el cliente real de API cierra el procesamiento al responder y al fallar, s
     assert.equal(c.estadoCargas().activas, 1);
     terminar();
     await promesa;
+    assert.equal(
+      c.estadoCargas().activas,
+      1,
+      "Una carga rápida mantiene el diálogo visible el tiempo mínimo",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 750));
     assert.equal(c.estadoCargas().activas, 0);
     await assert.rejects(
       api.post("/carga", archivo, {
@@ -94,7 +104,8 @@ test("el cliente real de API cierra el procesamiento al responder y al fallar, s
           ),
       }),
     );
-    assert.deepEqual(c.estadoCargas(), { activas: 0, fallos: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    assert.deepEqual(c.estadoCargas(), { activas: 0, fallos: 1, guardados: 0 });
     await api.post(
       "/solo-texto",
       { nombre: "Texto" },
@@ -113,4 +124,25 @@ test("el cliente real de API cierra el procesamiento al responder y al fallar, s
     global.window = anterior;
     global.CustomEvent = anteriorEvento;
   }
+});
+
+test("Guardar mantiene el diálogo durante la operación y lo cierra aunque falle", async () => {
+  const c = cargar("lib/cargas.ts");
+  let completar;
+  const guardado = c.conGuardado(
+    () => new Promise((resolve) => (completar = resolve)),
+  );
+  assert.equal(c.estadoCargas().guardados, 1);
+  completar("resultado");
+  assert.equal(await guardado, "resultado");
+  assert.equal(c.estadoCargas().guardados, 1);
+  await new Promise((resolve) => setTimeout(resolve, 750));
+  assert.equal(c.estadoCargas().activas, 0);
+  await assert.rejects(
+    c.conGuardado(async () => {
+      throw Error("Fallo de guardado");
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 750));
+  assert.equal(c.estadoCargas().activas, 0);
 });

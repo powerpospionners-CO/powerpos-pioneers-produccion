@@ -1,6 +1,8 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import SelectorArchivoPersonal from "@/components/SelectorArchivoPersonal";
 import AlertaSistema from "@/components/AlertaSistema";
+import { iniciarGuardado, terminarCarga } from "@/lib/cargas";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
@@ -49,6 +51,7 @@ function Formulario({
   onSubmit: (d: Record<string, any>) => Promise<void>;
 }) {
   const operacion = useRef("");
+  const [subidas, setSubidas] = useState(0);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -57,20 +60,17 @@ function Formulario({
       d: Record<string, any> = {};
     setBusy(true);
     setError("");
+    const proceso = iniciarGuardado();
     try {
       for (const c of campos) {
         const v = fd.get(c.name);
         if (c.type === "checkbox") d[c.name] = v === "on";
         else if (c.type === "file") {
-          if (v instanceof File && v.size) {
-            const upload = new FormData();
-            upload.append("archivo", v);
-            d[c.name] = (
-              await api.post("/personal/archivos", upload, {
-                headers: { "Content-Type": "multipart/form-data" },
-              })
-            ).data.id;
-          }
+          if (!v && !c.optional)
+            throw Error(
+              `Selecciona y termina de subir el documento: ${c.label}`,
+            );
+          d[c.name] = v || undefined;
         } else d[c.name] = v || undefined;
       }
       operacion.current ||= crypto.randomUUID();
@@ -82,6 +82,7 @@ function Formulario({
         String(e.response?.data?.message || e.message || "No se pudo guardar"),
       );
     } finally {
+      terminarCarga(proceso);
       setBusy(false);
     }
   }
@@ -91,7 +92,10 @@ function Formulario({
       className="space-y-4 rounded-xl border border-gray-800 bg-gray-900 p-5"
     >
       <h2 className="text-xl font-semibold">{title}</h2>
-      <fieldset disabled={busy} className="grid gap-4 md:grid-cols-2">
+      <fieldset
+        disabled={busy || subidas > 0}
+        className="grid gap-4 md:grid-cols-2"
+      >
         {campos.map((c) => (
           <label
             key={c.name}
@@ -136,6 +140,15 @@ function Formulario({
                       </option>
                     ))}
                   </select>
+                ) : c.type === "file" ? (
+                  <SelectorArchivoPersonal
+                    name={c.name}
+                    required={!c.optional}
+                    className={control}
+                    onOcupado={(ocupado) =>
+                      setSubidas((n) => Math.max(0, n + (ocupado ? 1 : -1)))
+                    }
+                  />
                 ) : (
                   <input
                     className={control}
@@ -143,10 +156,7 @@ function Formulario({
                     type={c.type || "text"}
                     list={c.sugerencias ? `lista-${c.name}` : undefined}
                     required={!c.optional}
-                    defaultValue={
-                      c.type === "file" ? undefined : String(c.value || "")
-                    }
-                    accept={c.type === "file" ? "application/pdf" : undefined}
+                    defaultValue={String(c.value || "")}
                     step={c.type === "number" ? "0.01" : undefined}
                     min={c.type === "number" ? "0" : undefined}
                     autoComplete={
@@ -171,8 +181,12 @@ function Formulario({
           {error}
         </p>
       )}
-      <button className={boton} disabled={busy}>
-        {busy ? "Guardando…" : submitLabel}
+      <button className={boton} disabled={busy || subidas > 0}>
+        {subidas > 0
+          ? "Subiendo documento…"
+          : busy
+            ? "Guardando…"
+            : submitLabel}
       </button>
     </form>
   );

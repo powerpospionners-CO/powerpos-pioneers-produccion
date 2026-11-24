@@ -27,8 +27,12 @@ export default function ProcesandoArchivos() {
     }
   }, [estado, aviso]);
   if (!estado.activas) return null;
+  const guardando = estado.guardados === estado.activas;
   return (
-    <DialogoSistema titulo="Procesando archivos" ocupado>
+    <DialogoSistema
+      titulo={guardando ? "Guardando cambios" : "Procesando archivos"}
+      ocupado
+    >
       <div
         className="flex flex-col items-center gap-4 py-3 text-center"
         role="status"
@@ -50,12 +54,14 @@ export default function ProcesandoArchivos() {
           className="h-9 w-9 animate-spin text-orange-400 motion-reduce:animate-none"
         />
         <p className="font-semibold">
-          {estado.activas === 1
-            ? "Subiendo y procesando tu archivo…"
-            : `Procesando ${estado.activas} archivos…`}
+          {guardando
+            ? "Estamos guardando la información…"
+            : estado.activas === 1
+              ? "Subiendo y procesando tu archivo…"
+              : `Procesando ${estado.activas} archivos…`}
         </p>
         <p className="text-sm text-gray-300">
-          Espera a que termine la carga. No cierres esta ventana.
+          Espera a que termine la operación. No cierres esta ventana.
         </p>
       </div>
     </DialogoSistema>

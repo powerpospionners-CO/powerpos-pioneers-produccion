@@ -2,6 +2,7 @@
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
 import { guardarConImagen } from '@/lib/guardarConImagen';
+import { iniciarGuardado, terminarCarga } from '@/lib/cargas';
 import api from '@/lib/api';
 import {
   Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images, DollarSign, Eye, EyeOff,
@@ -138,6 +139,7 @@ export default function CatalogoPage() {
   const guardar = async () => {
     if (!form.nombre) return;
     setLoading(true);
+    const proceso = iniciarGuardado();
     let registroGuardado = false;
     try {
       const payload = {

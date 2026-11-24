@@ -1,6 +1,8 @@
 "use client";
 import { useNotificar } from "@/components/Notificaciones";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import SelectorArchivoPersonal from "@/components/SelectorArchivoPersonal";
+import { conGuardado } from "@/lib/cargas";
 import api from "@/lib/api";
 
 type Registro = {
@@ -99,8 +101,9 @@ export default function DocumentosEmpresa({
   });
   const editor = useRef<HTMLFormElement>(null);
   const [archivoOriginal, setArchivoOriginal] = useState<string | null>(null);
-  const [archivo, setArchivo] = useState<File | null>(null),
-    [formato, setFormato] = useState("TEXTO"),
+  const [selectorVersion, setSelectorVersion] = useState(0);
+  const [subiendoArchivo, setSubiendoArchivo] = useState(false);
+  const [formato, setFormato] = useState("TEXTO"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [mensaje, setMensaje] = useState("");
@@ -206,42 +209,38 @@ export default function DocumentosEmpresa({
         tabIndex={-1}
         onSubmit={(e) => {
           e.preventDefault();
-          void run(async () => {
-            let archivoId = formato === "PDF" ? archivoOriginal : undefined;
-            if (formato === "PDF" && !archivo && !archivoId)
-              throw Error("Selecciona un PDF");
-            if (formato === "PDF" && archivo) {
-              const fd = new FormData();
-              fd.append("archivo", archivo);
-              archivoId = (
-                await api.post("/personal/archivos", fd, {
-                  headers: { "Content-Type": "multipart/form-data" },
-                })
-              ).data.id;
-            }
-            await api.post("/personal/documentos-empresa", {
-              ...form,
-              contenido: formato === "TEXTO" ? form.contenido : undefined,
-              archivoId,
-            });
-            setMensaje(
-              form.tipo === "CONTRATO"
-                ? "Modelo guardado. En Contratos, selecciónalo en Aplicar modelo de la empresa."
-                : "Borrador guardado. Revísalo antes de adoptar la política.",
-            );
-            setForm((f) => ({
-              ...f,
-              nombre: "",
-              contenido: "",
-              anteriorId: "",
-            }));
-            setArchivo(null);
-            setArchivoOriginal(null);
-          });
+          void conGuardado(() =>
+            run(async () => {
+              const archivoId = formato === "PDF" ? archivoOriginal : undefined;
+              if (formato === "PDF" && !archivoId)
+                throw Error("Selecciona un PDF");
+              await api.post("/personal/documentos-empresa", {
+                ...form,
+                contenido: formato === "TEXTO" ? form.contenido : undefined,
+                archivoId,
+              });
+              setMensaje(
+                form.tipo === "CONTRATO"
+                  ? "Modelo guardado. En Contratos, selecciónalo en Aplicar modelo de la empresa."
+                  : "Borrador guardado. Revísalo antes de adoptar la política.",
+              );
+              setForm((f) => ({
+                ...f,
+                nombre: "",
+                contenido: "",
+                anteriorId: "",
+              }));
+              setSelectorVersion((n) => n + 1);
+              setArchivoOriginal(null);
+            }),
+          );
         }}
         className="space-y-4"
       >
-        <fieldset disabled={busy} className="grid gap-4 md:grid-cols-2">
+        <fieldset
+          disabled={busy || subiendoArchivo}
+          className="grid gap-4 md:grid-cols-2"
+        >
           <legend className="mb-3 text-xl">
             {form.anteriorId
               ? "Editar documento existente"
@@ -263,7 +262,7 @@ export default function DocumentosEmpresa({
                     responsable: config?.responsable || "",
                     correo: config?.correo || "",
                   });
-                  setArchivo(null);
+                  setSelectorVersion((n) => n + 1);
                   setArchivoOriginal(null);
                   setFormato("TEXTO");
                   setMensaje("");
@@ -383,13 +382,14 @@ export default function DocumentosEmpresa({
               {archivoOriginal
                 ? "PDF actual conservado. Puedes seleccionar otro para reemplazarlo."
                 : "PDF completo, hasta 5 MB"}
-              <input
-                key={form.anteriorId || "nuevo"}
+              <SelectorArchivoPersonal
+                key={`${form.anteriorId || "nuevo"}-${selectorVersion}`}
+                name="politicaPdf"
                 required={!archivoOriginal}
-                type="file"
-                accept="application/pdf"
+                archivoActual={archivoOriginal}
                 className={control}
-                onChange={(e) => setArchivo(e.target.files?.[0] || null)}
+                onOcupado={setSubiendoArchivo}
+                onSubido={(id) => setArchivoOriginal(id || null)}
               />
             </label>
           )}
@@ -445,7 +445,7 @@ export default function DocumentosEmpresa({
                     contenido: r.datos.contenido || "",
                   });
                   setFormato(r.datos.archivoId ? "PDF" : "TEXTO");
-                  setArchivo(null);
+                  setSelectorVersion((n) => n + 1);
                   setArchivoOriginal(r.datos.archivoId || null);
                   editor.current?.scrollIntoView({
                     behavior: "smooth",
