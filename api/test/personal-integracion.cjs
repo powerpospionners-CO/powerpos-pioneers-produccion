@@ -519,10 +519,21 @@ const { AppModule } = require('../dist/src/app.module'),
         })
         .expect(201)
     ).body;
+    const individual = (
+      await auth(http.post('/personal/archivos'))
+        .attach(
+          'archivo',
+          Buffer.from(
+            '%PDF-1.4\nContrato individual ficticio del empleado para pruebas\n%%EOF',
+          ),
+          'individual.pdf',
+        )
+        .expect(201)
+    ).body;
     const datosContrato = {
       empleadoId: empleado.id,
       plantillaId: plantilla.id,
-      archivoId: file.id,
+      archivoId: individual.id,
       tipo: 'FIJO',
       inicio: '2026-01-01',
       fin: '2031-01-02',
@@ -535,6 +546,15 @@ const { AppModule } = require('../dist/src/app.module'),
     await auth(http.post('/personal/contratos'))
       .send(datosContrato)
       .expect(400);
+    const sinCompletar = await auth(http.post('/personal/contratos'))
+      .send({
+        ...datosContrato,
+        tipo: 'INDEFINIDO',
+        fin: undefined,
+        archivoId: file.id,
+      })
+      .expect(400);
+    assert(sinCompletar.body.message.includes('misma plantilla'));
     const contrato = (
       await auth(http.post('/personal/contratos'))
         .send({ ...datosContrato, tipo: 'INDEFINIDO', fin: undefined })

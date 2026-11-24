@@ -885,6 +885,19 @@ function Contenido() {
                             </p>
                           </section>
                         </div>
+                        <p
+                          className="my-4 rounded-lg border border-orange-700 p-4"
+                          role="note"
+                        >
+                          Este formulario conserva el PDF tal como lo cargas.
+                          Seleccionar al empleado no reemplaza campos como{" "}
+                          {"{{trabajador_nombre}}"} dentro del archivo. Para
+                          completar sus datos automáticamente, utiliza el
+                          generador de contratos de arriba. Si cargas un PDF
+                          externo, debe contener ya el nombre, la identificación
+                          y todas las condiciones individuales, sin campos
+                          pendientes.
+                        </p>
                         <Formulario
                           title="Registrar contrato completo revisado"
                           campos={[
@@ -904,7 +917,7 @@ function Contenido() {
                             {
                               name: "archivoId",
                               label:
-                                "Contrato individual completo PDF (hasta 5 MB)",
+                                "PDF ya completado con los datos del empleado (hasta 5 MB)",
                               type: "file",
                             },
                             {
