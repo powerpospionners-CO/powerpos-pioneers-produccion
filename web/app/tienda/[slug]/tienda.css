@@ -62,7 +62,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.figma-store .announcement span {
+.figma-store .announcement > span {
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -1836,8 +1836,7 @@
     font-size: 8px;
     text-align: center;
   }
-  .figma-store .announcement span,
-  .figma-store .announcement span + * {
+  .figma-store .announcement > span {
     display: none;
   }
   .figma-store .site-header {
@@ -2323,3 +2322,34 @@
 .figma-store .store-faq summary { font-weight: 700; cursor: pointer; padding: 8px; overflow-wrap: anywhere; }
 .figma-store .store-faq summary:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; border-radius: 6px; }
 .figma-store .store-faq details p { padding: 0 8px; }
+
+.figma-store .announcement { min-height: 38px; height: auto; padding: 8px 16px; flex-wrap: wrap; }
+.figma-store .hours-compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; letter-spacing: normal; text-transform: none; }
+.figma-store .hours-compact small { font-size: 12px; }
+.figma-store .hours-compact a { display: inline-flex; align-items: center; gap: 4px; text-decoration: underline; text-underline-offset: 3px; }
+.figma-store .hours-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+.figma-store .hours-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.figma-store .announcement .is-open { color: #a7f3c6; }
+.figma-store .hours-card { scroll-margin-top: 150px; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); margin-top: 32px; border: 1px solid var(--line); border-radius: 26px; overflow: hidden; background: white; }
+.figma-store .hours-intro { padding: clamp(24px, 4vw, 48px); background: var(--cream); min-width: 0; }
+.figma-store .hours-icon { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 18px; background: var(--orange); color: var(--brand-on); margin-bottom: 28px; }
+.figma-store .hours-intro h2 { font-size: clamp(28px, 3.2vw, 46px); line-height: 1.15; letter-spacing: -.04em; margin: 20px 0 28px; overflow-wrap: anywhere; }
+.figma-store .hours-intro h2 em { font-style: normal; color: var(--orange-dark); }
+.figma-store .hours-card .hours-status { padding: 9px 14px; border-radius: 999px; background: white; border: 1px solid var(--line); }
+.figma-store .hours-card .is-open { color: #146337; background: #e5f6eb; border-color: #aedcc0; }
+.figma-store .hours-card .is-closed { color: #5c5360; background: #f3eff3; }
+.figma-store .hours-next { font-size: 15px; line-height: 1.6; margin: 12px 0; }
+.figma-store .hours-timezone { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 24px; }
+.figma-store .hours-week { padding: clamp(16px, 3vw, 32px); min-width: 0; }
+.figma-store .hours-week ul { list-style: none; padding: 0; margin: 0; }
+.figma-store .hours-week li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.figma-store .hours-week li.is-today { background: var(--cream); border-radius: 12px; border: 1px solid var(--orange); }
+.figma-store .hours-week li > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.figma-store .hours-today { font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 5px; background: var(--orange); color: var(--brand-on); }
+.figma-store .hours-range { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 8px; font-variant-numeric: tabular-nums; }
+.figma-store .hours-range time { white-space: nowrap; }
+.figma-store .hours-range small { flex-basis: 100%; text-align: right; font-size: 10px; color: var(--muted); }
+.figma-store .hours-day-off { color: var(--muted); }
+.figma-store .hours-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 20px 12px 0; }
+.figma-store .hours-legacy { white-space: pre-line; line-height: 1.8; overflow-wrap: anywhere; }
+@media(max-width:760px) { .figma-store .hours-card { grid-template-columns: minmax(0,1fr); } .figma-store .announcement { gap: 5px 12px; font-size: 10px; } .figma-store .hours-compact small { font-size: 10px; } .figma-store .hours-week li { padding: 14px 8px; font-size: 12px; } }

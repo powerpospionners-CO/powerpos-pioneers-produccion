@@ -10,6 +10,7 @@ import {
   type CSSProperties,
 } from "react";
 import Link from "next/link";
+import HorarioTienda from "../../../components/HorarioTienda";
 import { rutasTienda, type SeccionTienda } from "../../../lib/seccionesTienda";
 import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
@@ -537,7 +538,7 @@ function App({
       <div ref={panelRef} className="figma-store app-shell" style={style}>
         <div className="announcement">
           {tienda.nombre} <span />{" "}
-          {t.horario || "Consulta disponibilidad y entrega con el negocio"}
+          <HorarioTienda horarios={t.horarios} anterior={t.horario} compacto href={`${rutas.contacto}#horarios`} />
         </div>
         <header className="site-header">
           <div className="nav-wrap">
@@ -1039,8 +1040,9 @@ function App({
                   )}
                 </div>
               )}
-              {(t.horario || t.envios || t.pagos || t.ciudadesEntrega?.length) && <div className="store-info-grid">
-                {[["Horario de atención",t.horario],["Entregas y domicilios",t.envios],["Medios y condiciones de pago",t.pagos],["Ciudades de entrega",t.ciudadesEntrega?.join(", ")]].map(([titulo,contenido])=>contenido?.trim()?<article key={titulo}><h2>{titulo}</h2><p>{contenido}</p></article>:null)}
+              <HorarioTienda horarios={t.horarios} anterior={t.horario} />
+              {(t.envios || t.pagos || t.ciudadesEntrega?.length) && <div className="store-info-grid">
+                {[["Entregas y domicilios",t.envios],["Medios y condiciones de pago",t.pagos],["Ciudades de entrega",t.ciudadesEntrega?.join(", ")]].map(([titulo,contenido])=>contenido?.trim()?<article key={titulo}><h2>{titulo}</h2><p>{contenido}</p></article>:null)}
               </div>}
               {!!t.preguntasFrecuentes?.length && <div className="store-faq" aria-labelledby="titulo-preguntas">
                 <h2 id="titulo-preguntas">Preguntas frecuentes</h2>
