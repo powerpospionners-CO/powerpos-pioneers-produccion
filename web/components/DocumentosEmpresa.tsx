@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 
 type Registro = {
@@ -94,6 +94,8 @@ export default function DocumentosEmpresa({
     responsable: config?.responsable || "",
     correo: config?.correo || "",
   });
+  const editor = useRef<HTMLFormElement>(null);
+  const [archivoOriginal, setArchivoOriginal] = useState<string | null>(null);
   const [archivo, setArchivo] = useState<File | null>(null),
     [formato, setFormato] = useState("TEXTO"),
     [busy, setBusy] = useState(false),
@@ -197,12 +199,15 @@ export default function DocumentosEmpresa({
         </p>
       )}
       <form
+        ref={editor}
+        tabIndex={-1}
         onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
-            let archivoId;
-            if (formato === "PDF") {
-              if (!archivo) throw Error("Selecciona un PDF");
+            let archivoId = formato === "PDF" ? archivoOriginal : undefined;
+            if (formato === "PDF" && !archivo && !archivoId)
+              throw Error("Selecciona un PDF");
+            if (formato === "PDF" && archivo) {
               const fd = new FormData();
               fd.append("archivo", archivo);
               archivoId = (
@@ -228,14 +233,43 @@ export default function DocumentosEmpresa({
               anteriorId: "",
             }));
             setArchivo(null);
+            setArchivoOriginal(null);
           });
         }}
         className="space-y-4"
       >
         <fieldset disabled={busy} className="grid gap-4 md:grid-cols-2">
           <legend className="mb-3 text-xl">
-            Crear plantilla o nueva versión
+            {form.anteriorId
+              ? "Editar documento existente"
+              : "Crear plantilla o nueva versión"}
           </legend>
+          {form.anteriorId && (
+            <div className="rounded-lg border border-orange-700 p-3 md:col-span-2">
+              <p>
+                Modifica los datos y el contenido. Al guardar se conservará una
+                nueva versión en borrador; los documentos ya enviados
+                permanecerán intactos.
+              </p>
+              <button
+                type="button"
+                className="mt-2 underline"
+                onClick={() => {
+                  setForm({
+                    ...inicial,
+                    responsable: config?.responsable || "",
+                    correo: config?.correo || "",
+                  });
+                  setArchivo(null);
+                  setArchivoOriginal(null);
+                  setFormato("TEXTO");
+                  setMensaje("");
+                }}
+              >
+                Cancelar edición
+              </button>
+            </div>
+          )}
           <label>
             Tipo
             <select
@@ -244,6 +278,7 @@ export default function DocumentosEmpresa({
               onChange={(e) => {
                 cambiar("tipo", e.target.value);
                 cambiar("anteriorId", "");
+                setArchivoOriginal(null);
                 if (e.target.value === "CONTRATO") setFormato("TEXTO");
               }}
             >
@@ -342,9 +377,12 @@ export default function DocumentosEmpresa({
             </label>
           ) : (
             <label className="md:col-span-2">
-              PDF completo, hasta 5 MB
+              {archivoOriginal
+                ? "PDF actual conservado. Puedes seleccionar otro para reemplazarlo."
+                : "PDF completo, hasta 5 MB"}
               <input
-                required
+                key={form.anteriorId || "nuevo"}
+                required={!archivoOriginal}
                 type="file"
                 accept="application/pdf"
                 className={control}
@@ -352,7 +390,11 @@ export default function DocumentosEmpresa({
               />
             </label>
           )}
-          <button className={boton}>Guardar nueva versión</button>
+          <button className={boton}>
+            {form.anteriorId
+              ? "Guardar cambios como nueva versión"
+              : "Guardar nueva versión"}
+          </button>
         </fieldset>
       </form>
       <section className="space-y-3 border-t border-gray-700 pt-4">
@@ -388,17 +430,31 @@ export default function DocumentosEmpresa({
                     ...inicial,
                     ...r.datos,
                     anteriorId: r.id,
-                    versionEtiqueta: "",
+                    versionEtiqueta: /^\d+(?:\.\d+)*$/.test(
+                      r.datos.versionEtiqueta,
+                    )
+                      ? r.datos.versionEtiqueta.replace(/\d+$/, (n: string) =>
+                          String(Number(n) + 1),
+                        )
+                      : "",
                     contenido: r.datos.contenido || "",
                   });
                   setFormato(r.datos.archivoId ? "PDF" : "TEXTO");
                   setArchivo(null);
+                  setArchivoOriginal(r.datos.archivoId || null);
+                  editor.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                  editor.current?.focus({ preventScroll: true });
                   setMensaje(
-                    "Copia cargada en el formulario superior. Escribe una versión nueva; el original se conserva.",
+                    "Documento cargado para editar. Revisa la versión y guarda tus cambios. Si es una política, adopta la nueva versión y vincúlala en Privacidad para los próximos envíos.",
                   );
                 }}
               >
-                Crear versión desde esta
+                {r.datos.tipo === "POLITICA"
+                  ? "Editar política"
+                  : "Editar documento"}
               </button>
               {r.datos.tipo === "POLITICA" && r.estado === "BORRADOR" && (
                 <button
