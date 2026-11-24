@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
+import DocumentosEmpresa from "@/components/DocumentosEmpresa";
 import EditorContratos from "@/components/EditorContratos";
 import { useAuthStore } from "@/store/authStore";
 
@@ -175,6 +176,7 @@ function Contenido() {
     [error, setError] = useState(""),
     [mensaje, setMensaje] = useState(""),
     [tab, setTab] = useState("empleados"),
+    [avisoPlantilla, setAvisoPlantilla] = useState<Registro | null>(null),
     [editar, setEditar] = useState<Registro | null>(null),
     [accion, setAccion] = useState<Registro | null>(null),
     [historial, setHistorial] = useState<any>(null),
@@ -341,6 +343,7 @@ function Contenido() {
                       ["pagos", "Periodos y pagos"],
                       ["contratos", "Contratos"],
                       ["config", "Privacidad"],
+                      ["plantillas", "Plantillas y políticas"],
                     ].map(([v, l]) => (
                       <button
                         key={v}
@@ -359,39 +362,144 @@ function Contenido() {
                       </button>
                     ))}
                   </nav>
-                  {tab === "config" && (
-                    <Formulario
-                      key={data.config?.version || "config"}
-                      title="Aviso de privacidad del empleador"
-                      campos={[
-                        {
-                          name: "responsable",
-                          label: "Razón social y responsable del tratamiento",
-                          value: data.config?.responsable,
-                        },
-                        {
-                          name: "correo",
-                          label:
-                            "Correo para consultas, correcciones y reclamaciones",
-                          type: "email",
-                          value: data.config?.correo,
-                        },
-                        {
-                          name: "politica",
-                          label:
-                            "Aviso revisado: finalidades laborales, derechos, canal de atención, acceso, conservación y entrega de copias",
-                          type: "textarea",
-                          value: data.config?.politica,
-                        },
-                        {
-                          name: "acepta",
-                          label:
-                            "He revisado el aviso aplicable a mi empresa y brindaré una alternativa en papel, sin impedir la contratación.",
-                          type: "checkbox",
-                        },
-                      ]}
-                      onSubmit={(d) => guardar("/personal/configuracion", d)}
+                  {tab === "plantillas" && (
+                    <DocumentosEmpresa
+                      empleados={empleados}
+                      config={data.config}
+                      onCambio={cargar}
+                      onUsarAviso={(r) => {
+                        setAvisoPlantilla(r);
+                        setTab("config");
+                      }}
                     />
+                  )}
+                  {tab === "config" && (
+                    <section className="space-y-4">
+                      <p>
+                        Vincula el aviso resumido con la política completa.
+                        Puedes crearla o cargarla en{" "}
+                        <button
+                          className="text-orange-300 underline"
+                          onClick={() => setTab("plantillas")}
+                        >
+                          Plantillas y políticas
+                        </button>
+                        . Usa una versión adoptada del sistema o un enlace
+                        externo HTTPS.
+                      </p>
+                      {data.config?.politicaId && (
+                        <button
+                          className="text-orange-300 underline"
+                          onClick={() =>
+                            void ejecutar(async () => {
+                              const r = await api.get(
+                                `/personal/documentos-empresa/${data.config.politicaId}/pdf`,
+                                { responseType: "blob" },
+                              );
+                              const u = URL.createObjectURL(r.data);
+                              const a = document.createElement("a");
+                              a.href = u;
+                              a.download = "politica-completa.pdf";
+                              a.click();
+                              setTimeout(() => URL.revokeObjectURL(u), 30000);
+                            })
+                          }
+                        >
+                          Consultar política completa vinculada
+                        </button>
+                      )}
+                      {(data.politicas || [])
+                        .filter(
+                          (p: Registro) =>
+                            p.id === data.config?.politicaId &&
+                            p.datos.publicada,
+                        )
+                        .map((p: any) => (
+                          <p key={p.id} className="break-all">
+                            Enlace público de la política:{" "}
+                            <a
+                              className="text-orange-300 underline"
+                              href={`${String(api.defaults.baseURL).replace(/\/$/, "")}/personal-politicas/${p.empresaId}/${p.sucursalId}/${p.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >{`${String(api.defaults.baseURL).replace(/\/$/, "")}/personal-politicas/${p.empresaId}/${p.sucursalId}/${p.id}`}</a>
+                          </p>
+                        ))}
+                      {data.config?.enlacePolitica && (
+                        <a
+                          className="block text-orange-300 underline"
+                          href={data.config.enlacePolitica}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Consultar política completa en su enlace externo
+                        </a>
+                      )}
+                      <Formulario
+                        key={`${data.config?.version || "config"}-${avisoPlantilla?.id || ""}`}
+                        title="Aviso de privacidad del empleador"
+                        campos={[
+                          {
+                            name: "responsable",
+                            label: "Razón social y responsable del tratamiento",
+                            value:
+                              avisoPlantilla?.datos.responsable ||
+                              data.config?.responsable,
+                          },
+                          {
+                            name: "correo",
+                            label:
+                              "Correo para consultas, correcciones y reclamaciones",
+                            type: "email",
+                            value:
+                              avisoPlantilla?.datos.correo ||
+                              data.config?.correo,
+                          },
+                          {
+                            name: "politica",
+                            label:
+                              "Aviso revisado: finalidades laborales, derechos, canal de atención, acceso, conservación y entrega de copias",
+                            type: "textarea",
+                            value:
+                              avisoPlantilla?.datos.contenido ||
+                              data.config?.politica,
+                          },
+                          {
+                            name: "politicaId",
+                            label:
+                              "Política completa del sistema (versión adoptada)",
+                            optional: true,
+                            value: data.config?.politicaId,
+                            options: (data.politicas || []).map(
+                              (p: Registro) => ({
+                                value: p.id,
+                                label: `${p.datos.nombre} · ${p.datos.versionEtiqueta}`,
+                              }),
+                            ),
+                          },
+                          {
+                            name: "enlacePolitica",
+                            label:
+                              "O enlace externo HTTPS a la política completa (deja vacío si elegiste una política del sistema)",
+                            type: "url",
+                            optional: true,
+                            value: data.config?.enlacePolitica,
+                          },
+                          {
+                            name: "acepta",
+                            label:
+                              "He revisado el aviso aplicable a mi empresa y brindaré una alternativa en papel, sin impedir la contratación.",
+                            type: "checkbox",
+                          },
+                        ]}
+                        onSubmit={(d) => guardar("/personal/configuracion", d)}
+                      />
+                      <p className="text-sm text-gray-400">
+                        Esta revisión es del administrador. No firma ni autoriza
+                        el tratamiento en nombre del empleado. La política y su
+                        versión se incluyen en las nuevas invitaciones privadas.
+                      </p>
+                    </section>
                   )}
                   {tab === "empleados" && (
                     <div className="grid gap-6 lg:grid-cols-2">

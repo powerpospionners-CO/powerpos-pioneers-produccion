@@ -25,6 +25,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { contextoSede } from '../prisma/sede-context';
 import { PersonalService } from './personal.service';
+import { DocumentosEmpresaService } from './documentos-empresa.service';
 import { ContratoEditorService } from './contrato-editor.service';
 
 function descargar(res: Response, bytes: Buffer, nombre: string, mime: string) {
@@ -44,7 +45,47 @@ export class PersonalController {
   constructor(
     private service: PersonalService,
     private editor: ContratoEditorService,
+    private documentos: DocumentosEmpresaService,
   ) {}
+  @Get('documentos-empresa')
+  @Header('Cache-Control', 'no-store, private')
+  biblioteca(@Request() r: any) {
+    return this.documentos.inicio(r.user);
+  }
+  @Post('documentos-empresa') crearDocumentoEmpresa(
+    @Request() r: any,
+    @Body() d: any,
+  ) {
+    return this.documentos.crear(r.user, d);
+  }
+  @Post('documentos-empresa/:id/adoptar') adoptarPolitica(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Body() d: any,
+  ) {
+    return this.documentos.adoptar(r.user, id, d);
+  }
+  @Post('documentos-empresa/:id/retirar-enlace') retirarEnlacePolitica(
+    @Request() r: any,
+    @Param('id') id: string,
+  ) {
+    return this.documentos.retirarEnlace(r.user, id);
+  }
+  @Post('documentos-empresa/:id/entregas') entregarPolitica(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Body() d: any,
+  ) {
+    return this.documentos.entregar(r.user, id, d);
+  }
+  @Get('documentos-empresa/:id/pdf') async documentoEmpresa(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { bytes } = await this.documentos.documento(r.user, id);
+    descargar(res, bytes, 'documento-empresa.pdf', 'application/pdf');
+  }
   @Get('editor') @Header('Cache-Control', 'no-store, private') editorInicio(
     @Request() r: any,
   ) {
@@ -247,7 +288,24 @@ export class PersonalFirmaGuard implements CanActivate {
 @Controller('personal-firma/:empresa/:sede')
 @UseGuards(PersonalFirmaGuard)
 export class PersonalFirmaController {
-  constructor(private service: PersonalService) {}
+  constructor(
+    private service: PersonalService,
+    private documentos: DocumentosEmpresaService,
+  ) {}
+  @Post('politica') async politicaCompleta(
+    @Request() r: any,
+    @Body() d: any,
+    @Res() res: Response,
+  ) {
+    const i = await this.service.sesion(r.personalActor, d.token, d.sesion);
+    const id = i.datos.politica?.politicaId;
+    if (!id)
+      throw new ForbiddenException(
+        'Esta invitación no tiene una política del sistema vinculada',
+      );
+    const { bytes } = await this.documentos.documento(r.personalActor, id);
+    descargar(res, bytes, 'politica-tratamiento-datos.pdf', 'application/pdf');
+  }
   @Post('codigo') codigo(@Request() r: any, @Body() d: any) {
     return this.service.solicitarCodigo(r.personalActor, d.token);
   }
@@ -295,5 +353,47 @@ export class PersonalFirmaController {
       'documento-laboral.zip',
       'application/zip',
     );
+  }
+}
+
+// Publica exclusivamente versiones de políticas que el administrador decidió hacer públicas.
+@Injectable()
+export class PoliticaPublicaGuard implements CanActivate {
+  constructor(private prisma: PrismaService) {}
+  async canActivate(c: ExecutionContext) {
+    const r = c.switchToHttp().getRequest();
+    const empresaId = Number(r.params.empresa),
+      sucursalId = Number(r.params.sede);
+    if (
+      !Number.isSafeInteger(empresaId) ||
+      empresaId < 1 ||
+      !Number.isSafeInteger(sucursalId) ||
+      sucursalId < 1 ||
+      !/^[a-f0-9-]{36}$/.test(r.params.id)
+    )
+      throw new ForbiddenException('Enlace inválido');
+    await this.prisma.estadoAislamiento();
+    r.sedeContext = this.prisma.aislamientoActivo
+      ? await this.prisma.contexto(empresaId, sucursalId)
+      : 'CONTROL';
+    r.personalActor = { id: 0, empresaId, sucursalId };
+    return true;
+  }
+}
+@Controller('personal-politicas/:empresa/:sede/:id')
+@UseGuards(PoliticaPublicaGuard)
+export class PoliticaPublicaController {
+  constructor(private documentos: DocumentosEmpresaService) {}
+  @Get() async politica(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { bytes } = await this.documentos.documento(
+      r.personalActor,
+      id,
+      true,
+    );
+    descargar(res, bytes, 'politica-tratamiento-datos.pdf', 'application/pdf');
   }
 }
