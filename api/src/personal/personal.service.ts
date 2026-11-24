@@ -15,6 +15,7 @@ import {
   revisionCuenta,
   totalesNomina,
 } from './nomina-bancaria';
+import { claveCargo } from './perfiles-cargo';
 import { enlacePolitica } from './documentos-empresa.service';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import {
@@ -41,6 +42,15 @@ export class PersonalService {
     await this.store.preparar();
     const entregas = await this.store.listar(a, 'ENTREGA');
     const avisosPago = await this.store.listar(a, 'PAGO_AVISO');
+    const empleados = await this.store.listar(a, 'EMPLEADO');
+    const perfiles = await this.store.listar(a, 'CONTRATO_BASE');
+    const cargosPropios = [
+      ...empleados.map((e: any) => e.datos.cargo),
+      ...perfiles.map((p: any) => p.datos.perfilCargo),
+    ].filter(Boolean) as string[];
+    const cargosEmpresa = [
+      ...new Map(cargosPropios.map((c) => [claveCargo(c), c])).values(),
+    ].sort((a, b) => a.localeCompare(b, 'es'));
     const conEntrega = (docs: any[]) =>
       docs.map((doc) => {
         const ultima = entregas.find((e: any) => e.referenciaId === doc.id);
@@ -57,7 +67,8 @@ export class PersonalService {
         };
       });
     return {
-      empleados: (await this.store.listar(a, 'EMPLEADO')).map((e: any) => ({
+      cargosEmpresa,
+      empleados: empleados.map((e: any) => ({
         ...e,
         cuentaRevision: revisionCuenta(e.datos.cuentaNomina),
       })),

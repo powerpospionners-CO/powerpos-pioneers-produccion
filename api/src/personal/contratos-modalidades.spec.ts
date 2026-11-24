@@ -6,6 +6,7 @@ import {
 import { datosContrato } from './contrato-editor.reglas';
 import { hoy } from './personal.reglas';
 const perfil = {
+  perfilCargo: 'Auxiliar',
   razonSocial: 'Empresa legal ficticia',
   domicilioEmpresa: 'Pereira',
   lugarCelebracion: 'Pereira',

@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { datosContrato, secciones } from './contrato-editor.reglas';
+import { claveCargo, validarCargoPlantilla } from './perfiles-cargo';
 import { hoy, texto } from './personal.reglas';
 
 export const TIPOS_CONTRATO = ['INDEFINIDO', 'FIJO', 'OBRA_LABOR'];
@@ -107,6 +108,12 @@ export function condicionesPlantilla(d: any) {
     );
   return {
     tipo: base.tipo,
+    perfilCargo: d.perfilCargo
+      ? texto(d.perfilCargo, 'cargo de la plantilla', 200)
+      : null,
+    perfilCargoClave: d.perfilCargo
+      ? claveCargo(texto(d.perfilCargo, 'cargo de la plantilla', 200))
+      : '',
     nombre: texto(d.nombre || base.nombre, 'nombre de plantilla', 200),
     razonSocial: texto(d.razonSocial, 'razón social legal', 300),
     domicilioEmpresa: valido.domicilioEmpresa,
@@ -150,6 +157,7 @@ export function completarContrato(plantilla: any, empleado: any, d: any) {
         'El término fijo requiere fecha final válida y no puede superar cuatro años; las prórrogas también se revisan al emitir',
       );
   }
+  validarCargoPlantilla(plantilla, empleado, d);
   return {
     ...plantilla,
     empleadoId: d.empleadoId,

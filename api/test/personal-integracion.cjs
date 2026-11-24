@@ -707,6 +707,7 @@ const { AppModule } = require('../dist/src/app.module'),
     finAuto.setUTCMonth(finAuto.getUTCMonth() + 1);
     const perfilAuto = {
       ...contenidoEditor,
+      perfilCargo: 'Auxiliar ficticio',
       clausulas: undefined,
       anexos: undefined,
       aplicarATodas: true,
@@ -859,6 +860,130 @@ const { AppModule } = require('../dist/src/app.module'),
     }
     console.log(
       'PASS contratos por modalidad: datos del expediente, tres PDF, revisión, firma de empleador, envío y reintento SMTP, lectura y firma OTP del empleado',
+    );
+    // Cargos propios: un perfil nuevo no reemplaza al auxiliar; otra empresa puede usar el mismo nombre con otras condiciones.
+    const cargoVentas = 'Ventas externas empresariales';
+    const perfilVentas = {
+      ...perfilAuto,
+      perfilCargo: cargoVentas,
+      funciones:
+        'Visitar empresas y gestionar pedidos con condiciones autorizadas.',
+      jornada: 'Jornada comercial ficticia distinta de caja.',
+      descansos: 'Descansos de la ruta comercial ficticia.',
+      lugarServicio: 'Rutas de visitas empresariales ficticias',
+    };
+    const ventasA = (
+      await auth(http.post('/personal/editor/plantillas-modalidad'))
+        .send(perfilVentas)
+        .expect(201)
+    ).body;
+    const perfilProduccion = {
+      ...perfilAuto,
+      perfilCargo: 'Producción de alimentos',
+      funciones:
+        'Elaborar totopos y tortillas con procedimientos seguros e higiene.',
+      jornada: 'Jornada de producción ficticia.',
+      lugarServicio: 'Área de producción ficticia',
+    };
+    await auth(http.post('/personal/editor/plantillas-modalidad'))
+      .send(perfilProduccion)
+      .expect(201);
+    const modelosConCargos = (
+      await auth(http.get('/personal/editor')).expect(200)
+    ).body.plantillasModalidad;
+    assert.equal(
+      modelosConCargos.filter(
+        (p) => p.datos.perfilCargo === 'Auxiliar ficticio',
+      ).length,
+      3,
+    );
+    assert.equal(
+      modelosConCargos.filter((p) => p.datos.perfilCargo === cargoVentas)
+        .length,
+      3,
+    );
+    assert.equal(
+      modelosConCargos.filter(
+        (p) => p.datos.perfilCargo === 'Producción de alimentos',
+      ).length,
+      3,
+    );
+    await auth(http.post('/personal/editor/preparar'))
+      .send({
+        empleadoId: empleadoAuto.id,
+        plantillaId: ventasA.find((p) => p.datos.tipo === 'INDEFINIDO').id,
+      })
+      .expect(400);
+    const ventasB = (
+      await auth(http.post('/personal/editor/plantillas-modalidad'), b.token)
+        .send({
+          ...perfilVentas,
+          funciones: 'FUNCIONES EXCLUSIVAS DE EMPRESA B',
+          razonSocial: 'Empresa B ficticia',
+        })
+        .expect(201)
+    ).body;
+    const cargosB = (await auth(http.get('/personal'), b.token).expect(200))
+      .body.cargosEmpresa;
+    assert(cargosB.includes(cargoVentas));
+    assert(!cargosB.includes('Producción de alimentos'));
+    const editorB = (
+      await auth(http.get('/personal/editor'), b.token).expect(200)
+    ).body;
+    assert.equal(editorB.plantillasModalidad.length, 3);
+    assert(
+      editorB.plantillasModalidad.every(
+        (p) => p.datos.funciones === 'FUNCIONES EXCLUSIVAS DE EMPRESA B',
+      ),
+    );
+    await auth(http.post('/personal/editor/preparar'))
+      .send({ empleadoId: empleadoAuto.id, plantillaId: ventasB[0].id })
+      .expect(404);
+    const nuevasVentasA = (
+      await auth(http.post('/personal/editor/plantillas-modalidad'))
+        .send({
+          ...perfilVentas,
+          funciones: 'Funciones de ventas actualizadas solo para A.',
+        })
+        .expect(201)
+    ).body;
+    assert(
+      nuevasVentasA.every((p) =>
+        ventasA.some(
+          (v) => v.id === p.datos.anteriorId && v.datos.tipo === p.datos.tipo,
+        ),
+      ),
+    );
+    const propiosA = (await auth(http.get('/personal')).expect(200)).body
+      .cargosEmpresa;
+    assert(propiosA.includes('Producción de alimentos'));
+    assert(
+      !JSON.stringify(
+        (await auth(http.get('/personal/editor')).expect(200)).body,
+      ).includes('FUNCIONES EXCLUSIVAS DE EMPRESA B'),
+    );
+    const legacy = (
+      await auth(http.post('/personal/editor/plantillas-modalidad'))
+        .send({
+          ...perfilAuto,
+          perfilCargo: undefined,
+          aplicarATodas: false,
+          tipo: 'INDEFINIDO',
+        })
+        .expect(201)
+    ).body[0];
+    await auth(http.post('/personal/editor/preparar'))
+      .send({ empleadoId: empleadoAuto.id, plantillaId: legacy.id })
+      .expect(400);
+    await auth(http.post('/personal/editor/preparar'))
+      .send({
+        empleadoId: empleadoAuto.id,
+        plantillaId: legacy.id,
+        confirmarPerfilGeneral: true,
+      })
+      .expect(201);
+    console.log(
+      'PASS perfiles por cargo: cargos propios por empresa, coexistencia de caja/ventas/producción, rechazo de cargo distinto, aislamiento y revisión expresa de plantillas antiguas',
     );
     const cuentaPerfil = {
       ...empleadoAuto.datos,
