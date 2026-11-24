@@ -13,6 +13,7 @@ export type ProductoPublico = {
   presentacion?: string;
 };
 export type TiendaPublica = {
+  bold?: { habilitado: boolean };
   nombre: string;
   logo: string;
   telefono: string;

@@ -24,7 +24,7 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
       const modulo = await Test.createTestingModule({ imports: [AppModule] })
         .overrideProvider(NotificacionesService).useValue({ enviarAlerta: async () => ({ enviado: false }) })
         .overrideProvider(ImpresionService).useValue({ imprimirCierreCaja: async () => ({ impreso: false }) }).compile();
-      const instancia = modulo.createNestApplication();
+      const instancia = modulo.createNestApplication({ rawBody: true });
       await instancia.init();
       return instancia;
     }
@@ -322,6 +322,59 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(await db.movimientoFinanciero.count({where:{pedidoId:entregaRevision.pedidoCajaId}}),movimientosTrasAnular);
     assert.equal(await db.auditoria.count({where:{empresaId:empresa.id,entidad:'PEDIDO_DISTRIBUIDOR',entidadId:pedidoRevision.id,accion:'ANULAR'}}),1);
     console.log('PASS revisión administrativa distribuidor: venta anulada, caja cerrada, cancelación concurrente única, sin nuevo stock, reembolso ni comisión');
+
+    // Checkout web: únicamente confirmación firmada de Bold, sin cobros ni redes externas.
+    process.env.BOLD_ENCRYPTION_KEY = 'ab'.repeat(32);
+    const slugBold = 'bold-' + randomUUID().slice(0, 8);
+    await db.empresa.update({ where: { id: empresa.id }, data: { tiendaSlug: slugBold, tiendaConfig: { publicada: true, pedidosHabilitados: true, sucursalId: sede.id, zonas: [{ nombre: 'Centro', costo: 0 }] } } });
+    const credBold = { habilitado: true, webhookRegistrado: true, merchantId: 'COMERCIO-FICTICIO', identidad: 'identidad-produccion-ficticia', secreto: 'secreto-produccion-ficticio' };
+    await http.patch('/tienda-admin/bold/configuracion').set('Authorization', sesionPaula).send(credBold).expect(403);
+    const guardadoBold = (await http.patch('/tienda-admin/bold/configuracion').set('Authorization', token).send(credBold).expect(200)).body;
+    assert.equal(guardadoBold.habilitado, true); assert.equal(JSON.stringify(guardadoBold).includes(credBold.secreto), false);
+    const catalogoBold = (await http.get(`/tiendas/${slugBold}`).expect(200)).body;
+    assert.equal(catalogoBold.bold.habilitado, true); assert.equal(JSON.stringify(catalogoBold).includes(credBold.secreto), false);
+    const prodBold = await db.producto.create({ data: { empresaId: empresa.id, categoriaId: categoria.id, nombre: 'Checkout ficticio', precio: 12000, costo: 3000, controlaStock: true, stockActual: 3 } });
+    const claveBold = randomUUID();
+    const webBold = (await http.post(`/tiendas/${slugBold}/pedidos`).send({ clave: claveBold, nombre: 'Cliente ficticio', telefono: '3000001234', direccion: 'Dirección de prueba', zona: 'Centro', metodoPago: 'TARJETA', pagoBold: true, totalEsperado: 12000, items: [{ productoId: prodBold.id, cantidad: 1 }] }).expect(201)).body;
+    const rutaWebBold = `/tiendas/${slugBold}/pedidos/${webBold.id}`, gestionWebBold = `/tienda-admin/pedidos/${webBold.id}`;
+    await http.post(rutaWebBold + '/bold').send({ clave: randomUUID() }).expect(404);
+    const checkoutBold = (await http.post(rutaWebBold + '/bold').send({ clave: claveBold }).expect(201)).body;
+    assert.equal(checkoutBold.total, 12000); assert.equal(JSON.stringify(checkoutBold).includes(credBold.secreto), false);
+    const reintentoBold = (await http.post(rutaWebBold + '/bold').send({ clave: claveBold }).expect(201)).body;
+    assert.equal(reintentoBold.referencia, checkoutBold.referencia);
+    await http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' }).expect(409);
+    assert.equal((await http.get(rutaWebBold + '?bold-tx-status=approved').expect(200)).body.pagoBold.estado, 'PENDIENTE');
+    const { createHmac } = require('node:crypto');
+    const eventoBold = { id: randomUUID(), type: 'SALE_APPROVED', data: { merchant_id: credBold.merchantId, payment_id: 'FICTICIO-' + randomUUID(), amount: { total: 12000, currency: 'COP' }, metadata: { reference: checkoutBold.referencia }, payment_method: 'CARD_WEB' } };
+    const textoBold = JSON.stringify(eventoBold), firmaBold = createHmac('sha256', credBold.secreto).update(Buffer.from(textoBold).toString('base64')).digest('hex');
+    const rutaHookBold = `/tiendas/${slugBold}/bold/webhook`;
+    await http.post(rutaHookBold).set('Content-Type', 'application/json').set('x-bold-signature', '0'.repeat(64)).send(textoBold).expect(401);
+    await http.post(rutaHookBold).set('Content-Type', 'application/json').set('x-bold-signature', firmaBold).send(textoBold).expect(200);
+    await http.post(rutaHookBold).set('Content-Type', 'application/json').set('x-bold-signature', firmaBold).send(textoBold).expect(200);
+    assert.equal((await http.get(rutaWebBold).expect(200)).body.pagoBold.estado, 'APROBADO');
+    assert.equal((await db.pedidoWeb.findUnique({ where: { id: webBold.id } })).pedidoId, null);
+    await http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'RECHAZAR', motivo: 'No entregar' }).expect(409);
+    // Si no hay caja o existencias, el pago recibido se conserva para conciliación.
+    await http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' }).expect(400);
+    assert.equal((await http.get(rutaWebBold).expect(200)).body.pagoBold.estado, 'APROBADO');
+    await http.post('/caja/abrir').set('Authorization', token).send({ montoInicial: 0 }).expect(201);
+    await db.producto.update({ where: { id: prodBold.id }, data: { stockActual: 0 } });
+    await http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' }).expect(400);
+    assert.equal((await http.get(rutaWebBold).expect(200)).body.pagoBold.estado, 'APROBADO');
+    await db.producto.update({ where: { id: prodBold.id }, data: { stockActual: 3 } });
+    const aceptacionesBold = await Promise.all([http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' }), http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' })]);
+    assert.deepEqual(aceptacionesBold.map(r => r.status).sort(), [200, 409]);
+    const seguimientoBold = (await http.get(rutaWebBold).expect(200)).body;
+    assert.equal(seguimientoBold.pagoBold.estado, 'APLICADO');
+    assert.equal(Number((await db.producto.findUnique({ where: { id: prodBold.id } })).stockActual), 2);
+    const ventaBold = await db.pedidoWeb.findUnique({ where: { id: webBold.id } });
+    const movimientosBold = await db.movimientoFinanciero.count({ where: { pedidoId: ventaBold.pedidoId } });
+    const voidBold = JSON.stringify({ ...eventoBold, id: randomUUID(), type: 'VOID_APPROVED' });
+    await http.post(rutaHookBold).set('Content-Type', 'application/json').set('x-bold-signature', createHmac('sha256', credBold.secreto).update(Buffer.from(voidBold).toString('base64')).digest('hex')).send(voidBold).expect(200);
+    assert.equal((await http.get(rutaWebBold).expect(200)).body.pagoBold.estado, 'REVISION');
+    assert.equal(await db.movimientoFinanciero.count({ where: { pedidoId: ventaBold.pedidoId } }), movimientosBold);
+    assert.equal(Number((await db.producto.findUnique({ where: { id: prodBold.id } })).stockActual), 2);
+    console.log('PASS Bold web: credenciales cifradas, total del servidor, propietario del checkout, firma falsa rechazada, retorno no confiable, evento idempotente, pago conservado ante caja/stock, aceptación concurrente única y anulación sin doble reversión');
 
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));

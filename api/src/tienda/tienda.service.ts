@@ -10,6 +10,8 @@ import { PedidosService } from '../pedidos/pedidos.service';
 import { monto, puntosConfig, SLUGS_RESERVADOS, texto, tiendaConfig } from './reglas';
 import { paletaLogoLocal } from '../empresa/paleta-logo-local';
 import { agregarOrigen, leerOrigenes } from '../productos/origenes.service';
+import { BoldService } from './bold.service';
+import { montoBold } from './bold.reglas';
 
 @Injectable()
 export class TiendaService {
@@ -54,6 +56,7 @@ export class TiendaService {
   constructor(
     private prisma: PrismaService,
     private pedidos: PedidosService,
+    private bold: BoldService,
   ) {}
 
   async configuracion(empresaId: number) {
@@ -257,6 +260,7 @@ export class TiendaService {
       direccion: e.direccion,
       telefono: e.telefono,
       config,
+      bold: { habilitado: await this.bold.disponible({ empresaId: e.id, sucursalId: config.sucursalId }) },
       productos: productos.map(p => agregarOrigen(p, leerOrigenes(e.tiendaConfig))),
     };
   }
@@ -312,11 +316,13 @@ export class TiendaService {
     )
       throw new BadRequestException('Carrito inválido');
     if (
-      !['EFECTIVO', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA'].includes(
+      !['EFECTIVO', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'TARJETA'].includes(
         body.metodoPago,
       )
     )
       throw new BadRequestException('Medio de pago inválido');
+    if (body.metodoPago === 'TARJETA' && (body.pagoBold !== true || !(await this.bold.disponible({ empresaId: e.id, sucursalId: t.sucursalId }))))
+      throw new BadRequestException('Los pagos Bold no están habilitados para esta tienda');
     const productos = await this.prisma.producto.findMany({
       where: {
         empresaId: e.id,
@@ -346,6 +352,7 @@ export class TiendaService {
       throw new BadRequestException(`La compra mínima es $${t.minimo}`);
     const total = subtotal + zona.costo;
     monto(total, 'Total del pedido', 0, 99999999.99);
+    if (body.metodoPago === 'TARJETA') montoBold(total);
     if (
       Math.abs(Number(body.totalEsperado) - total) > 0.009 ||
       !Number.isFinite(body.totalEsperado)
@@ -408,10 +415,23 @@ export class TiendaService {
       },
     });
     if (!p) throw new NotFoundException('Pedido no encontrado');
-    return p;
+    const registro = await this.prisma.pedidoWeb.findFirst({ where: { id, empresaId: e.id } });
+    return { ...p, pagoBold: await this.bold.estado(registro) };
   }
-  listar(user: any) {
-    return this.prisma.pedidoWeb.findMany({
+  async pagoBold(slug: string, id: string, clave: unknown) {
+    const e = await this.empresaPublica(slug);
+    const p = await this.prisma.pedidoWeb.findFirst({ where: { id, empresaId: e.id } });
+    if (!p) throw new NotFoundException('Pedido no encontrado');
+    return this.bold.intento(p, clave, slug);
+  }
+  async webhookBold(slug: string, raw: Buffer, firma: unknown) {
+    // Mantener recepción de cobros previos aunque la tienda deje de estar publicada.
+    const e = await this.prisma.empresa.findUnique({ where: { tiendaSlug: slug } });
+    if (!e) throw new NotFoundException('Tienda no encontrada');
+    return this.bold.webhook({ empresaId: e.id, sucursalId: tiendaConfig(e.tiendaConfig).sucursalId }, raw, firma);
+  }
+  async listar(user: any) {
+    const pedidos = await this.prisma.pedidoWeb.findMany({
       where: {
         empresaId: user.empresaId,
         ...(user.rol === 'DOMICILIARIO'
@@ -424,6 +444,7 @@ export class TiendaService {
       orderBy: { creadoEn: 'desc' },
       take: 100,
     });
+    return Promise.all(pedidos.map(async p => ({ ...p, pagoBold: await this.bold.estado(p) })));
   }
   repartidores(user: any) {
     return this.prisma.usuario.findMany({
@@ -450,6 +471,7 @@ export class TiendaService {
         if (body.accion === 'ACEPTAR') {
           if (p.estado !== 'RECIBIDO')
             throw new ConflictException('El pedido ya fue revisado');
+          const pago = p.metodoPago === 'TARJETA' ? await this.bold.verificarParaVenta(p, tx) : null;
           const items = p.items as any[];
           const prods = await tx.producto.findMany({
             where: {
@@ -476,7 +498,7 @@ export class TiendaService {
           const venta = await this.pedidos.crearEnTransaccion(
             {
               items,
-              metodoPago: p.metodoPago,
+              metodoPago: pago?.metodo || p.metodoPago,
               sucursalId: p.sucursalId,
               clienteId: body.clienteId || null,
               observacion: `DOMICILIO: ${p.nombre} · ${p.telefono} · ${p.direccion}. ${p.observacion || ''}`,
@@ -490,12 +512,14 @@ export class TiendaService {
             throw new ConflictException(
               'Cambió el precio durante la revisión. No se registró la venta.',
             );
+          if (pago) await this.bold.aplicar(pago.registro, venta.id, tx);
           return tx.pedidoWeb.update({
             where: { id },
             data: { estado: 'ACEPTADO', pedidoId: venta.id },
           });
         }
         if (body.accion === 'RECHAZAR') {
+          await this.bold.validarRechazo(p, tx);
           if (p.estado !== 'RECIBIDO')
             throw new ConflictException(
               'Solo se rechazan solicitudes sin aceptar',

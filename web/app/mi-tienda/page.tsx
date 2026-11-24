@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import { useAuthStore } from "@/store/authStore";
 import ProductosTienda from "./ProductosTienda";
 import OrigenesProductos from "@/components/OrigenesProductos";
+import BoldConfiguracion from "./BoldConfiguracion";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
@@ -379,7 +380,7 @@ export default function MiTienda() {
               </form>
             )
           )}
-          {usuario?.rol === "ADMIN_EMPRESA" && <div className="mt-8"><OrigenesProductos /><ProductosTienda /></div>}
+          {usuario?.rol === "ADMIN_EMPRESA" && <div className="mt-8 space-y-6">{config && <BoldConfiguracion sucursalTienda={config.tienda.sucursalId} />}<OrigenesProductos /><ProductosTienda /></div>}
         </main>
       </div>
     </AuthGuard>

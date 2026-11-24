@@ -180,8 +180,7 @@ export default function Domicilios() {
                         Total: {money(p.total)} · {p.metodoPago}
                       </p>
                       <p className="text-sm text-gray-400">
-                        Medio de pago declarado por el cliente; verificar el
-                        cobro.
+                        {p.pagoBold ? `Bold: ${p.pagoBold.estado === "APROBADO" ? "Pago confirmado · listo para aceptar" : p.pagoBold.estado === "REVISION" ? "Requiere revisión en Bold" : p.pagoBold.estado}. ${p.pagoBold.referencia || ""}` : "Medio de pago declarado por el cliente; verificar el cobro."}
                       </p>
                       {p.pedido && (
                         <p className="mt-3 break-all text-sm">
@@ -228,6 +227,7 @@ export default function Domicilios() {
                                 </select>
                               </label>
                               <button
+                                disabled={!!p.pagoBold && p.pagoBold.estado !== "APROBADO"}
                                 className="rounded-lg bg-teal-700 px-4 py-3"
                                 onClick={() => actuar(p.id, "ACEPTAR")}
                               >

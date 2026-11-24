@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { BoldCheckout } from "./BoldCheckout";
 import {
   solicitarTienda,
   type TiendaPublica,
 } from "../../../lib/tiendaPublica";
-type Estado = { id: string; estado: string; total: number; motivo?: string };
+type Estado = { id: string; estado: string; total: number; motivo?: string; pagoBold?: { estado: string; referencia?: string } | null };
 const dinero = (n: number) =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -31,6 +32,7 @@ export function PedidoTienda({
     metodoPago: "EFECTIVO",
   });
   const [estado, setEstado] = useState<Estado | null>(null),
+    [clavePago, setClavePago] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const lock = useRef(false),
@@ -42,6 +44,7 @@ export function PedidoTienda({
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("pedido");
     if (!id) return;
+    try { setClavePago(sessionStorage.getItem(`bold:${slug}:${id}`) || ""); } catch { /* Seguimiento disponible sin almacenamiento. */ }
     const controller = new AbortController();
     solicitarTienda<Estado>(`${path}/${encodeURIComponent(id)}`, {
       signal: controller.signal,
@@ -52,7 +55,7 @@ export function PedidoTienda({
           setError("No fue posible recuperar el seguimiento del pedido.");
       });
     return () => controller.abort();
-  }, [path]);
+  }, [path, slug]);
   useEffect(() => {
     if (!estado?.id) return;
     const controller = new AbortController();
@@ -76,6 +79,7 @@ export function PedidoTienda({
     setError("");
     const body = JSON.stringify({
       ...form,
+      pagoBold: form.metodoPago === "TARJETA",
       totalEsperado: total,
       items: items.map((i) => ({ productoId: i.id, cantidad: i.quantity })),
     });
@@ -87,6 +91,11 @@ export function PedidoTienda({
         body: JSON.stringify({ ...JSON.parse(body), clave: clave.current.id }),
       });
       setEstado(result);
+      if (form.metodoPago === "TARJETA") {
+        setClavePago(clave.current.id);
+        try { sessionStorage.setItem(`bold:${slug}:${result.id}`, clave.current.id); } catch { /* Mantener la clave en memoria. */ }
+        setEstado({ ...result, pagoBold: { estado: "PENDIENTE" } });
+      }
       onRecibido();
       const url = new URL(window.location.href);
       url.searchParams.set("pedido", result.id);
@@ -110,6 +119,9 @@ export function PedidoTienda({
           <p>Referencia: {estado.id.slice(0, 8)}</p>
           <p>Estado: {estado.estado.replaceAll("_", " ")}</p>
           <p>{dinero(Number(estado.total))}</p>
+          {estado.pagoBold && <p>Pago Bold: {({ PENDIENTE: "Pendiente de confirmación", APROBADO: "Pago recibido · pendiente de aceptación de la tienda", APLICADO: "Pago recibido y pedido aceptado", RECHAZADO: "El último intento fue rechazado", ANULADO: "Pago anulado", REVISION: "En revisión con la tienda" } as Record<string, string>)[estado.pagoBold.estado] || estado.pagoBold.estado}</p>}
+          {estado.estado === "RECIBIDO" && estado.pagoBold && ["PENDIENTE", "RECHAZADO"].includes(estado.pagoBold.estado) && clavePago && <BoldCheckout slug={slug} pedidoId={estado.id} clave={clavePago} />}
+          {estado.pagoBold && !clavePago && estado.pagoBold.estado === "PENDIENTE" && <p>Para continuar el pago, utiliza el mismo navegador donde enviaste el pedido. Si ya pagaste, espera la confirmación o contacta a la tienda.</p>}
           {estado.motivo && <p>{estado.motivo}</p>}
           <p>
             La empresa revisa y confirma tu pedido. Esta solicitud no es un
@@ -168,6 +180,7 @@ export function PedidoTienda({
             {["EFECTIVO", "TRANSFERENCIA", "NEQUI", "DAVIPLATA"].map((p) => (
               <option key={p}>{p}</option>
             ))}
+            {tienda.bold?.habilitado && <option value="TARJETA">Pagar en línea con Bold</option>}
           </select>
         </label>
         <label>
@@ -190,7 +203,7 @@ export function PedidoTienda({
           <input type="checkbox" required /> Autorizo a {tienda.nombre} a usar
           estos datos para atender y entregar este pedido.
         </label>
-        <p>La empresa confirma la solicitud. Enviarla no registra un pago.</p>
+        <p>{form.metodoPago === "TARJETA" ? "Al enviar el pedido podrás pagar con Bold. El pago se confirmará automáticamente y la tienda revisará tu pedido." : "La empresa confirma la solicitud. Enviarla no registra un pago."}</p>
         {error && (
           <p role="alert" className="error">
             {error}
