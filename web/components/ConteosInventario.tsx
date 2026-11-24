@@ -1,4 +1,5 @@
 "use client";
+import { useNotificar } from "@/components/Notificaciones";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import api from "@/lib/api";
@@ -37,6 +38,8 @@ export default function ConteosInventario({
 }: {
   administrador: boolean;
 }) {
+  const { solicitar } = useNotificar();
+
   const [productos, setProductos] = useState<Producto[]>([]);
   const [conteos, setConteos] = useState<Conteo[]>([]);
   const [lineas, setLineas] = useState<Linea[]>([]);
@@ -269,6 +272,7 @@ export default function ConteosInventario({
             <div className="flex gap-3">
               {[true, false].map((aprobar) => (
                 <button
+                  type="button"
                   key={String(aprobar)}
                   disabled={ocupado}
                   className={
@@ -276,8 +280,8 @@ export default function ConteosInventario({
                       ? boton
                       : "rounded-lg border border-red-800 px-4 py-2 text-red-300"
                   }
-                  onClick={() => {
-                    const motivo = window.prompt(
+                  onClick={async () => {
+                    const motivo = await solicitar(
                       aprobar
                         ? "Motivo de aprobación: se ajustarán las existencias y quedará historial."
                         : "Motivo de rechazo",

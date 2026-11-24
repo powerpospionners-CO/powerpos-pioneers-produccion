@@ -43,7 +43,7 @@ const ETIQUETAS_METODO: Record<string, string> = {
 };
 
 export default function CajaHistorialPage() {
-  const { aviso } = useNotificar();
+  const { aviso, confirmar } = useNotificar();
   const esAdmin = useAuthStore(s => s.usuario?.rol === 'ADMIN_EMPRESA');
   const [verArchivadas, setVerArchivadas] = useState(false);
   const [cambiandoArchivo, setCambiandoArchivo] = useState<number | null>(null);
@@ -71,7 +71,7 @@ export default function CajaHistorialPage() {
   };
 
   const cambiarArchivo = async (c: CajaCerrada) => {
-    if (!window.confirm(`${verArchivadas ? 'Restaurar' : 'Quitar del historial'} el cierre de ${c.usuario?.nombre || 'caja'} del ${c.cerradaEn ? new Date(c.cerradaEn).toLocaleString('es-CO') : ''}? Las ventas y movimientos se conservan. Puedes restaurarlo desde Archivados.`)) return;
+    if (!(await confirmar(`${verArchivadas ? 'Restaurar' : 'Quitar del historial'} el cierre de ${c.usuario?.nombre || 'caja'} del ${c.cerradaEn ? new Date(c.cerradaEn).toLocaleString('es-CO') : ''}? Las ventas y movimientos se conservan. Puedes restaurarlo desde Archivados.`))) return;
     setCambiandoArchivo(c.id);
     try {
       await api.patch(`/caja/${c.id}/archivo-historial`, { archivada: !verArchivadas });

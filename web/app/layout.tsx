@@ -3,6 +3,7 @@ import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import RegistroServiceWorker from "@/components/RegistroServiceWorker";
 import { NotificacionesProvider } from "@/components/Notificaciones";
+import ProcesandoArchivos from "@/components/ProcesandoArchivos";
 import TecladoTactilEmpresa from "@/components/TecladoTactilEmpresa";
 
 export const metadata: Metadata = {
@@ -30,13 +31,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className="h-full antialiased"
-    >
+    <html lang="es" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <RegistroServiceWorker />
-        <ThemeProvider><NotificacionesProvider>{children}</NotificacionesProvider></ThemeProvider>
+        <ThemeProvider>
+          <NotificacionesProvider>
+            {children}
+            <ProcesandoArchivos />
+          </NotificacionesProvider>
+        </ThemeProvider>
         <TecladoTactilEmpresa />
       </body>
     </html>
