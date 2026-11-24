@@ -318,6 +318,11 @@ const { AppModule } = require('../dist/src/app.module'),
     assert.deepEqual(excesos.map((r) => r.status).sort(), [201, 400]);
     await auth(http.get(`/personal/${pago.id}/documento`), b.token).expect(404);
     await auth(http.post(`/personal/${pago.id}/invitar`)).expect(201);
+    assert(sent.at(-1).text.includes('versión 1.0'));
+    const politicaAdjunta = sent
+      .at(-1)
+      .attachments.find((a) => a.filename === 'politica-tratamiento-datos.pdf');
+    assert.equal(politicaAdjunta.content.subarray(0, 5).toString(), '%PDF-');
     const invitation = sent
       .at(-1)
       .text.match(/#empresa=(\d+)&sede=(\d+)&token=([a-f0-9]{64})/);
