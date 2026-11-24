@@ -257,9 +257,10 @@ function App({
         pos: "center",
         tone: ["orange", "red", "green", "purple", "ochre"][i % 5],
         image:
-          products.find((p) => p.category === name && p.image)?.image || "",
+          t.imagenesCategorias?.find(c => c.categoriaId === tienda.productos.find(p => p.categoria.nombre === name)?.categoriaId)?.imagen ||
+          products.find((p) => p.category === name && p.image && p.image !== tienda.logo && p.image !== t.portada)?.image || "",
       })),
-    [products],
+    [products, t.imagenesCategorias, t.portada, tienda.logo, tienda.productos],
   );
   const origins = [...new Set(products.map((p) => p.country).filter(Boolean))];
   const telefono = (t.whatsapp || tienda.telefono || "").replace(/\D/g, "");
@@ -731,7 +732,7 @@ function App({
                           backgroundPosition: item.pos,
                           backgroundImage: item.image
                             ? `url(${JSON.stringify(item.image)})`
-                            : "var(--hero-image)",
+                            : "none",
                         }}
                       />
                       <span className="category-index">0{index + 1}</span>
@@ -941,6 +942,16 @@ function App({
                   negocio para confirmar disponibilidad, presentación y opciones
                   de entrega.
                 </p>
+                {(t.mision?.trim() || t.vision?.trim()) && (
+                  <div className="about-purpose">
+                    {[["Nuestra misión", t.mision], ["Nuestra visión", t.vision]].map(([titulo, contenido]) => contenido?.trim() ? (
+                      <article key={titulo}>
+                        <h2>{titulo}</h2>
+                        <p>{contenido}</p>
+                      </article>
+                    ) : null)}
+                  </div>
+                )}
                 <Link
                   prefetch={false}
                   href={rutas.contacto}

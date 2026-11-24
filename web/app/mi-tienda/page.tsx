@@ -21,6 +21,7 @@ export default function MiTienda() {
   const { usuario } = useAuthStore();
   const [config, setConfig] = useState<any>(null),
     [sucursales, setSucursales] = useState<any[]>([]),
+    [categorias, setCategorias] = useState<{id: number; nombre: string}[]>([]),
     [mensaje, setMensaje] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -33,10 +34,12 @@ export default function MiTienda() {
     Promise.all([
       api.get("/tienda-admin/configuracion"),
       api.get("/sucursales"),
+      api.get("/categorias"),
     ])
-      .then(([c, s]) => {
+      .then(([c, s, cats]) => {
         setConfig(c.data);
         setSucursales(s.data);
+        setCategorias(cats.data);
       })
       .catch((e) =>
         setError(
@@ -102,6 +105,19 @@ export default function MiTienda() {
       setBusy(false);
       e.target.value = "";
     }
+  }
+  async function subirCategoria(e: React.ChangeEvent<HTMLInputElement>, categoriaId: number) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true); setError(""); setMensaje("Subiendo imagen de categoría…");
+    try {
+      const form = new FormData(); form.append("imagen", file);
+      const { data } = await api.post("/empresa/anuncios/imagen", form, { headers: { "Content-Type": "multipart/form-data" } });
+      setConfig((c: any) => ({ ...c, tienda: { ...c.tienda, imagenesCategorias: [...(c.tienda.imagenesCategorias || []).filter((i: {categoriaId: number}) => i.categoriaId !== categoriaId), {categoriaId, imagen: data.imagen}] } }));
+      setMensaje("Imagen cargada. Guarda los cambios para publicarla.");
+    } catch (error: any) {
+      setMensaje(""); setError(error.response?.data?.message || "No se pudo subir la imagen de categoría");
+    } finally { setBusy(false); e.target.value = ""; }
   }
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -275,6 +291,7 @@ export default function MiTienda() {
                       </a>
                       .
                     </p>
+                    <p className="text-gray-400">Personaliza las tarjetas de Productos en «Imágenes de las categorías». Sus imágenes son independientes de las fotos de los productos.</p>
                     {[
                       ["titulo", "Título principal"],
                       ["antetitulo", "Frase sobre el título principal"],
@@ -285,6 +302,8 @@ export default function MiTienda() {
                         "sobreNosotros",
                         "Sobre nosotros (historia, qué los hace diferentes, etc.)",
                       ],
+                      ["mision", "Nuestra misión (Nosotros)"],
+                      ["vision", "Nuestra visión (Nosotros)"],
                       [
                         "pagos",
                         "Medios y condiciones de pago (respuestas del asistente)",
@@ -300,7 +319,7 @@ export default function MiTienda() {
                     ].map(([k, label]) => (
                       <label key={k} className="block">
                         {label}
-                        {k === "descripcion" || k === "sobreNosotros" ? (
+                        {["descripcion", "sobreNosotros", "mision", "vision"].includes(k) ? (
                           <textarea
                             maxLength={2000}
                             className={input}
@@ -357,6 +376,22 @@ export default function MiTienda() {
                         />
                       </label>
                     ))}
+                  </section>
+                  <section className={card}>
+                    <h2 className="text-xl font-bold">Imágenes de las categorías</h2>
+                    <p className="text-gray-400">Selecciona una imagen para cada tarjeta de la página Productos. Guarda los cambios para publicarlas. Si no seleccionas una, se usará una foto de producto de esa categoría, excluyendo el logo y la portada.</p>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      {categorias.map(categoria => {
+                        const imagen = config.tienda.imagenesCategorias?.find((c: {categoriaId: number}) => c.categoriaId === categoria.id)?.imagen;
+                        return <div key={categoria.id} className="rounded-lg border border-gray-700 p-4 space-y-3">
+                          <label className="block font-semibold">{categoria.nombre}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} className={`${input} mt-2`} onChange={e => subirCategoria(e, categoria.id)} />
+                          </label>
+                          {imagen && <><Image src={imagen} alt={`Imagen de ${categoria.nombre}`} width={320} height={200} unoptimized className="h-40 w-full rounded-lg object-contain" /><button type="button" disabled={busy} className="rounded-lg border border-gray-600 px-4 py-2" onClick={() => cambiar("imagenesCategorias", config.tienda.imagenesCategorias.filter((c: {categoriaId: number}) => c.categoriaId !== categoria.id))}>Usar imagen automática</button></>}
+                        </div>;
+                      })}
+                    </div>
+                    {!categorias.length && <p>Crea tus categorías en Productos para personalizar sus imágenes.</p>}
                   </section>
                   <section className={card}>
                     <h2 className="text-xl font-bold">Productos y precios</h2>

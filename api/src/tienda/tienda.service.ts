@@ -94,6 +94,8 @@ export class TiendaService {
       'portadaTexto',
       'descripcion',
       'sobreNosotros',
+      'mision',
+      'vision',
       'horario',
       'pagos',
       'envios',
@@ -107,8 +109,21 @@ export class TiendaService {
       t[campo] = texto(
         t[campo],
         campo,
-        campo === 'descripcion' || campo === 'sobreNosotros' ? 2000 : 500,
+        ['descripcion', 'sobreNosotros', 'mision', 'vision'].includes(campo) ? 2000 : 500,
       );
+    if (!Array.isArray(t.imagenesCategorias) || t.imagenesCategorias.length > 300)
+      throw new BadRequestException('Imágenes de categorías inválidas');
+    t.imagenesCategorias = t.imagenesCategorias.map(c => {
+      if (!c || !Number.isSafeInteger(c.categoriaId) || c.categoriaId < 1)
+        throw new BadRequestException('Categoría inválida');
+      const imagen = texto(c.imagen, 'Imagen de categoría', 500, true);
+      if (!/^https:\/\//i.test(imagen)) throw new BadRequestException('La imagen de categoría debe usar HTTPS');
+      return { categoriaId: c.categoriaId, imagen };
+    });
+    if (new Set(t.imagenesCategorias.map(c => c.categoriaId)).size !== t.imagenesCategorias.length)
+      throw new BadRequestException('No repita imágenes de una categoría');
+    if (t.imagenesCategorias.length && await this.prisma.categoria.count({ where: { empresaId, id: { in: t.imagenesCategorias.map(c => c.categoriaId) } } }) !== t.imagenesCategorias.length)
+      throw new BadRequestException('Las categorías deben pertenecer a su empresa');
     if (!/^#[0-9a-f]{6}$/i.test(t.color))
       throw new BadRequestException('Color inválido');
     if (t.portada && !/^https:\/\//i.test(t.portada))
@@ -190,6 +205,9 @@ export class TiendaService {
       portadaTexto: t.portadaTexto,
       descripcion: t.descripcion,
       sobreNosotros: t.sobreNosotros,
+      mision: t.mision,
+      vision: t.vision,
+      imagenesCategorias: t.imagenesCategorias,
       color: t.color,
       coloresAutomaticos: t.coloresAutomaticos,
       paletaLogo: t.paletaLogo,
