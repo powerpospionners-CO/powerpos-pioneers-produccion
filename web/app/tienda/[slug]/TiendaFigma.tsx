@@ -1115,7 +1115,12 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                   </p>
                   <button
                     className="button primary full"
-                    onClick={() => setCheckout(true)}
+                    onClick={() => {
+                      const url = new URL(window.location.href);
+                      for (const key of ['pedido', 'bold-order-id', 'bold-tx-status']) url.searchParams.delete(key);
+                      window.history.replaceState(null, '', url);
+                      setCheckout(true);
+                    }}
                   >
                     Finalizar pedido <Icon name="arrow" />
                   </button>
@@ -1133,13 +1138,13 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
               <button className="back-link" onClick={() => setCheckout(false)}>
                 ← Volver al carrito
               </button>
-              <div className="order-mini-summary">
+              {!t.pedidosHabilitados && <div className="order-mini-summary">
                 <div>
                   <span>{totalCount} productos</span>
                   <strong>{money(subtotal)}</strong>
                 </div>
                 <small>Envío: Por confirmar</small>
-              </div>
+              </div>}
               {t.pedidosHabilitados ? (
                 <PedidoTienda
                   tienda={tienda}
@@ -1278,6 +1283,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
               onClick={() => {
                 setCartOpen(true);
                 setToast("");
+                setCheckout(false);
               }}
             >
               Ver carrito

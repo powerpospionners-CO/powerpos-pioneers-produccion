@@ -283,6 +283,7 @@ export class TiendaService {
         id: existente.id,
         estado: existente.estado,
         total: existente.total,
+        subtotal: existente.subtotal, costoDomicilio: existente.costoDomicilio, items: existente.items,
       };
     const nombre = texto(body.nombre, 'Nombre', 100, true),
       telefono = texto(body.telefono, 'Teléfono', 20, true),
@@ -391,13 +392,13 @@ export class TiendaService {
           metodoPago: body.metodoPago,
         },
       });
-      return { id: pedido.id, estado: pedido.estado, total: pedido.total };
+      return { id: pedido.id, estado: pedido.estado, total: pedido.total, subtotal: pedido.subtotal, costoDomicilio: pedido.costoDomicilio, items: pedido.items };
     } catch (err) {
       if (err.code === 'P2002') {
         const p = await this.prisma.pedidoWeb.findUniqueOrThrow({
           where: { empresaId_clave: { empresaId: e.id, clave } },
         });
-        return { id: p.id, estado: p.estado, total: p.total };
+        return { id: p.id, estado: p.estado, total: p.total, subtotal: p.subtotal, costoDomicilio: p.costoDomicilio, items: p.items };
       }
       throw err;
     }
@@ -410,6 +411,7 @@ export class TiendaService {
         id: true,
         estado: true,
         total: true,
+        subtotal: true, costoDomicilio: true, items: true,
         motivo: true,
         pedido: { select: { numero: true, estado: true } },
       },
@@ -519,11 +521,11 @@ export class TiendaService {
           });
         }
         if (body.accion === 'RECHAZAR') {
-          await this.bold.validarRechazo(p, tx);
           if (p.estado !== 'RECIBIDO')
             throw new ConflictException(
               'Solo se rechazan solicitudes sin aceptar',
             );
+          await this.bold.validarRechazo(p, tx);
           return tx.pedidoWeb.update({
             where: { id },
             data: {

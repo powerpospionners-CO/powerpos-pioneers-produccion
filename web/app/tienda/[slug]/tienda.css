@@ -1370,6 +1370,39 @@
   line-height: 1.5;
 }
 
+.figma-store .web-order-confirmation {
+  margin-top: 20px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: white;
+  color: var(--black);
+  display: grid;
+  gap: 18px;
+}
+.figma-store .web-order-heading span { color: var(--muted); font-size: 12px; }
+.figma-store .web-order-heading h3 { margin: 6px 0 0; font-size: 24px; font-weight: 800; line-height: 1.2; }
+.figma-store .web-order-confirmation p { margin: 0; font-size: 14px; line-height: 1.6; }
+.figma-store .web-order-status { padding: 10px 12px; border-radius: 8px; background: var(--cream); font-weight: 600; }
+.figma-store .web-order-items { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.figma-store .web-order-items li { display: flex; justify-content: space-between; align-items: start; gap: 16px; font-size: 14px; }
+.figma-store .web-order-items strong { white-space: nowrap; }
+.figma-store .web-order-totals { margin: 0; border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 10px; }
+.figma-store .web-order-totals > div { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+.figma-store .web-order-totals dd { margin: 0; white-space: nowrap; }
+.figma-store .web-order-totals .web-order-grand-total { font-size: 20px; font-weight: 800; }
+.figma-store .web-order-payment { font-weight: 600; }
+.figma-store .web-order-confirmation section { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--line); }
+.figma-store .web-order-confirmation .web-order-help { color: var(--muted); font-size: 12px; }
+.figma-store .bold-checkout h4 { margin: 0; font-size: 18px; font-weight: 700; }
+.figma-store .bold-button-slot { display: flex; justify-content: center; align-items: center; padding: 12px 0; min-height: 76px; }
+.figma-store .bold-button-slot > * { max-width: 100%; }
+@media (max-width: 480px) {
+  .figma-store .web-order-confirmation { padding: 18px 14px; }
+  .figma-store .web-order-heading h3 { font-size: 21px; }
+  .figma-store .web-order-totals .web-order-grand-total { font-size: 18px; }
+}
+
 .figma-store .toast {
   position: fixed;
   z-index: 90;

@@ -153,7 +153,7 @@ export default function Domicilios() {
                       </div>
                       <p className="text-sm text-gray-400">
                         {new Date(p.creadoEn).toLocaleString("es-CO")} ·{" "}
-                        {p.id.slice(0, 8)}
+                        <span title={p.id}>{p.id.slice(0, 8)}</span>
                       </p>
                       <p className="mt-4">
                         {p.telefono} · {p.zona}
@@ -234,7 +234,7 @@ export default function Domicilios() {
                                 Aceptar y registrar venta
                               </button>
                               <label className="block">
-                                Motivo de rechazo
+                                Motivo de cancelación
                                 <input
                                   className="mt-1 w-full rounded bg-gray-800 p-3"
                                   maxLength={300}
@@ -252,8 +252,9 @@ export default function Domicilios() {
                                 className="rounded border border-red-500 px-4 py-2 disabled:opacity-40"
                                 onClick={() => actuar(p.id, "RECHAZAR")}
                               >
-                                Rechazar solicitud
+                                Cancelar pedido
                               </button>
+                              {p.pagoBold && ["PENDIENTE", "RECHAZADO"].includes(p.pagoBold.estado) && <p className="text-sm text-gray-400">Puedes cancelar si todavía no hay pago confirmado. Si Bold confirma un cobro después, aparecerá en revisión en Mi tienda → Últimos pagos web.</p>}
                             </>
                           )}
                         {p.estado === "ACEPTADO" &&

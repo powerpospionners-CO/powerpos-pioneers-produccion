@@ -243,11 +243,40 @@ describe('Cobros Bold del checkout web', () => {
       await service.webhook(a, e.raw, e.signature);
     expect(pago.estado).toBe('REVISION');
   });
-  it('no permite rechazar silenciosamente un pedido cuyo cobro está en curso', async () => {
-    const { service, pedido, db } = preparar();
-    await expect(service.validarRechazo(pedido, db)).rejects.toThrow(
-      'Revisa o anula',
-    );
+  it.each(['PENDIENTE', 'RECHAZADO'])(
+    'permite cancelar un intento %s sin afirmar que devolvió dinero',
+    async (estado) => {
+      const { service, pedido, db, pago } = preparar();
+      pago.estado = estado;
+      await service.validarRechazo(pedido, db);
+      expect(pago.estado).toBe('CANCELADO');
+      await expect(
+        service.intento(pedido, pedido.clave, 'tienda'),
+      ).rejects.toThrow('ya tiene confirmación');
+    },
+  );
+  it.each(['APROBADO', 'APLICADO', 'REVISION'])(
+    'impide cancelar automáticamente un cobro %s',
+    async (estado) => {
+      const { service, pedido, db, pago } = preparar();
+      pago.estado = estado;
+      await expect(service.validarRechazo(pedido, db)).rejects.toThrow(
+        'Gestiona la devolución',
+      );
+      expect(db.boldRegistro.update).not.toHaveBeenCalled();
+    },
+  );
+  it('conserva un pago tardío de un pedido cancelado para revisión sin registrarlo como venta', async () => {
+    const { service, pedido, db, pago, evento } = preparar();
+    await service.validarRechazo(pedido, db);
+    const e = evento();
+    await service.webhook(a, e.raw, e.signature);
+    expect(pago.estado).toBe('REVISION');
+    expect((pago.datos as any).paymentId).toBe('TRANSACCION1');
+    expect((pago.datos as any).canceladoEn).toBeTruthy();
+    await expect(service.verificarParaVenta(pedido, db)).rejects.toThrow();
+    await service.webhook(a, e.raw, e.signature);
+    expect(pago.estado).toBe('REVISION');
   });
   it('otra empresa no puede obtener la configuración ni acreditar el cobro', async () => {
     const { service, evento, pago } = preparar();
