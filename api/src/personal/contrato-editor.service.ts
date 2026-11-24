@@ -9,6 +9,7 @@ import {
   condicionesPlantilla,
   TIPOS_CONTRATO,
 } from './contratos-modalidades';
+import { empleadoDocumental } from './nomina-bancaria';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import { PersonalService } from './personal.service';
 import { hash, hoy, texto } from './personal.reglas';
@@ -287,8 +288,10 @@ export class ContratoEditorService {
         plantillaModalidadId: d.plantillaModalidadId || null,
         razonSocial: datos.razonSocial || empresa.nombre,
         empresa,
-        empleado: empleado.datos,
-        empleadoHuella: hash(JSON.stringify(empleado.datos)),
+        empleado: empleadoDocumental(empleado.datos),
+        empleadoHuella: hash(
+          JSON.stringify(empleadoDocumental(empleado.datos)),
+        ),
         empresaHuella: hash(JSON.stringify(empresa)),
         fechaElaboracion: hoy(),
       };
@@ -430,7 +433,8 @@ export class ContratoEditorService {
       const e = await this.store.obtener(a, r.datos.empleadoId, 'EMPLEADO', tx),
         empresa = await this.empresa(a, tx);
       if (
-        hash(JSON.stringify(e.datos)) !== r.datos.empleadoHuella ||
+        hash(JSON.stringify(empleadoDocumental(e.datos))) !==
+          r.datos.empleadoHuella ||
         hash(JSON.stringify(empresa)) !== r.datos.empresaHuella
       )
         throw new ConflictException(

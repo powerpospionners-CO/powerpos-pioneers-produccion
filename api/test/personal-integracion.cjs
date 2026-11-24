@@ -860,6 +860,154 @@ const { AppModule } = require('../dist/src/app.module'),
     console.log(
       'PASS contratos por modalidad: datos del expediente, tres PDF, revisión, firma de empleador, envío y reintento SMTP, lectura y firma OTP del empleado',
     );
+    const cuentaPerfil = {
+      ...empleadoAuto.datos,
+      salario: '1750905',
+      banco: 'Davivienda',
+      tipoCuenta: 'AHORROS',
+      numeroCuenta: '001234567890',
+    };
+    await auth(http.patch(`/personal/empleados/${empleadoAuto.id}`))
+      .send(cuentaPerfil)
+      .expect(200);
+    const revisionAnteriorCuenta = (
+      await auth(http.get('/personal')).expect(200)
+    ).body.empleados.find((e) => e.id === empleadoAuto.id).cuentaRevision;
+    const periodoBanco = (
+      await auth(http.post('/personal/periodos'))
+        .send({
+          empleadoId: empleadoAuto.id,
+          desde: hoyAuto,
+          hasta: hoyAuto,
+          fechaProgramada: hoyAuto,
+          revisado: true,
+          conceptos: [
+            { tipo: 'DEVENGADO', nombre: 'Salario ficticio', monto: '1000000' },
+            { tipo: 'DEVENGADO', nombre: 'Auxilio ficticio', monto: '100000' },
+            {
+              tipo: 'DEDUCCION',
+              nombre: 'Salud ficticia',
+              monto: '40000',
+              fundamento: 'Aporte legal de prueba',
+              soporteId: file.id,
+            },
+            {
+              tipo: 'DEDUCCION',
+              nombre: 'Pensión ficticia',
+              monto: '40000',
+              fundamento: 'Aporte legal de prueba',
+              soporteId: file.id,
+            },
+          ],
+        })
+        .expect(201)
+    ).body;
+    assert(!Object.hasOwn(periodoBanco.datos.empleado, 'cuentaNomina'));
+    await auth(http.patch(`/personal/empleados/${empleadoAuto.id}`))
+      .send({ ...cuentaPerfil, numeroCuenta: '009999999999' })
+      .expect(200);
+    const revisionActualCuenta = (
+      await auth(http.get('/personal')).expect(200)
+    ).body.empleados.find((e) => e.id === empleadoAuto.id).cuentaRevision;
+    const giro = {
+      periodoId: periodoBanco.id,
+      monto: '500000',
+      fechaPago: hoyAuto,
+      medio: 'TRANSFERENCIA',
+      soporteId: file.id,
+      referenciaTransferencia: 'GIRO-FICTICIO-1',
+      cuentaRevision: revisionAnteriorCuenta,
+      confirmado: true,
+      idempotencia: randomUUID(),
+    };
+    await auth(http.post('/personal/pagos/registrar-enviar'))
+      .send(giro)
+      .expect(409);
+    giro.cuentaRevision = revisionActualCuenta;
+    await auth(http.post('/personal/pagos/registrar-enviar'), b.token)
+      .send(giro)
+      .expect(404);
+    await auth(http.post('/personal/pagos/registrar-enviar'), 'Bearer ' + ct)
+      .send(giro)
+      .expect(403);
+    const movimientosBancoAntes = await db.movimientoFinanciero.count({
+      where: { empresaId: a.e.id, categoria: 'NOMINA' },
+    });
+    const enviadosAntes = sent.length;
+    const giros = await Promise.all([
+      auth(http.post('/personal/pagos/registrar-enviar'))
+        .send(giro)
+        .expect(201),
+      auth(http.post('/personal/pagos/registrar-enviar'))
+        .send(giro)
+        .expect(201),
+    ]);
+    assert.equal(giros[0].body.id, giros[1].body.id);
+    assert.equal(sent.length, enviadosAntes + 1);
+    const correoComprobante = sent.at(-1);
+    assert.equal(correoComprobante.to, empleadoAuto.datos.email);
+    assert.equal(
+      correoComprobante.attachments[0].filename,
+      'comprobante-pago.pdf',
+    );
+    assert.equal(
+      correoComprobante.attachments[0].content.subarray(0, 5).toString(),
+      '%PDF-',
+    );
+    assert.match(correoComprobante.text, /personal\/firma#empresa=/);
+    assert.equal(giros[0].body.datos.cuentaDestino.terminacion, '9999');
+    assert(!JSON.stringify(giros[0].body).includes('009999999999'));
+    assert.equal(giros[0].body.datos.saldoTrasAbonoCentavos, 52000000);
+    assert.equal(giros[0].body.datos.netoPeriodoCentavos, 102000000);
+    assert.equal(giros[0].body.estado, 'REGISTRADO_SIN_CONFIRMAR');
+    assert.equal(
+      (await personal.store.listar(actor, 'FIRMA', giros[0].body.id)).length,
+      0,
+    );
+    assert.equal(
+      await db.movimientoFinanciero.count({
+        where: { empresaId: a.e.id, categoria: 'NOMINA' },
+      }),
+      movimientosBancoAntes + 1,
+    );
+    const giroFinal = {
+      ...giro,
+      monto: '520000',
+      referenciaTransferencia: 'GIRO-FICTICIO-2',
+      idempotencia: randomUUID(),
+    };
+    personal.enviar = async () => {
+      throw Error('SMTP simulado no disponible');
+    };
+    const pagoSinCorreo = (
+      await auth(http.post('/personal/pagos/registrar-enviar'))
+        .send(giroFinal)
+        .expect(201)
+    ).body;
+    assert.equal(pagoSinCorreo.comprobanteCorreo, 'FALLIDO');
+    await auth(http.post('/personal/pagos/registrar-enviar'))
+      .send(giroFinal)
+      .expect(201);
+    assert.equal(
+      await db.movimientoFinanciero.count({
+        where: { empresaId: a.e.id, categoria: 'NOMINA' },
+      }),
+      movimientosBancoAntes + 2,
+    );
+    personal.enviar = async (to, subject, text, attachments) => {
+      sent.push({ to, subject, text, attachments });
+    };
+    await auth(http.post(`/personal/${pagoSinCorreo.id}/invitar`)).expect(201);
+    const pagosConAviso = (await auth(http.get('/personal')).expect(200)).body
+      .pagos;
+    assert.equal(
+      pagosConAviso.find((p) => p.id === pagoSinCorreo.id).comprobanteCorreo,
+      'ENVIADO',
+    );
+    assert.equal(sent.at(-1).attachments[0].filename, 'comprobante-pago.pdf');
+    console.log(
+      'PASS nómina bancaria: destino cifrado y enmascarado, cambio de cuenta rechazado, deducciones desglosadas, abonos idempotentes y correo con PDF, reenvío sin duplicar pagos',
+    );
     console.log(
       `Personal: aislamiento, cifrado, pagos concurrentes e idempotentes, evidencia financiera protegida, OTP, copias y contratos revisados OK (${mysql ? 'MariaDB' : 'PostgreSQL'}).`,
     );

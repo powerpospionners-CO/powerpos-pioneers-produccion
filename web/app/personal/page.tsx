@@ -4,11 +4,13 @@ import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import DocumentosEmpresa from "@/components/DocumentosEmpresa";
+import PagoNomina from "@/components/PagoNomina";
 import EditorContratos from "@/components/EditorContratos";
 import { useAuthStore } from "@/store/authStore";
 
 type Registro = {
   copia?: string;
+  comprobanteCorreo?: string;
   id: string;
   tipo: string;
   estado: string;
@@ -273,7 +275,7 @@ function Contenido() {
     },
     {
       name: "salario",
-      label: "Salario mensual pactado (COP)",
+      label: "Salario básico mensual COP (sin auxilio de transporte)",
       type: "number",
       value: editar ? String(editar.datos.salarioCentavos / 100) : "",
     },
@@ -306,6 +308,28 @@ function Contenido() {
         "Lugar de trabajo del empleado (opcional si usa el de la plantilla)",
       optional: true,
       value: editar?.datos.lugarServicio,
+    },
+    {
+      name: "banco",
+      label: "Banco de la cuenta de nómina (ejemplo: Davivienda)",
+      optional: true,
+      value: editar?.datos.cuentaNomina?.banco,
+    },
+    {
+      name: "tipoCuenta",
+      label: "Tipo de cuenta de nómina",
+      optional: true,
+      value: editar?.datos.cuentaNomina?.tipo,
+      options: [
+        { value: "AHORROS", label: "Ahorros" },
+        { value: "CORRIENTE", label: "Corriente" },
+      ],
+    },
+    {
+      name: "numeroCuenta",
+      label: "Número de cuenta del empleado (se guarda cifrado)",
+      optional: true,
+      value: editar?.datos.cuentaNomina?.numero,
     },
     {
       name: "activo",
@@ -735,55 +759,13 @@ function Contenido() {
                         />
                       </div>
                       <div className="grid gap-6 lg:grid-cols-2">
-                        <Formulario
-                          title="Registrar pago o abono real"
-                          campos={[
-                            {
-                              name: "periodoId",
-                              label: "Periodo pendiente",
-                              options: periodos
-                                .filter(
-                                  (p) =>
-                                    p.datos.pagadoCentavos <
-                                    p.datos.totalCentavos,
-                                )
-                                .map((p) => ({
-                                  value: p.id,
-                                  label: `${p.datos.empleado.nombre}: ${p.datos.desde} – ${p.datos.hasta} · saldo ${money(p.datos.totalCentavos - p.datos.pagadoCentavos)}`,
-                                })),
-                            },
-                            {
-                              name: "monto",
-                              label: "Importe efectivamente pagado COP",
-                              type: "number",
-                            },
-                            {
-                              name: "fechaPago",
-                              label: "Fecha real de pago",
-                              type: "date",
-                              value: hoy(),
-                            },
-                            {
-                              name: "medio",
-                              label: "Medio de pago",
-                              options: ["EFECTIVO", "TRANSFERENCIA"].map(
-                                (value) => ({ value, label: value }),
-                              ),
-                            },
-                            {
-                              name: "soporteId",
-                              label:
-                                "Soporte PDF (obligatorio en transferencia)",
-                              type: "file",
-                              optional: true,
-                            },
-                          ]}
-                          onSubmit={(d) =>
-                            guardar("/personal/pagos", {
-                              ...d,
-                              idempotencia: d.idempotencia,
-                            })
-                          }
+                        <PagoNomina
+                          periodos={periodos}
+                          empleados={empleados}
+                          onRegistrado={async (mensaje) => {
+                            setMensaje(mensaje);
+                            await cargar();
+                          }}
                         />
                         <section className="space-y-3">
                           <h2 className="text-xl">Saldo por periodo</h2>
@@ -989,6 +971,14 @@ function Contenido() {
                             <p className="text-sm text-gray-400">
                               {r.datos.fechaPago || r.datos.inicio}
                             </p>
+                            {r.tipo === "PAGO" && (
+                              <p className="text-sm text-gray-300">
+                                Comprobante inicial por correo:{" "}
+                                {estado(
+                                  r.comprobanteCorreo || "SIN_ENVIO_AUTOMATICO",
+                                )}
+                              </p>
+                            )}
                             <p
                               className={
                                 r.copia === "PENDIENTE"

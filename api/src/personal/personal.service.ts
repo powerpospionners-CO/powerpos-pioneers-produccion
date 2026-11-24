@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -7,6 +8,13 @@ import {
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import * as nodemailer from 'nodemailer';
 import * as bcrypt from 'bcrypt';
+import {
+  cuentaNomina,
+  cuentaResumida,
+  empleadoDocumental,
+  revisionCuenta,
+  totalesNomina,
+} from './nomina-bancaria';
 import { enlacePolitica } from './documentos-empresa.service';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import {
@@ -32,11 +40,15 @@ export class PersonalService {
   async inicio(a: ActorPersonal) {
     await this.store.preparar();
     const entregas = await this.store.listar(a, 'ENTREGA');
+    const avisosPago = await this.store.listar(a, 'PAGO_AVISO');
     const conEntrega = (docs: any[]) =>
       docs.map((doc) => {
         const ultima = entregas.find((e: any) => e.referenciaId === doc.id);
         return {
           ...doc,
+          comprobanteCorreo:
+            avisosPago.find((r: any) => r.referenciaId === doc.id)?.estado ||
+            'SIN_ENVIO_AUTOMATICO',
           copia: ultima
             ? ultima.datos.pendiente
               ? 'PENDIENTE'
@@ -45,7 +57,10 @@ export class PersonalService {
         };
       });
     return {
-      empleados: await this.store.listar(a, 'EMPLEADO'),
+      empleados: (await this.store.listar(a, 'EMPLEADO')).map((e: any) => ({
+        ...e,
+        cuentaRevision: revisionCuenta(e.datos.cuentaNomina),
+      })),
       periodos: await this.store.listar(a, 'PERIODO'),
       pagos: conEntrega(await this.store.listar(a, 'PAGO')),
       plantillas: await this.store.listar(a, 'PLANTILLA'),
@@ -140,6 +155,7 @@ export class PersonalService {
       salarioCentavos: centavos(d.salario),
       frecuencia: texto(d.frecuencia, 'frecuencia', 20),
       activo: d.activo !== false,
+      cuentaNomina: cuentaNomina(d, anteriorEmpleado?.datos.cuentaNomina),
       ...Object.fromEntries(
         ['domicilio', 'funciones', 'lugarServicio'].map((campo) => {
           const v =
@@ -248,7 +264,7 @@ export class PersonalService {
         'PERIODO',
         {
           ...datos,
-          empleado: e.datos,
+          empleado: empleadoDocumental(e.datos),
           empleadoId: e.id,
           pagadoCentavos: 0,
           revisionPor: a.id,
@@ -286,6 +302,10 @@ export class PersonalService {
       throw new BadRequestException('Medio de pago inválido');
     if (d.medio === 'TRANSFERENCIA' && !d.soporteId)
       throw new BadRequestException('Adjunta el soporte de transferencia');
+    const referenciaTransferencia =
+      d.medio === 'TRANSFERENCIA' && d.referenciaTransferencia
+        ? texto(d.referenciaTransferencia, 'referencia bancaria', 120)
+        : null;
     if (d.soporteId)
       await this.store.obtener(a, texto(d.soporteId, 'soporte', 36), 'ARCHIVO');
     return this.store.prisma.$transaction(async (tx) => {
@@ -300,7 +320,10 @@ export class PersonalService {
           pago.datos.montoCentavos !== monto ||
           pago.datos.fechaPago !== fechaPago ||
           pago.datos.medio !== d.medio ||
-          pago.datos.soporteId !== (d.soporteId || null)
+          pago.datos.soporteId !== (d.soporteId || null) ||
+          (pago.datos.referenciaTransferencia || null) !==
+            referenciaTransferencia ||
+          (d.cuentaRevision && pago.datos.cuentaRevision !== d.cuentaRevision)
         )
           throw new BadRequestException('La clave ya corresponde a otro pago');
         return pago;
@@ -308,10 +331,49 @@ export class PersonalService {
       const p = await this.store.obtener(a, periodoId, 'PERIODO', tx);
       if (p.datos.pagadoCentavos + monto > p.datos.totalCentavos)
         throw new BadRequestException('El pago supera el saldo pendiente');
-      const empresa = await tx.empresa.findUnique({
+      let cuentaDestino: any = null,
+        cuentaVersion: string | null = null;
+      if (d.medio === 'TRANSFERENCIA') {
+        await this.store.bloquear(a, p.datos.empleadoId, tx);
+        const e = await this.store.obtener(
+          a,
+          p.datos.empleadoId,
+          'EMPLEADO',
+          tx,
+        );
+        if (
+          d.exigirCuenta === true &&
+          (!e.datos.cuentaNomina ||
+            !d.cuentaRevision ||
+            !referenciaTransferencia)
+        )
+          throw new BadRequestException(
+            'Completa la cuenta del empleado, confirma el destino e indica la referencia bancaria',
+          );
+        cuentaVersion = revisionCuenta(e.datos.cuentaNomina);
+        if (d.cuentaRevision && d.cuentaRevision !== cuentaVersion)
+          throw new ConflictException(
+            'La cuenta del empleado cambió; actualiza y verifica el destino antes de registrar',
+          );
+        cuentaDestino = cuentaResumida(e.datos.cuentaNomina);
+      }
+      const empresaRegistrada = await tx.empresa.findUnique({
         where: { id: a.empresaId },
         select: { nombre: true, nit: true, direccion: true },
       });
+      const privacidad = (
+        await this.store.listar(a, 'CONFIG', undefined, tx)
+      )[0]?.datos;
+      const politicaEmpresa = privacidad?.politicaId
+        ? await this.store.obtener(a, privacidad.politicaId, 'DOC_EMPRESA', tx)
+        : null;
+      const empresa = {
+        ...empresaRegistrada,
+        nombreLegal:
+          politicaEmpresa?.datos.responsable ||
+          privacidad?.responsable ||
+          empresaRegistrada?.nombre,
+      };
       const movimiento = await this.financiero.registrarMovimiento(
         {
           tipo: 'EGRESO',
@@ -341,6 +403,9 @@ export class PersonalService {
         montoCentavos: monto,
         fechaPago,
         medio: d.medio,
+        cuentaDestino,
+        cuentaRevision: cuentaVersion,
+        referenciaTransferencia,
         soporteId: d.soporteId || null,
         movimientoId: movimiento.id,
         aviso: ACEPTACION,
@@ -376,6 +441,78 @@ export class PersonalService {
       );
       return creado;
     });
+  }
+  async pagoYEnviar(a: ActorPersonal, d: any) {
+    if (d.confirmado !== true)
+      throw new BadRequestException(
+        'Confirma que el pago ya se realizó y que revisaste importe y destino',
+      );
+    const pago = await this.pago(a, { ...d, exigirCuenta: true });
+    const aviso = await this.store.prisma.$transaction(async (tx) => {
+      await this.store.bloquear(a, pago.id, tx);
+      const existente = (
+        await this.store.listar(a, 'PAGO_AVISO', pago.id, tx)
+      )[0];
+      if (existente) return { registro: existente, nuevo: false };
+      const registro = await this.store.crear(
+        a,
+        'PAGO_AVISO',
+        { pagoId: pago.id, creadoEn: new Date().toISOString() },
+        { referenciaId: pago.id, llave: pago.id, estado: 'PENDIENTE' },
+        tx,
+      );
+      return { registro, nuevo: true };
+    });
+    let estado = aviso.registro.estado;
+    if (aviso.nuevo) {
+      try {
+        await this.invitarConEstado(a, pago.id);
+        estado = 'ENVIADO';
+      } catch {
+        estado = 'FALLIDO';
+      }
+    }
+    return {
+      ...pago,
+      comprobanteCorreo: estado,
+      mensaje:
+        estado === 'ENVIADO'
+          ? 'Pago registrado y comprobante con deducciones enviado al correo del empleado.'
+          : `El pago quedó registrado. Envío del comprobante: ${estado}. Usa Enviar al empleado para reintentar; no registres otro pago.`,
+    };
+  }
+  private async estadoAvisoPago(a: ActorPersonal, id: string, estado: string) {
+    return this.store.prisma.$transaction(async (tx) => {
+      await this.store.bloquear(a, id, tx);
+      const previo = (await this.store.listar(a, 'PAGO_AVISO', id, tx))[0];
+      const datos = {
+        ...(previo?.datos || {}),
+        pagoId: id,
+        terminadoEn: new Date().toISOString(),
+      };
+      const r = previo
+        ? await this.store.actualizar(a, previo, datos, estado, tx)
+        : await this.store.crear(
+            a,
+            'PAGO_AVISO',
+            datos,
+            { referenciaId: id, llave: id, estado },
+            tx,
+          );
+      await this.store.evento(a, id, 'COMPROBANTE_CORREO', { estado }, tx);
+      return r;
+    });
+  }
+  async invitarConEstado(a: ActorPersonal, id: string) {
+    const doc = await this.store.obtener(a, id);
+    try {
+      const r = await this.invitar(a, id);
+      if (doc.tipo === 'PAGO') await this.estadoAvisoPago(a, id, 'ENVIADO');
+      return r;
+    } catch (error) {
+      if (doc.tipo === 'PAGO') await this.estadoAvisoPago(a, id, 'FALLIDO');
+      throw error;
+    }
   }
   async plantilla(a: ActorPersonal, d: any) {
     await this.store.preparar();
@@ -467,7 +604,7 @@ export class PersonalService {
           ? texto(d.razonSocial, 'nombre legal del empleador', 300)
           : empresa.nombre,
       },
-      empleado: e.datos,
+      empleado: empleadoDocumental(e.datos),
       empleadoId: e.id,
       plantillaId: p.id,
       archivoId: archivo.id,
@@ -682,8 +819,18 @@ export class PersonalService {
     try {
       await this.enviar(
         empleado.datos.email,
-        'Documento laboral para revisar',
+        doc.tipo === 'PAGO'
+          ? 'Comprobante de pago de nómina para revisar'
+          : 'Documento laboral para revisar',
         `Tienes un documento de tu empleador para revisar. Nadie debe firmar por ti. Abre ${base}/personal/firma#empresa=${a.empresaId}&sede=${a.sucursalId}&token=${token}\nEl enlace vence en 7 días. No compartas los códigos. Puedes pedir una copia en papel sin firmar electrónicamente.`,
+        doc.tipo === 'PAGO'
+          ? [
+              {
+                filename: 'comprobante-pago.pdf',
+                content: await this.original(a, id),
+              },
+            ]
+          : undefined,
       );
     } catch (error) {
       await this.store.actualizar(
@@ -954,7 +1101,11 @@ export class PersonalService {
         (f: any) => f.datos,
       );
     const pdf = await new Promise<Buffer>((resolve, reject) => {
-      const p = new PDFDocument({ size: 'A4', margin: 48 });
+      const p = new PDFDocument({
+        size: 'A4',
+        margins: { top: 48, bottom: 65, left: 48, right: 48 },
+        bufferPages: true,
+      });
       const parts: Buffer[] = [];
       p.on('data', (b: Buffer) => parts.push(b));
       p.on('end', () => resolve(Buffer.concat(parts)));
@@ -977,10 +1128,35 @@ export class PersonalService {
         p.moveDown().text(
           'Conceptos revisados del periodo (este comprobante puede ser un abono parcial):',
         );
-        for (const c of doc.datos.conceptos || [])
-          p.text(
-            `${c.tipo}: ${c.nombre}: COP ${(c.montoCentavos / 100).toFixed(2)}`,
+        const totales = totalesNomina(doc.datos.conceptos || []);
+        for (const tipo of ['DEVENGADO', 'DEDUCCION']) {
+          p.moveDown()
+            .font('Helvetica-Bold')
+            .text(tipo === 'DEVENGADO' ? 'DEVENGADOS' : 'DEDUCCIONES');
+          p.font('Helvetica');
+          const conceptos = (doc.datos.conceptos || []).filter(
+            (c: any) => c.tipo === tipo,
           );
+          if (!conceptos.length) p.text('Sin conceptos registrados.');
+          for (const c of conceptos) {
+            p.text(`${c.nombre}: COP ${(c.montoCentavos / 100).toFixed(2)}`);
+            if (c.fundamento)
+              p.fontSize(9).text(`Fundamento: ${c.fundamento}`).fontSize(10);
+          }
+        }
+        p.moveDown()
+          .font('Helvetica-Bold')
+          .text(
+            `Total devengado: COP ${(totales.devengado / 100).toFixed(2)}\nTotal deducido: COP ${(totales.deducido / 100).toFixed(2)}\nNeto del periodo: COP ${(totales.neto / 100).toFixed(2)}\nValor de este pago: COP ${(doc.datos.montoCentavos / 100).toFixed(2)}`,
+          )
+          .font('Helvetica');
+        const cuenta = doc.datos.cuentaDestino;
+        if (cuenta)
+          p.moveDown().text(
+            `Destino declarado: ${cuenta.banco} · ${cuenta.tipo} · cuenta terminada en ${cuenta.terminacion}\nTitular: ${cuenta.titular}`,
+          );
+        if (doc.datos.referenciaTransferencia)
+          p.text(`Referencia bancaria: ${doc.datos.referenciaTransferencia}`);
         if (doc.estado === 'REGISTRADO_SIN_CONFIRMAR')
           p.moveDown().text(
             'REGISTRADO POR EL EMPLEADOR. EL TRABAJADOR TODAVIA NO HA CONFIRMADO LA RECEPCION.',
@@ -996,6 +1172,19 @@ export class PersonalService {
       p.moveDown().text(
         'Este documento solo tiene confirmacion del trabajador cuando existen evidencias de su firma. Conservar un comprobante no implica renuncia a derechos laborales ni impide presentar diferencias.',
       );
+      const paginas = p.bufferedPageRange();
+      for (let i = 0; i < paginas.count; i++) {
+        p.switchToPage(i);
+        p.page.margins.bottom = 25;
+        p.font('Helvetica')
+          .fontSize(8)
+          .text(
+            `Referencia ${doc.id} · página ${i + 1}/${paginas.count}`,
+            48,
+            805,
+            { width: 499, lineBreak: false },
+          );
+      }
       p.end();
     });
     return { doc, pdf, firmas, reclamos };
@@ -1110,6 +1299,7 @@ export class PersonalService {
       firmas: await this.store.listar(a, 'FIRMA', id),
       reclamos: await this.store.listar(a, 'RECLAMO', id),
       entregas: await this.store.listar(a, 'ENTREGA', id),
+      avisosComprobante: await this.store.listar(a, 'PAGO_AVISO', id),
     };
   }
 }
