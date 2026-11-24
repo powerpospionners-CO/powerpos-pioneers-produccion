@@ -18,7 +18,8 @@ export default function AlertaSistema({
   return (
     <div
       role={tipo === "error" ? "alert" : "status"}
-      className={`my-3 flex items-start gap-3 rounded-xl border p-4 ${estilo}`}
+      data-tipo={tipo}
+      className={`powerpos-alerta my-3 flex items-start gap-3 rounded-xl border p-4 ${estilo}`}
     >
       <Icono aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
       <div className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed">

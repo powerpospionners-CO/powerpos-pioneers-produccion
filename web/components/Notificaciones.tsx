@@ -134,7 +134,8 @@ export function NotificacionesProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               role={t.tipo === "error" ? "alert" : "status"}
-              className={`flex items-start gap-3 rounded-xl border p-3 shadow-lg ${ESTILO_TOAST[t.tipo]}`}
+              data-tipo={t.tipo}
+              className={`powerpos-alerta flex items-start gap-3 rounded-xl border p-3 shadow-lg ${ESTILO_TOAST[t.tipo]}`}
             >
               <Icono size={18} className="mt-0.5 shrink-0" />
               <p className="flex-1 text-sm leading-snug">{t.mensaje}</p>
@@ -196,7 +197,7 @@ export function NotificacionesProvider({ children }: { children: ReactNode }) {
               <button
                 type="submit"
                 disabled={confirmacion.entrada && !valor.trim()}
-                className={`flex-1 rounded-lg px-3 py-2.5 font-bold text-white disabled:opacity-50 ${confirmacion.peligroso ? "bg-red-600 hover:bg-red-700" : "bg-orange-600 hover:bg-orange-700"}`}
+                className={`flex-1 rounded-lg px-3 py-2.5 font-bold text-white disabled:opacity-50 ${confirmacion.peligroso ? "bg-red-600 hover:bg-red-700" : "bg-orange-700 hover:bg-orange-800"}`}
               >
                 {confirmacion.textoConfirmar}
               </button>
