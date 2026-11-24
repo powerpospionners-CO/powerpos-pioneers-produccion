@@ -3,6 +3,12 @@ import {
   ConflictException,
   Injectable,
 } from '@nestjs/common';
+import {
+  baseModalidad,
+  completarContrato,
+  condicionesPlantilla,
+  TIPOS_CONTRATO,
+} from './contratos-modalidades';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import { PersonalService } from './personal.service';
 import { hash, hoy, texto } from './personal.reglas';
@@ -120,6 +126,9 @@ export class ContratoEditorService {
       borradores: await this.store.listar(a, 'BORRADOR'),
       modelos: await this.store.listar(a, 'MODELO'),
       guia: CLAUSULAS_GUIA,
+      plantillasModalidad: await this.store.listar(a, 'CONTRATO_BASE'),
+      modalidades: TIPOS_CONTRATO.map(baseModalidad),
+      privacidad: await this.personal.config(a),
       variables: [
         'empresa',
         'nit',
@@ -134,6 +143,66 @@ export class ContratoEditorService {
       ],
       empresa: await this.empresa(a),
     };
+  }
+  async plantillaModalidad(a: ActorPersonal, d: any) {
+    await this.store.preparar();
+    const tipos = d.aplicarATodas === true ? TIPOS_CONTRATO : [d.tipo];
+    const versiones = await this.store.listar(a, 'CONTRATO_BASE');
+    const preparados = tipos.map((tipo) =>
+      condicionesPlantilla({
+        ...d,
+        tipo,
+        ...(d.aplicarATodas === true
+          ? {
+              nombre: baseModalidad(tipo).nombre,
+              terminacion: baseModalidad(tipo).terminacion,
+            }
+          : {}),
+      }),
+    );
+    return this.store.prisma.$transaction(async (tx) => {
+      const resultado: any[] = [];
+      for (const datos of preparados) {
+        const anterior = versiones.find(
+          (r: any) => r.datos.tipo === datos.tipo,
+        );
+        const r = await this.store.crear(
+          a,
+          'CONTRATO_BASE',
+          {
+            ...datos,
+            anteriorId: anterior?.id || null,
+            guardadaEn: new Date().toISOString(),
+          },
+          { estado: 'CONFIGURADA' },
+          tx,
+        );
+        await this.store.evento(
+          a,
+          r.id,
+          'CONFIGURAR_PLANTILLA_MODALIDAD',
+          { tipo: datos.tipo },
+          tx,
+        );
+        resultado.push(r);
+      }
+      return resultado;
+    });
+  }
+  async prepararContrato(a: ActorPersonal, d: any) {
+    await this.store.preparar();
+    const p = await this.store.obtener(
+      a,
+      texto(d.plantillaId, 'plantilla', 36),
+      'CONTRATO_BASE',
+    );
+    const e = await this.store.obtener(
+      a,
+      texto(d.empleadoId, 'empleado', 36),
+      'EMPLEADO',
+    );
+    const datos = completarContrato(p.datos, e.datos, d);
+    return this.guardar(a, { ...datos, plantillaModalidadId: p.id });
   }
   private async empresa(a: ActorPersonal, tx?: any) {
     return this.store.db(tx).empresa.findUnique({
@@ -166,6 +235,17 @@ export class ContratoEditorService {
     if (!(await this.personal.config(a)))
       throw new BadRequestException('Configura primero el aviso de privacidad');
     const datos = datosContrato(d);
+    if (d.plantillaModalidadId) {
+      const p = await this.store.obtener(
+        a,
+        texto(d.plantillaModalidadId, 'plantilla por modalidad', 36),
+        'CONTRATO_BASE',
+      );
+      if (p.datos.tipo !== datos.tipo)
+        throw new BadRequestException(
+          'La plantilla no corresponde a la modalidad',
+        );
+    }
     if (d.modeloId)
       await this.store.obtener(
         a,
@@ -204,6 +284,7 @@ export class ContratoEditorService {
       const payload = {
         ...datos,
         modeloId: d.modeloId || null,
+        plantillaModalidadId: d.plantillaModalidadId || null,
         razonSocial: datos.razonSocial || empresa.nombre,
         empresa,
         empleado: empleado.datos,

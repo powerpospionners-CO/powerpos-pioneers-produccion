@@ -91,6 +91,15 @@ export class PersonalController {
   ) {
     return this.editor.inicio(r.user);
   }
+  @Post('editor/plantillas-modalidad') plantillaModalidad(
+    @Request() r: any,
+    @Body() d: any,
+  ) {
+    return this.editor.plantillaModalidad(r.user, d);
+  }
+  @Post('editor/preparar') prepararContrato(@Request() r: any, @Body() d: any) {
+    return this.editor.prepararContrato(r.user, d);
+  }
   @Post('editor/modelos') modelo(@Request() r: any, @Body() d: any) {
     return this.editor.modelo(r.user, d);
   }
@@ -210,6 +219,13 @@ export class PersonalController {
     @Body() d: any,
   ) {
     return this.service.firmarEmpleador(r.user, id, d);
+  }
+  @Post(':id/firmar-enviar') firmarYEnviar(
+    @Request() r: any,
+    @Param('id') id: string,
+    @Body() d: any,
+  ) {
+    return this.service.firmarYEnviar(r.user, id, d);
   }
   @Post(':id/invitar') invitar(@Request() r: any, @Param('id') id: string) {
     return this.service.invitar(r.user, id);

@@ -37,8 +37,10 @@ function Formulario({
   title,
   campos,
   onSubmit,
+  submitLabel = "Guardar",
 }: {
   title: string;
+  submitLabel?: string;
   campos: Campo[];
   onSubmit: (d: Record<string, any>) => Promise<void>;
 }) {
@@ -158,7 +160,7 @@ function Formulario({
         </p>
       )}
       <button className={boton} disabled={busy}>
-        {busy ? "Guardando…" : "Guardar"}
+        {busy ? "Guardando…" : submitLabel}
       </button>
     </form>
   );
@@ -283,6 +285,27 @@ function Contenido() {
         label: value,
       })),
       value: editar?.datos.frecuencia,
+    },
+    {
+      name: "domicilio",
+      label: "Domicilio del empleado (para completar contratos)",
+      optional: true,
+      value: editar?.datos.domicilio,
+    },
+    {
+      name: "funciones",
+      label:
+        "Funciones específicas (para contratos; si está vacío se usa la plantilla)",
+      type: "textarea",
+      optional: true,
+      value: editar?.datos.funciones,
+    },
+    {
+      name: "lugarServicio",
+      label:
+        "Lugar de trabajo del empleado (opcional si usa el de la plantilla)",
+      optional: true,
+      value: editar?.datos.lugarServicio,
     },
     {
       name: "activo",
@@ -1062,7 +1085,8 @@ function Contenido() {
                   {accion && (
                     <Formulario
                       key={accion.id}
-                      title={`Firma del empleador: ${accion.datos.empleado.nombre}`}
+                      title={`Firmar como empleador y enviar a ${accion.datos.empleado.email}: ${accion.datos.empleado.nombre}`}
+                      submitLabel="Firmar y enviar enlace"
                       campos={[
                         {
                           name: "nombre",
@@ -1088,9 +1112,17 @@ function Contenido() {
                           type: "checkbox",
                         },
                       ]}
-                      onSubmit={(d) =>
-                        guardar(`/personal/${accion.id}/firma-empleador`, d)
-                      }
+                      onSubmit={async (d) => {
+                        const r = (
+                          await api.post(
+                            `/personal/${accion.id}/firmar-enviar`,
+                            d,
+                          )
+                        ).data;
+                        setMensaje(r.mensaje);
+                        setAccion(null);
+                        await cargar();
+                      }}
                     />
                   )}
                   {historial && (
