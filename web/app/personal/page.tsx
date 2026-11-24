@@ -324,6 +324,18 @@ function Contenido() {
       value: editar?.datos.lugarServicio,
     },
     {
+      name: "eps",
+      label: "EPS del empleado",
+      optional: true,
+      value: editar?.datos.eps,
+    },
+    {
+      name: "fondoPensiones",
+      label: "Fondo de pensiones del empleado",
+      optional: true,
+      value: editar?.datos.fondoPensiones,
+    },
+    {
       name: "banco",
       label: "Banco de la cuenta de nómina (ejemplo: Davivienda)",
       optional: true,
@@ -404,6 +416,7 @@ function Contenido() {
                       ["pagos", "Periodos y pagos"],
                       ["contratos", "Contratos"],
                       ["config", "Privacidad"],
+                      ["afiliaciones", "Configuración laboral"],
                       ["plantillas", "Plantillas y políticas"],
                     ].map(([v, l]) => (
                       <button
@@ -805,6 +818,37 @@ function Contenido() {
                         </section>
                       </div>
                     </>
+                  )}
+                  {tab === "afiliaciones" && (
+                    <section className="space-y-4">
+                      <p>
+                        Registra las entidades a las que el empleador afilia a
+                        su personal. La EPS y el fondo de pensiones se registran
+                        por separado en cada empleado.
+                      </p>
+                      <Formulario
+                        key={JSON.stringify(data.afiliacionesEmpresa || {})}
+                        title="Afiliaciones del empleador"
+                        campos={[
+                          {
+                            name: "cajaCompensacion",
+                            label:
+                              "Caja de compensación familiar del empleador",
+                            optional: true,
+                            value: data.afiliacionesEmpresa?.cajaCompensacion,
+                          },
+                          {
+                            name: "arl",
+                            label: "ARL del empleador",
+                            optional: true,
+                            value: data.afiliacionesEmpresa?.arl,
+                          },
+                        ]}
+                        onSubmit={(d) =>
+                          guardar("/personal/afiliaciones-empresa", d)
+                        }
+                      />
+                    </section>
                   )}
                   {tab === "contratos" && (
                     <>

@@ -77,6 +77,45 @@ describe('Editor de contratos', () => {
     expect(() => resolverTexto('{{constructor}}', d)).toThrow();
     expect(() => resolverTexto('{{empleado', d)).toThrow();
   });
+  it('toma las afiliaciones del empleado seleccionado y exige las variables utilizadas', () => {
+    const base = {
+      ...datosContrato(ejemploContrato),
+      empresa: { nombre: 'Empresa', nit: '123' },
+    };
+    const a = {
+      ...base,
+      empresa: { ...base.empresa, arl: 'ARL A', cajaCompensacion: 'Caja A' },
+      empleado: {
+        nombre: 'Ana',
+        identificacion: '1',
+        eps: 'EPS A',
+        fondoPensiones: 'Fondo A',
+      },
+    };
+    const b = {
+      ...base,
+      empleado: { nombre: 'Luis', identificacion: '2', eps: 'EPS B' },
+    };
+    expect(
+      resolverTexto(
+        '{{trabajador_nombre}} / {{eps}} / {{fondo_pensiones}} / {{arl}} / {{caja_compensacion}}',
+        a,
+      ),
+    ).toBe('Ana / EPS A / Fondo A / ARL A / Caja A');
+    expect(resolverTexto('{{eps}}', b)).toBe('EPS B');
+    expect(() => resolverTexto('{{fondo_pensiones}}', b)).toThrow(
+      'expediente del empleado',
+    );
+    expect(() =>
+      resolverTexto('{{eps}}', { ...b, empleado: { ...b.empleado, eps: ' ' } }),
+    ).toThrow('Completa el dato eps');
+    expect(
+      resolverTexto('{{empleado}}', {
+        ...b,
+        empleado: { nombre: 'Sin afiliación registrada' },
+      }),
+    ).toBe('Sin afiliación registrada');
+  });
   it('no registra una revisión tácita o con fecha futura', () => {
     expect(() => revisionContrato({ acepta: false })).toThrow();
     expect(() =>

@@ -47,6 +47,12 @@ export class PersonalController {
     private editor: ContratoEditorService,
     private documentos: DocumentosEmpresaService,
   ) {}
+  @Post('afiliaciones-empresa') guardarAfiliacionesEmpresa(
+    @Request() r: any,
+    @Body() d: any,
+  ) {
+    return this.service.guardarAfiliacionesEmpresa(r.user, d);
+  }
   @Get('documentos-empresa')
   @Header('Cache-Control', 'no-store, private')
   biblioteca(@Request() r: any) {

@@ -101,6 +101,12 @@ export function variablesContrato(d: any) {
     empresa: d.razonSocial || d.empresa.nombre,
     nit: d.empresa.nit,
     empleado: d.empleado.nombre,
+    trabajador_nombre: d.empleado.nombre,
+    trabajador_cedula: d.empleado.identificacion,
+    eps: d.empleado.eps,
+    fondo_pensiones: d.empleado.fondoPensiones,
+    arl: d.empresa.arl,
+    caja_compensacion: d.empresa.cajaCompensacion,
     documento: d.empleado.identificacion,
     cargo: d.cargo,
     salario: `COP ${(d.salarioCentavos / 100).toFixed(2)}`,
@@ -115,7 +121,12 @@ export function resolverTexto(s: string, d: any) {
   const r = s.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key) => {
     if (!Object.prototype.hasOwnProperty.call(vars, key))
       throw new BadRequestException(`Variable no permitida: ${key}`);
-    return String(vars[key as keyof typeof vars]);
+    const valor = vars[key as keyof typeof vars];
+    if (valor === undefined || valor === null || String(valor).trim() === '')
+      throw new BadRequestException(
+        `Completa el dato ${key} en el expediente del empleado o en la configuración laboral de la empresa, según corresponda, antes de generar este contrato`,
+      );
+    return String(valor);
   });
   if (r.includes('{{') || r.includes('}}'))
     throw new BadRequestException('Hay una variable incompleta en el contrato');

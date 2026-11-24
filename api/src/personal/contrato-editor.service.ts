@@ -94,6 +94,17 @@ export async function pdfContrato(
       pdf.addPage();
       seccion(`ANEXO ${i + 1}: ${c.titulo}`, c.contenido);
     }
+    const afiliaciones = [
+      ['EPS', d.empleado.eps],
+      ['Fondo de pensiones', d.empleado.fondoPensiones],
+      ['ARL', d.empresa.arl],
+      ['Caja de compensación', d.empresa.cajaCompensacion],
+    ].filter(([, valor]) => valor);
+    if (afiliaciones.length)
+      seccion(
+        'Afiliaciones registradas del trabajador',
+        afiliaciones.map(([nombre, valor]) => `${nombre}: ${valor}`).join('\n'),
+      );
     seccion(
       'Aceptación y entrega de copias',
       'Este original se somete a la aceptación separada del empleador y del trabajador. Las evidencias de firma identifican el documento mediante SHA-256 y se entregan junto con el original y sus anexos. La elaboración o revisión del borrador no equivale a una firma. La firma electrónica es voluntaria; puede solicitarse una alternativa en papel.',
@@ -136,6 +147,12 @@ export class ContratoEditorService {
         'empresa',
         'nit',
         'empleado',
+        'trabajador_nombre',
+        'trabajador_cedula',
+        'eps',
+        'fondo_pensiones',
+        'arl',
+        'caja_compensacion',
         'documento',
         'cargo',
         'salario',
@@ -215,10 +232,11 @@ export class ContratoEditorService {
     });
   }
   private async empresa(a: ActorPersonal, tx?: any) {
-    return this.store.db(tx).empresa.findUnique({
+    const empresa = await this.store.db(tx).empresa.findUnique({
       where: { id: a.empresaId },
       select: { nombre: true, nit: true, direccion: true },
     });
+    return { ...empresa, ...(await this.personal.afiliacionesEmpresa(a, tx)) };
   }
   async modelo(a: ActorPersonal, d: any) {
     await this.store.preparar();
