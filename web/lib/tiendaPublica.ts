@@ -25,6 +25,8 @@ export type TiendaPublica = {
     sobreNosotros: string;
     mision?: string;
     vision?: string;
+    galeria?: { imagen: string; descripcion: string }[];
+    preguntasFrecuentes?: { pregunta: string; respuesta: string }[];
     imagenesCategorias?: { categoriaId: number; imagen: string }[];
     color: string;
     coloresAutomaticos?: boolean;

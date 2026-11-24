@@ -19,6 +19,8 @@ export const tiendaDefaults = {
   sobreNosotros: '',
   mision: '',
   vision: '',
+  galeria: [] as { imagen: string; descripcion: string }[],
+  preguntasFrecuentes: [] as { pregunta: string; respuesta: string }[],
   imagenesCategorias: [] as { categoriaId: number; imagen: string }[],
   color: '#0f766e',
   coloresAutomaticos: true,

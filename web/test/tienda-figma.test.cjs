@@ -62,3 +62,12 @@ test('las categorías usan su imagen elegida sin cambiar la foto del producto', 
  const html = renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos'}));
  assert(html.includes('https://example.com/categoria.png'), html.slice(html.indexOf('category-grid'), html.indexOf('category-grid')+900)); assert(html.includes('https://example.com/martillo.png'));
 });
+
+test('galería en Nosotros y dudas y entregas en Contacto sin mezclar páginas', () => {
+ const tienda={...datos,config:{...datos.config,galeria:[{imagen:'https://example.com/local.png',descripcion:'Nuestro local'}],preguntasFrecuentes:[{pregunta:'¿Cuánto tarda el envío?',respuesta:'Se confirma al aceptar tu pedido.'}],envios:'Entregamos en nuestra ciudad',pagos:'Efectivo y tarjeta'}};
+ const render=seccion=>renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion}));
+ const nosotros=render('nosotros'), contacto=render('contacto'), inicio=render('inicio');
+ assert(nosotros.includes('https://example.com/local.png')); assert(!contacto.includes('https://example.com/local.png'));
+ assert(contacto.includes('<details><summary>¿Cuánto tarda el envío?</summary>')); assert(contacto.includes('Entregamos en nuestra ciudad')); assert(contacto.includes('Efectivo y tarjeta'));
+ assert(!nosotros.includes('¿Cuánto tarda el envío?')); assert(!inicio.includes('https://example.com/local.png'));
+});

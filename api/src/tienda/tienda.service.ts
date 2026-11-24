@@ -111,6 +111,14 @@ export class TiendaService {
         campo,
         ['descripcion', 'sobreNosotros', 'mision', 'vision'].includes(campo) ? 2000 : 500,
       );
+    if (!Array.isArray(t.galeria) || t.galeria.length > 12) throw new BadRequestException('Agregue hasta 12 fotos a la galería');
+    t.galeria = t.galeria.map(f => {
+      const imagen = texto(f?.imagen, 'Foto de galería', 500, true);
+      if (!/^https:\/\//i.test(imagen)) throw new BadRequestException('La foto debe usar HTTPS');
+      return { imagen, descripcion: texto(f?.descripcion, 'Descripción de foto', 200) };
+    });
+    if (!Array.isArray(t.preguntasFrecuentes) || t.preguntasFrecuentes.length > 20) throw new BadRequestException('Agregue hasta 20 preguntas frecuentes');
+    t.preguntasFrecuentes = t.preguntasFrecuentes.map(p => ({ pregunta: texto(p?.pregunta, 'Pregunta', 200, true), respuesta: texto(p?.respuesta, 'Respuesta', 2000, true) }));
     if (!Array.isArray(t.imagenesCategorias) || t.imagenesCategorias.length > 300)
       throw new BadRequestException('Imágenes de categorías inválidas');
     t.imagenesCategorias = t.imagenesCategorias.map(c => {
@@ -207,6 +215,8 @@ export class TiendaService {
       sobreNosotros: t.sobreNosotros,
       mision: t.mision,
       vision: t.vision,
+      galeria: t.galeria,
+      preguntasFrecuentes: t.preguntasFrecuentes,
       imagenesCategorias: t.imagenesCategorias,
       color: t.color,
       coloresAutomaticos: t.coloresAutomaticos,
