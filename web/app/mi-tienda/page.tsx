@@ -7,6 +7,8 @@ import { useAuthStore } from "@/store/authStore";
 import ProductosTienda from "./ProductosTienda";
 import OrigenesProductos from "@/components/OrigenesProductos";
 import BoldConfiguracion from "./BoldConfiguracion";
+import HorariosAtencion from "./HorariosAtencion";
+import CoberturaEntrega from "./CoberturaEntrega";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
@@ -170,7 +172,6 @@ export default function MiTienda() {
                       ["portadaTexto", "Texto sobre la portada"],
                       ["descripcion", "Descripción del negocio"],
                       ["sobreNosotros", "Sobre nosotros (historia, qué los hace diferentes, etc.)"],
-                      ["horario", "Horario de atención"],
                       ["pagos", "Medios y condiciones de pago (respuestas del asistente)"],
                       ["envios", "Condiciones y plazos de entrega (respuestas del asistente)"],
                       ["portada", "URL HTTPS de la imagen de portada"],
@@ -210,6 +211,7 @@ export default function MiTienda() {
                       />
                     </label>
                   </section>
+                  <HorariosAtencion value={config.tienda.horarios || null} anterior={config.tienda.horario || ""} onChange={v => cambiar("horarios", v)} />
                   <section className={card}>
                     <h2 className="text-xl font-bold">Redes sociales</h2>
                     <p className="text-gray-400">
@@ -289,87 +291,13 @@ export default function MiTienda() {
                         }
                       />
                     </label>
-                    <h3 className="font-semibold">
-                      Zonas y tarifas de entrega
-                    </h3>
-                    {config.tienda.zonas.map((z: any, i: number) => (
-                      <div
-                        className="grid gap-3 sm:grid-cols-[1fr_160px_auto]"
-                        key={i}
-                      >
-                        <label>
-                          Zona
-                          <input
-                            required
-                            className={input}
-                            value={z.nombre}
-                            onChange={(e) =>
-                              cambiar(
-                                "zonas",
-                                config.tienda.zonas.map((v: any, j: number) =>
-                                  j === i
-                                    ? { ...v, nombre: e.target.value }
-                                    : v,
-                                ),
-                              )
-                            }
-                          />
-                        </label>
-                        <label>
-                          Tarifa COP
-                          <input
-                            required
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className={input}
-                            value={z.costo}
-                            onChange={(e) =>
-                              cambiar(
-                                "zonas",
-                                config.tienda.zonas.map((v: any, j: number) =>
-                                  j === i
-                                    ? { ...v, costo: Number(e.target.value) }
-                                    : v,
-                                ),
-                              )
-                            }
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          className="text-red-300"
-                          onClick={() =>
-                            cambiar(
-                              "zonas",
-                              config.tienda.zonas.filter(
-                                (_: unknown, j: number) => j !== i,
-                              ),
-                            )
-                          }
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="text-teal-300 underline"
-                      onClick={() =>
-                        cambiar("zonas", [
-                          ...config.tienda.zonas,
-                          { nombre: "", costo: 0 },
-                        ])
-                      }
-                    >
-                      + Agregar zona
-                    </button>
                     <p className="text-sm text-gray-400">
                       Cada pedido queda pendiente de revisión en Domicilios.
                       WhatsApp abre una conversación con tu empresa y no crea
                       una venta automáticamente.
                     </p>
                   </section>
+                  <CoberturaEntrega ciudades={config.tienda.ciudadesEntrega || []} zonas={config.tienda.zonas} onChange={(ciudades, zonas) => setConfig((c: any) => ({...c, tienda: {...c.tienda, ciudadesEntrega: ciudades, zonas}}))} />
                   <button
                     className="rounded-lg bg-orange-600 px-7 py-3 font-bold"
                     disabled={busy}

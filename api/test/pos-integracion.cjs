@@ -397,6 +397,21 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(Number((await db.producto.findUnique({ where: { id: prodBold.id } })).stockActual), 2);
     console.log('PASS cancelación Bold: solicitud pendiente cancelada, checkout bloqueado, resumen propio y aprobación tardía conservada sin venta ni movimiento de inventario');
 
+    const configTienda = (await http.get('/tienda-admin/configuracion').set('Authorization',token).expect(200)).body;
+    const horariosTienda = Array.from({length:7},(_,dia)=>({dia,abierto:dia<6,apertura:'10:30',cierre:'19:30'}));
+    const coberturaTienda = {slug:configTienda.slug,tienda:{...configTienda.tienda,horarios:horariosTienda,ciudadesEntrega:['Pereira','Dosquebradas'],zonas:[{id:'per-centro',ciudad:'Pereira',nombre:'Centro',costo:3000},{id:'dos-centro',ciudad:'Dosquebradas',nombre:'Centro',costo:2000}]}};
+    const configuradaTienda = (await http.patch('/tienda-admin/configuracion').set('Authorization',token).send(coberturaTienda).expect(200)).body;
+    assert.equal(configuradaTienda.tienda.horario,'Lunes a sábado: 10:30 a. m. – 7:30 p. m.; Domingo: cerrado');
+    await http.patch('/tienda-admin/configuracion').set('Authorization',token).send({...coberturaTienda,tienda:{...coberturaTienda.tienda,horarios:horariosTienda.slice(0,6)}}).expect(400);
+    const ciudadPedido = {clave:randomUUID(),nombre:'Cliente cobertura',telefono:'3000009999',direccion:'Dirección ficticia',zona:'dos-centro',ciudad:'Pereira',metodoPago:'EFECTIVO',totalEsperado:14000,items:[{productoId:prodBold.id,cantidad:1}]};
+    await http.post(`/tiendas/${slugBold}/pedidos`).send(ciudadPedido).expect(400);
+    const pedidoCiudad = (await http.post(`/tiendas/${slugBold}/pedidos`).send({...ciudadPedido,ciudad:'Dosquebradas'}).expect(201)).body;
+    assert.equal(Number(pedidoCiudad.costoDomicilio),2000);assert.equal(Number(pedidoCiudad.total),14000);
+    assert.equal((await db.pedidoWeb.findUnique({where:{id:pedidoCiudad.id}})).zona,'Dosquebradas · Centro');
+    const ciudadesPublicas = (await http.get(`/tiendas/${slugBold}`).expect(200)).body;
+    assert.deepEqual(ciudadesPublicas.config.ciudadesEntrega,['Pereira','Dosquebradas']);assert.equal(ciudadesPublicas.config.horarios.length,7);
+    console.log('PASS horarios y ciudades: selección semanal persistida, resumen público, días inválidos rechazados, zonas homónimas separadas por ciudad y tarifa del servidor');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);

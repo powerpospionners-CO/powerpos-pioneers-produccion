@@ -69,7 +69,7 @@ export function responderTienda(
     )
   ) {
     const zonas = t.zonas
-      .map((z) => `${z.nombre}: ${dinero(z.costo)}`)
+      .map((z) => `${z.ciudad ? `${z.ciudad} · ` : ''}${z.nombre}: ${dinero(z.costo)}`)
       .join("; ");
     const publicado = [
       t.envios,
