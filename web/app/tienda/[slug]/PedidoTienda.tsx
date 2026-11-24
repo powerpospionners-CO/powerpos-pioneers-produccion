@@ -5,7 +5,16 @@ import {
   solicitarTienda,
   type TiendaPublica,
 } from "../../../lib/tiendaPublica";
-type Estado = { id: string; estado: string; total: number; motivo?: string; pagoBold?: { estado: string; referencia?: string } | null };
+type Estado = {
+  id: string;
+  estado: string;
+  total: number;
+  subtotal?: number;
+  costoDomicilio?: number;
+  items?: { nombre: string; cantidad: number; precio: number }[];
+  motivo?: string;
+  pagoBold?: { estado: string; referencia?: string } | null;
+};
 const dinero = (n: number) =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -32,6 +41,7 @@ export function PedidoTienda({
     metodoPago: "EFECTIVO",
   });
   const [estado, setEstado] = useState<Estado | null>(null),
+    [recuperando, setRecuperando] = useState(false),
     [clavePago, setClavePago] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -44,7 +54,12 @@ export function PedidoTienda({
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("pedido");
     if (!id) return;
-    try { setClavePago(sessionStorage.getItem(`bold:${slug}:${id}`) || ""); } catch { /* Seguimiento disponible sin almacenamiento. */ }
+    setRecuperando(true);
+    try {
+      setClavePago(sessionStorage.getItem(`bold:${slug}:${id}`) || "");
+    } catch {
+      /* Seguimiento disponible sin almacenamiento. */
+    }
     const controller = new AbortController();
     solicitarTienda<Estado>(`${path}/${encodeURIComponent(id)}`, {
       signal: controller.signal,
@@ -53,6 +68,9 @@ export function PedidoTienda({
       .catch(() => {
         if (!controller.signal.aborted)
           setError("No fue posible recuperar el seguimiento del pedido.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRecuperando(false);
       });
     return () => controller.abort();
   }, [path, slug]);
@@ -93,7 +111,11 @@ export function PedidoTienda({
       setEstado(result);
       if (form.metodoPago === "TARJETA") {
         setClavePago(clave.current.id);
-        try { sessionStorage.setItem(`bold:${slug}:${result.id}`, clave.current.id); } catch { /* Mantener la clave en memoria. */ }
+        try {
+          sessionStorage.setItem(`bold:${slug}:${result.id}`, clave.current.id);
+        } catch {
+          /* Mantener la clave en memoria. */
+        }
         setEstado({ ...result, pagoBold: { estado: "PENDIENTE" } });
       }
       onRecibido();
@@ -111,24 +133,120 @@ export function PedidoTienda({
       setBusy(false);
     }
   }
+  function nuevoPedido() {
+    const url = new URL(window.location.href);
+    for (const key of ["pedido", "bold-order-id", "bold-tx-status"])
+      url.searchParams.delete(key);
+    window.history.replaceState(null, "", url);
+    setEstado(null);
+    setClavePago("");
+    setError("");
+    clave.current = { body: "", id: "" };
+  }
+  if (recuperando)
+    return <p role="status">Consultando el estado de tu pedido…</p>;
   if (estado)
     return (
-      <div role="status" className="confirmation-note">
-        <div>
-          <h3>Solicitud recibida</h3>
-          <p>Referencia: {estado.id.slice(0, 8)}</p>
-          <p>Estado: {estado.estado.replaceAll("_", " ")}</p>
-          <p>{dinero(Number(estado.total))}</p>
-          {estado.pagoBold && <p>Pago Bold: {({ PENDIENTE: "Pendiente de confirmación", APROBADO: "Pago recibido · pendiente de aceptación de la tienda", APLICADO: "Pago recibido y pedido aceptado", RECHAZADO: "El último intento fue rechazado", ANULADO: "Pago anulado", REVISION: "En revisión con la tienda" } as Record<string, string>)[estado.pagoBold.estado] || estado.pagoBold.estado}</p>}
-          {estado.estado === "RECIBIDO" && estado.pagoBold && ["PENDIENTE", "RECHAZADO"].includes(estado.pagoBold.estado) && clavePago && <BoldCheckout slug={slug} pedidoId={estado.id} clave={clavePago} />}
-          {estado.pagoBold && !clavePago && estado.pagoBold.estado === "PENDIENTE" && <p>Para continuar el pago, utiliza el mismo navegador donde enviaste el pedido. Si ya pagaste, espera la confirmación o contacta a la tienda.</p>}
-          {estado.motivo && <p>{estado.motivo}</p>}
-          <p>
-            La empresa revisa y confirma tu pedido. Esta solicitud no es un
-            comprobante de pago.
-          </p>
+      <section
+        className="web-order-confirmation"
+        aria-label="Resumen de tu pedido"
+      >
+        <div className="web-order-heading">
+          <span>Pedido #{estado.id.slice(0, 8)}</span>
+          <h3>
+            {estado.estado === "RECHAZADO"
+              ? "Pedido cancelado"
+              : estado.estado === "RECIBIDO"
+                ? "Recibimos tu pedido"
+                : "Sigue tu pedido"}
+          </h3>
         </div>
-      </div>
+        <p className="web-order-status" role="status">
+          {(
+            {
+              RECIBIDO: "Pendiente de revisión de la tienda",
+              ACEPTADO: "Aceptado por la tienda",
+              EN_CAMINO: "Tu pedido está en camino",
+              ENTREGADO: "Pedido entregado",
+              RECHAZADO: "Solicitud cancelada",
+            } as Record<string, string>
+          )[estado.estado] || estado.estado.replaceAll("_", " ")}
+        </p>
+        {!!estado.items?.length && (
+          <ul className="web-order-items">
+            {estado.items.map((item, i) => (
+              <li key={i}>
+                <span>
+                  {item.cantidad} × {item.nombre}
+                </span>
+                <strong>{dinero(item.cantidad * Number(item.precio))}</strong>
+              </li>
+            ))}
+          </ul>
+        )}
+        <dl className="web-order-totals">
+          {estado.subtotal !== undefined && (
+            <div>
+              <dt>Productos</dt>
+              <dd>{dinero(Number(estado.subtotal))}</dd>
+            </div>
+          )}
+          {estado.costoDomicilio !== undefined && (
+            <div>
+              <dt>Domicilio</dt>
+              <dd>{dinero(Number(estado.costoDomicilio))}</dd>
+            </div>
+          )}
+          <div className="web-order-grand-total">
+            <dt>Total del pedido</dt>
+            <dd>{dinero(Number(estado.total))}</dd>
+          </div>
+        </dl>
+        {estado.pagoBold && (
+          <p className="web-order-payment">
+            Pago Bold:{" "}
+            {(
+              {
+                PENDIENTE: "Pendiente de confirmación",
+                APROBADO:
+                  "Pago recibido · pendiente de aceptación de la tienda",
+                APLICADO: "Pago recibido y pedido aceptado",
+                RECHAZADO: "El último intento fue rechazado",
+                ANULADO: "Pago anulado",
+                CANCELADO: "Intento cancelado con el pedido",
+                REVISION: "Contacta a la tienda: hay un pago en revisión",
+              } as Record<string, string>
+            )[estado.pagoBold.estado] || estado.pagoBold.estado}
+          </p>
+        )}
+        {estado.estado === "RECIBIDO" &&
+          estado.pagoBold &&
+          ["PENDIENTE", "RECHAZADO"].includes(estado.pagoBold.estado) &&
+          clavePago && (
+            <BoldCheckout slug={slug} pedidoId={estado.id} clave={clavePago} />
+          )}
+        {estado.pagoBold &&
+          !clavePago &&
+          estado.pagoBold.estado === "PENDIENTE" && (
+            <p>
+              Para continuar el pago, utiliza el mismo navegador donde enviaste
+              el pedido. Si ya pagaste, espera la confirmación o contacta a la
+              tienda.
+            </p>
+          )}
+        {estado.motivo && <p>{estado.motivo}</p>}
+        <p className="web-order-help">
+          La empresa revisa y confirma tu pedido. Esta solicitud no es un
+          comprobante de pago.
+        </p>
+        <button
+          type="button"
+          className="button text full"
+          onClick={nuevoPedido}
+        >
+          Hacer otro pedido
+        </button>
+      </section>
     );
   return (
     <form onSubmit={enviar}>
@@ -180,7 +298,9 @@ export function PedidoTienda({
             {["EFECTIVO", "TRANSFERENCIA", "NEQUI", "DAVIPLATA"].map((p) => (
               <option key={p}>{p}</option>
             ))}
-            {tienda.bold?.habilitado && <option value="TARJETA">Pagar en línea con Bold</option>}
+            {tienda.bold?.habilitado && (
+              <option value="TARJETA">Pagar en línea con Bold</option>
+            )}
           </select>
         </label>
         <label>
@@ -203,7 +323,11 @@ export function PedidoTienda({
           <input type="checkbox" required /> Autorizo a {tienda.nombre} a usar
           estos datos para atender y entregar este pedido.
         </label>
-        <p>{form.metodoPago === "TARJETA" ? "Al enviar el pedido podrás pagar con Bold. El pago se confirmará automáticamente y la tienda revisará tu pedido." : "La empresa confirma la solicitud. Enviarla no registra un pago."}</p>
+        <p>
+          {form.metodoPago === "TARJETA"
+            ? "Al enviar el pedido podrás pagar con Bold. El pago se confirmará automáticamente y la tienda revisará tu pedido."
+            : "La empresa confirma la solicitud. Enviarla no registra un pago."}
+        </p>
         {error && (
           <p role="alert" className="error">
             {error}

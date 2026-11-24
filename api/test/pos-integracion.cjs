@@ -376,6 +376,27 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     assert.equal(Number((await db.producto.findUnique({ where: { id: prodBold.id } })).stockActual), 2);
     console.log('PASS Bold web: credenciales cifradas, total del servidor, propietario del checkout, firma falsa rechazada, retorno no confiable, evento idempotente, pago conservado ante caja/stock, aceptación concurrente única y anulación sin doble reversión');
 
+    // Cancelar una solicitud sin pago confirmado y retener cualquier aprobación tardía.
+    const claveCancelacion = randomUUID();
+    const webCancelacion = (await http.post(`/tiendas/${slugBold}/pedidos`).send({ clave: claveCancelacion, nombre: 'Pedido de prueba para cancelar', telefono: '3000005678', direccion: 'Dirección ficticia', zona: 'Centro', metodoPago: 'TARJETA', pagoBold: true, totalEsperado: 12000, items: [{ productoId: prodBold.id, cantidad: 1 }] }).expect(201)).body;
+    assert.equal(webCancelacion.items[0].nombre, 'Checkout ficticio');
+    assert.equal(Number(webCancelacion.subtotal), 12000); assert.equal(Number(webCancelacion.costoDomicilio), 0);
+    const rutaCancelacion = `/tiendas/${slugBold}/pedidos/${webCancelacion.id}`;
+    const checkoutCancelacion = (await http.post(rutaCancelacion + '/bold').send({ clave: claveCancelacion }).expect(201)).body;
+    await http.patch(`/tienda-admin/pedidos/${webCancelacion.id}`).set('Authorization', token).send({ accion: 'RECHAZAR', motivo: 'Pedido de prueba sin pago' }).expect(200);
+    let cancelado = (await http.get(rutaCancelacion).expect(200)).body;
+    assert.equal(cancelado.estado, 'RECHAZADO'); assert.equal(cancelado.pagoBold.estado, 'CANCELADO');
+    assert.equal(Number(cancelado.total), 12000); assert.equal(cancelado.items[0].nombre, 'Checkout ficticio');
+    await http.post(rutaCancelacion + '/bold').send({ clave: claveCancelacion }).expect(409);
+    await http.patch(`/tienda-admin/pedidos/${webCancelacion.id}`).set('Authorization', token).send({ accion: 'ACEPTAR' }).expect(409);
+    const tardio = JSON.stringify({ ...eventoBold, id: randomUUID(), data: { ...eventoBold.data, payment_id: 'TARDIO-' + randomUUID(), metadata: { reference: checkoutCancelacion.referencia } } });
+    await http.post(rutaHookBold).set('Content-Type', 'application/json').set('x-bold-signature', createHmac('sha256', credBold.secreto).update(Buffer.from(tardio).toString('base64')).digest('hex')).send(tardio).expect(200);
+    cancelado = (await http.get(rutaCancelacion).expect(200)).body;
+    assert.equal(cancelado.estado, 'RECHAZADO'); assert.equal(cancelado.pagoBold.estado, 'REVISION');
+    assert.equal((await db.pedidoWeb.findUnique({ where: { id: webCancelacion.id } })).pedidoId, null);
+    assert.equal(Number((await db.producto.findUnique({ where: { id: prodBold.id } })).stockActual), 2);
+    console.log('PASS cancelación Bold: solicitud pendiente cancelada, checkout bloqueado, resumen propio y aprobación tardía conservada sin venta ni movimiento de inventario');
+
     const canalA = app.get(EventosService), canalB = otra.get(EventosService), pedidos = [];
     subscriptions.push(canalB.escuchar(empresa.id, 'PRUEBA').subscribe(e => pedidos.push(e)));
     await canalA.publicar(empresa.id, 'PRUEBA', { pedidoId: cobrada.id }, 10000);

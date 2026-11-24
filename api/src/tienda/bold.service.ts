@@ -270,10 +270,25 @@ export class BoldService {
   async validarRechazo(p: any, tx: any) {
     if (p.metodoPago !== 'TARJETA') return;
     const r = await this.registro(p, tx);
-    if (r && !['ANULADO'].includes(r.estado))
+    if (
+      r &&
+      !['PENDIENTE', 'RECHAZADO', 'ANULADO', 'CANCELADO'].includes(r.estado)
+    )
       throw new ConflictException(
-        'Este pedido tiene un intento de pago Bold. Revisa o anula el cobro en Bold antes de rechazarlo; no se hacen devoluciones automáticas.',
+        'Bold confirmó un pago o requiere revisión. Gestiona la devolución o anulación en Bold antes de cancelar este pedido; no se devuelven fondos automáticamente.',
       );
+    if (r && ['PENDIENTE', 'RECHAZADO'].includes(r.estado))
+      await this.db(tx).boldRegistro.update({
+        where: { id: r.id },
+        data: {
+          estado: 'CANCELADO',
+          datos: {
+            ...r.datos,
+            canceladoEn: new Date().toISOString(),
+            motivoCancelacion: 'Pedido cancelado antes de confirmar el pago',
+          },
+        },
+      });
   }
   async pagos(a: Scope) {
     await this.preparar();
@@ -385,11 +400,13 @@ export class BoldService {
             });
           if (
             (datos.paymentId && datos.paymentId !== d.payment_id) ||
-            estado === 'ANULADO'
+            ['ANULADO', 'CANCELADO'].includes(estado)
           )
             estado = 'REVISION';
           else if (['PENDIENTE', 'RECHAZADO'].includes(estado)) {
             estado = 'APROBADO';
+          }
+          if (!datos.paymentId) {
             datos = {
               ...datos,
               paymentId: d.payment_id,
@@ -402,7 +419,10 @@ export class BoldService {
         else if (event.type === 'VOID_APPROVED') {
           if (datos.paymentId && datos.paymentId !== d.payment_id)
             estado = 'REVISION';
-          else estado = estado === 'APLICADO' ? 'REVISION' : 'ANULADO';
+          else
+            estado = ['APLICADO', 'REVISION'].includes(estado)
+              ? 'REVISION'
+              : 'ANULADO';
         }
         await tx.boldRegistro.create({
           data: {

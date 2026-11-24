@@ -83,13 +83,14 @@ export function BoldCheckout({
     };
   }, [slug, pedidoId, clave, intento]);
   return (
-    <section aria-label="Pago seguro con Bold">
+    <section className="bold-checkout" aria-label="Pago seguro con Bold">
+      <h4>Pago en línea</h4>
       <p>
         Paga de forma segura con Bold. Confirmaremos el pago cuando Bold nos
         notifique; puede tardar unos minutos.
       </p>
       {cargando && <p role="status">Preparando pago seguro…</p>}
-      <div ref={root} />
+      <div className="bold-button-slot" ref={root} />
       {error && (
         <div role="alert">
           <p>{error}</p>
@@ -98,7 +99,7 @@ export function BoldCheckout({
           </button>
         </div>
       )}
-      <p>Si ya pagaste, espera la confirmación antes de volver a pagar.</p>
+      <p className="web-order-help">Si ya pagaste, espera la confirmación antes de volver a pagar.</p>
     </section>
   );
 }
