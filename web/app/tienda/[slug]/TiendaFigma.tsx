@@ -538,7 +538,7 @@ function App({
       <div ref={panelRef} className="figma-store app-shell" style={style}>
         <div className="announcement">
           {tienda.nombre} <span />{" "}
-          <HorarioTienda horarios={t.horarios} anterior={t.horario} compacto href={rutas.contacto} />
+          <HorarioTienda horarios={t.horarios} anterior={t.horario} compacto href={`${rutas.contacto}#horarios`} />
         </div>
         <header className="site-header">
           <div className="nav-wrap">

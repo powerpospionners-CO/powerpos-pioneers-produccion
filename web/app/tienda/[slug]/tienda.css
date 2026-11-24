@@ -2330,7 +2330,7 @@
 .figma-store .hours-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
 .figma-store .hours-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .figma-store .announcement .is-open { color: #a7f3c6; }
-.figma-store .hours-card { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); margin-top: 32px; border: 1px solid var(--line); border-radius: 26px; overflow: hidden; background: white; }
+.figma-store .hours-card { scroll-margin-top: 150px; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); margin-top: 32px; border: 1px solid var(--line); border-radius: 26px; overflow: hidden; background: white; }
 .figma-store .hours-intro { padding: clamp(24px, 4vw, 48px); background: var(--cream); min-width: 0; }
 .figma-store .hours-icon { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 18px; background: var(--orange); color: var(--brand-on); margin-bottom: 28px; }
 .figma-store .hours-intro h2 { font-size: clamp(28px, 3.2vw, 46px); line-height: 1.15; letter-spacing: -.04em; margin: 20px 0 28px; overflow-wrap: anywhere; }
