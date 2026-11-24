@@ -16,7 +16,7 @@ import {
   totalesNomina,
 } from './nomina-bancaria';
 import { claveCargo } from './perfiles-cargo';
-import { enlacePolitica } from './documentos-empresa.service';
+import { enlacePolitica, pdfPolitica } from './documentos-empresa.service';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import {
   centavos,
@@ -827,21 +827,41 @@ export class PersonalService {
       throw new ServiceUnavailableException(
         'Configura una dirección HTTPS válida para Personal',
       );
+    const adjuntos: { filename: string; content: Buffer }[] = [];
+    if (doc.tipo === 'PAGO')
+      adjuntos.push({
+        filename: 'comprobante-pago.pdf',
+        content: await this.original(a, id),
+      });
+    if (politicaCompleta) {
+      const contenido = politicaCompleta.datos.archivoId
+        ? Buffer.from(
+            (
+              await this.store.obtener(
+                a,
+                politicaCompleta.datos.archivoId,
+                'ARCHIVO',
+              )
+            ).datos.contenido,
+            'base64',
+          )
+        : await pdfPolitica(politicaCompleta.datos, politicaCompleta.estado);
+      adjuntos.push({
+        filename: 'politica-tratamiento-datos.pdf',
+        content: contenido,
+      });
+    }
+    const avisoPolitica = politicaCompleta
+      ? `También recibirás adjunta la política de tratamiento de datos de tu empleador: ${politicaCompleta.datos.nombre}, versión ${politicaCompleta.datos.versionEtiqueta}. Puedes consultarla nuevamente dentro del enlace y confirmar que la has leído.`
+      : `Dentro del enlace encontrarás el aviso de privacidad y el acceso a la política completa de tu empleador: ${config.enlacePolitica}. Podrás confirmar su lectura.`;
     try {
       await this.enviar(
         empleado.datos.email,
         doc.tipo === 'PAGO'
           ? 'Comprobante de pago de nómina para revisar'
-          : 'Documento laboral para revisar',
-        `Tienes un documento de tu empleador para revisar. Nadie debe firmar por ti. Abre ${base}/personal/firma#empresa=${a.empresaId}&sede=${a.sucursalId}&token=${token}\nEl enlace vence en 7 días. No compartas los códigos. Puedes pedir una copia en papel sin firmar electrónicamente.`,
-        doc.tipo === 'PAGO'
-          ? [
-              {
-                filename: 'comprobante-pago.pdf',
-                content: await this.original(a, id),
-              },
-            ]
-          : undefined,
+          : 'Contrato y política de privacidad para revisar',
+        `Tienes un documento de tu empleador para revisar. ${avisoPolitica} Nadie debe firmar por ti. Abre ${base}/personal/firma#empresa=${a.empresaId}&sede=${a.sucursalId}&token=${token}\nEl enlace vence en 7 días. No compartas los códigos. Puedes pedir una copia en papel sin firmar electrónicamente.`,
+        adjuntos.length ? adjuntos : undefined,
       );
     } catch (error) {
       await this.store.actualizar(
@@ -1046,6 +1066,12 @@ export class PersonalService {
             ? 'He revisado los conceptos y confirmo que recibí únicamente el importe de este abono. No renuncio a reclamar diferencias.'
             : ACEPTACION,
         politica: i.datos.politica,
+        lecturaPolitica: {
+          confirmada: true,
+          fecha: new Date().toISOString(),
+          declaracion:
+            'Confirmo que he leído el aviso y la política de privacidad de mi empleador y conozco el canal para ejercer mis derechos.',
+        },
         copiaCorreo: true,
         ...(d.reclamo
           ? { reclamo: texto(d.reclamo, 'diferencia o reclamación', 3000) }

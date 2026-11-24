@@ -354,8 +354,8 @@ export default function FirmaLaboral() {
                     checked={politica}
                     onChange={(e) => setPolitica(e.target.checked)}
                   />
-                  He leído el aviso de privacidad y conozco el canal de
-                  atención.
+                  Confirmo que he leído el aviso y la política de privacidad de
+                  mi empleador y conozco el canal para ejercer mis derechos.
                 </label>
                 <label className="flex gap-3">
                   <input
