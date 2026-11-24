@@ -1283,6 +1283,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
               onClick={() => {
                 setCartOpen(true);
                 setToast("");
+                setCheckout(false);
               }}
             >
               Ver carrito
