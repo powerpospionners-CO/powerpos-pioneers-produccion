@@ -577,6 +577,7 @@ export class PersonalService {
         'ARCHIVO',
         tx,
       );
+    await this.validarPdfIndividual(a, p, archivo.datos.sha256, tx);
     if (p.estado !== 'REVISADA' || d.revisado !== true)
       throw new BadRequestException(
         'Requiere revisión jurídica del contrato completo',
@@ -656,6 +657,25 @@ export class PersonalService {
     );
     return r;
   }
+  private async validarPdfIndividual(
+    a: ActorPersonal,
+    plantilla: any,
+    documentoHash: string,
+    tx?: any,
+  ) {
+    // El editor crea una referencia interna a su borrador revisado y ya individualizado.
+    if (plantilla.referenciaId) return;
+    const original = await this.store.obtener(
+      a,
+      plantilla.datos.archivoId,
+      'ARCHIVO',
+      tx,
+    );
+    if (original.datos.sha256 === documentoHash)
+      throw new BadRequestException(
+        'Este PDF es la misma plantilla sin individualizar. Genera el contrato con el empleado desde el editor o carga un PDF completo con sus datos; seleccionar al empleado no rellena un PDF externo.',
+      );
+  }
   async firmarEmpleador(a: ActorPersonal, id: string, d: any) {
     const usuario = await this.store.prisma.usuario.findFirst({
       where: { id: a.id, empresaId: a.empresaId },
@@ -687,6 +707,18 @@ export class PersonalService {
         throw new BadRequestException(
           'El contrato ya fue firmado por el empleador',
         );
+      const plantilla = await this.store.obtener(
+        a,
+        doc.datos.plantillaId,
+        'PLANTILLA',
+        tx,
+      );
+      await this.validarPdfIndividual(
+        a,
+        plantilla,
+        doc.datos.documentoHash,
+        tx,
+      );
       const firma = {
         documentoHash: doc.datos.documentoHash,
         nombre,
