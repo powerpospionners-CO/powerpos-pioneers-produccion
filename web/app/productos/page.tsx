@@ -2,6 +2,7 @@
 import { useNotificar } from '@/components/Notificaciones';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { guardarConImagen } from '@/lib/guardarConImagen';
 import api from '@/lib/api';
 import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
@@ -257,7 +258,7 @@ function SeccionPresentaciones({ producto, onCambio }: { producto: Producto; onC
           ))}
         </div>
       )}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
       <div className="grid grid-cols-2 gap-2">
         <input value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre (ej. Tarro)" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
         <input type="number" min="1" step="1" value={nuevo.factorUnidades} onChange={(e) => setNuevo({ ...nuevo, factorUnidades: e.target.value })} placeholder="Unidades que trae" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
@@ -332,7 +333,7 @@ function SeccionComboComponentes({ producto, productosDisponibles, onCambio }: {
           {costoSugerido > 0 && <p className="text-xs text-gray-500">Costo sugerido de la canasta (suma de componentes): ${costoSugerido.toLocaleString()}</p>}
         </div>
       )}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
       <div className="grid grid-cols-2 gap-2">
         {!editandoId && (
           <select value={productoIdNuevo} onChange={(e) => setProductoIdNuevo(e.target.value)} className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white">
@@ -415,7 +416,7 @@ function SeccionLotes({ productoId }: { productoId: number }) {
           })}
         </div>
       )}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
       <div className="grid grid-cols-3 gap-2">
         <input type="number" min="1" step="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Cantidad recibida" className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
         <input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white" />
@@ -733,6 +734,7 @@ export default function ProductosPage() {
   const guardar = async () => {
     if (!form.nombre || !form.precio || !form.categoriaId) return;
     setLoading(true);
+    let registroGuardado = false;
     try {
       const ingredientesPayload = recetaTemp
         .filter((r) => r.cantidad)
@@ -773,22 +775,23 @@ export default function ProductosPage() {
         payload.ingredientes = ingredientesPayload;
       }
 
-      const { data: productoGuardado } = editando
-        ? await api.patch(`/productos/${editando.id}`, payload)
-        : await api.post('/productos', payload);
-
-      if (archivoImagenProducto) {
-        const formDataImagen = new FormData();
-        formDataImagen.append('imagen', archivoImagenProducto);
-        await api.post(`/productos/${productoGuardado.id}/imagen`, formDataImagen, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      }
+      await guardarConImagen({
+        guardar: async () => (editando
+          ? await api.patch(`/productos/${editando.id}`, payload)
+          : await api.post('/productos', payload)).data,
+        recordar: registro => { setEditando(registro); registroGuardado = true; },
+        subirImagen: archivoImagenProducto ? async registro => {
+          const archivo = new FormData(); archivo.append('imagen', archivoImagenProducto);
+          await api.post(`/productos/${registro.id}/imagen`, archivo, { headers: { 'Content-Type': 'multipart/form-data' } });
+        } : undefined,
+      });
 
       setModal(false);
       cargarDatos();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      aviso(registroGuardado
+        ? `El producto se guardó, pero su imagen no se pudo cargar. Puedes reintentar sobre este mismo producto. ${e?.response?.data?.message || ''}`
+        : e?.response?.data?.message || 'No se pudo guardar el producto. Revisa los datos e inténtalo de nuevo.', 'error');
     } finally {
       setLoading(false);
     }

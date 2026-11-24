@@ -1,4 +1,5 @@
 "use client";
+import { useNotificar } from "@/components/Notificaciones";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import axios from "axios";
@@ -42,6 +43,8 @@ export default function GastosRecurrentes({
   administrador: boolean;
   alGenerar: () => Promise<void>;
 }) {
+  const { solicitar } = useNotificar();
+
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [periodo, setPeriodo] = useState(mesActual);
   const [ocupado, setOcupado] = useState(false);
@@ -205,6 +208,7 @@ export default function GastosRecurrentes({
               <div className="flex flex-wrap gap-3">
                 {gasto.activo && (
                   <button
+                    type="button"
                     disabled={ocupado || !periodo}
                     className={boton}
                     onClick={() =>
@@ -226,10 +230,11 @@ export default function GastosRecurrentes({
                   </button>
                 )}
                 <button
+                  type="button"
                   disabled={ocupado}
                   className="text-orange-300"
-                  onClick={() => {
-                    const monto = window.prompt(
+                  onClick={async () => {
+                    const monto = await solicitar(
                       "Nuevo valor mensual. Solo afecta meses que aún no se hayan generado.",
                       gasto.monto,
                     );
@@ -248,6 +253,7 @@ export default function GastosRecurrentes({
                   Cambiar valor
                 </button>
                 <button
+                  type="button"
                   disabled={ocupado}
                   className="text-gray-300"
                   onClick={() =>

@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import AlertaSistema from "@/components/AlertaSistema";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
@@ -383,16 +384,8 @@ function Contenido() {
             </p>
           ) : (
             <>
-              {error && (
-                <p role="alert" className="rounded-lg bg-red-950 p-4">
-                  {error}
-                </p>
-              )}
-              {mensaje && (
-                <p role="status" className="rounded-lg bg-green-950 p-4">
-                  {mensaje}
-                </p>
-              )}
+              {error && <AlertaSistema tipo="error">{error}</AlertaSistema>}
+              {mensaje && <AlertaSistema tipo="exito">{mensaje}</AlertaSistema>}
               {data && (
                 <>
                   <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-4 text-sm">
@@ -420,6 +413,7 @@ function Contenido() {
                       ["plantillas", "Plantillas y políticas"],
                     ].map(([v, l]) => (
                       <button
+                        type="button"
                         key={v}
                         className={
                           tab === v
@@ -453,6 +447,7 @@ function Contenido() {
                         Vincula el aviso resumido con la política completa.
                         Puedes crearla o cargarla en{" "}
                         <button
+                          type="button"
                           className="text-orange-300 underline"
                           onClick={() => setTab("plantillas")}
                         >
@@ -463,6 +458,7 @@ function Contenido() {
                       </p>
                       {data.config?.politicaId && (
                         <button
+                          type="button"
                           className="text-orange-300 underline"
                           onClick={() =>
                             void ejecutar(async () => {
@@ -599,6 +595,7 @@ function Contenido() {
                               {e.datos.email} · {money(e.datos.salarioCentavos)}
                             </p>
                             <button
+                              type="button"
                               className="mt-2 text-orange-400 underline"
                               onClick={() => setEditar(e)}
                             >
@@ -607,7 +604,7 @@ function Contenido() {
                           </article>
                         ))}
                         {editar && (
-                          <button onClick={() => setEditar(null)}>
+                          <button type="button" onClick={() => setEditar(null)}>
                             Cancelar edición
                           </button>
                         )}
@@ -729,6 +726,7 @@ function Contenido() {
                                 </label>
                               )}
                               <button
+                                type="button"
                                 className="text-red-300"
                                 onClick={() =>
                                   setConceptos((cs) =>
@@ -741,6 +739,7 @@ function Contenido() {
                             </div>
                           ))}
                           <button
+                            type="button"
                             className={boton}
                             onClick={() =>
                               setConceptos((cs) => [
@@ -910,6 +909,7 @@ function Contenido() {
                                   {p.datos.revisadaPor} · {p.datos.revisadaEn}
                                 </p>
                                 <button
+                                  type="button"
                                   className="text-orange-400 underline"
                                   onClick={() =>
                                     void ejecutar(() =>
@@ -1063,6 +1063,7 @@ function Contenido() {
                           </div>
                           <div className="flex flex-wrap gap-3 text-sm">
                             <button
+                              type="button"
                               disabled={ocupado}
                               onClick={() =>
                                 void ejecutar(() =>
@@ -1073,6 +1074,7 @@ function Contenido() {
                               Leer PDF
                             </button>
                             <button
+                              type="button"
                               disabled={ocupado}
                               onClick={() =>
                                 void ejecutar(() => descargar(r.id))
@@ -1081,6 +1083,7 @@ function Contenido() {
                               Descargar evidencias
                             </button>
                             <button
+                              type="button"
                               disabled={ocupado}
                               onClick={() =>
                                 void ejecutar(async () =>
@@ -1098,6 +1101,7 @@ function Contenido() {
                             </button>
                             {r.estado === "PENDIENTE_EMPLEADOR" && (
                               <button
+                                type="button"
                                 className="text-orange-400"
                                 onClick={() => setAccion(r)}
                               >
@@ -1109,6 +1113,7 @@ function Contenido() {
                               "PENDIENTE_EMPLEADO",
                             ].includes(r.estado) && (
                               <button
+                                type="button"
                                 className="text-orange-400"
                                 disabled={ocupado}
                                 onClick={() =>
@@ -1127,6 +1132,7 @@ function Contenido() {
                               "EN_REVISION",
                             ].includes(r.estado) && (
                               <button
+                                type="button"
                                 disabled={ocupado}
                                 onClick={() =>
                                   void ejecutar(

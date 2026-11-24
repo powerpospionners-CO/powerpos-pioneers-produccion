@@ -182,3 +182,28 @@ textarea {
 .pos-trailer-grande textarea { min-height: 96px; }
 .pos-trailer-grande :is(button, label) > svg { flex-shrink: 0; }
 .pos-trailer-grande .rounded-full.w-5.h-5 { width: 30px; height: 30px; }
+
+/* Estados comunes de acciones; los enlaces de navegación conservan su semántica. */
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #fb923c;
+  outline-offset: 3px;
+}
+button.underline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid #4b5563;
+  border-radius: 0.5rem;
+  background-color: #1f2937;
+  text-decoration: none;
+}
+button.underline:hover:not(:disabled) { background-color: #374151; }
+button.underline:disabled { opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) {
+  .fade-in-up { animation: none; }
+}

@@ -1,6 +1,7 @@
 'use client';
 import { useNotificar } from '@/components/Notificaciones';
 import { useEffect, useState } from 'react';
+import { guardarConImagen } from '@/lib/guardarConImagen';
 import api from '@/lib/api';
 import {
   Plus, Edit, Trash2, X, FileSpreadsheet, Upload, Download, FileText, ExternalLink, Image as ImageIcon, Search, Images, DollarSign, Eye, EyeOff,
@@ -137,6 +138,7 @@ export default function CatalogoPage() {
   const guardar = async () => {
     if (!form.nombre) return;
     setLoading(true);
+    let registroGuardado = false;
     try {
       const payload = {
         nombre: form.nombre,
@@ -146,21 +148,21 @@ export default function CatalogoPage() {
         descripcion: form.descripcion || null,
         ...(esEnchilaMarket ? { origen: form.origen || null, usos: form.usos } : {}),
       };
-      const { data: guardado } = editando
-        ? await api.patch(`/catalogo/${editando.id}`, payload)
-        : await api.post('/catalogo', payload);
+      await guardarConImagen({
+        guardar: async () => (editando
+          ? await api.patch(`/catalogo/${editando.id}`, payload)
+          : await api.post('/catalogo', payload)).data,
+        recordar: registro => { setEditando(registro); registroGuardado = true; },
+        subirImagen: archivoImagen ? async registro => {
+          const archivo = new FormData(); archivo.append('imagen', archivoImagen);
+          await api.post(`/catalogo/${registro.id}/imagen`, archivo, { headers: { 'Content-Type': 'multipart/form-data' } });
+        } : undefined,
+      });
 
-      if (archivoImagen) {
-        const formData = new FormData();
-        formData.append('imagen', archivoImagen);
-        await api.post(`/catalogo/${guardado.id}/imagen`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      }
       setModal(false);
       cargarDatos();
     } catch (e: any) {
-      aviso(e?.response?.data?.message || 'No se pudo guardar el producto del catálogo', 'error');
+      aviso(registroGuardado ? `El producto del catálogo se guardó, pero no se pudo cargar su imagen. Puedes reintentar sobre el mismo registro. ${e?.response?.data?.message || ''}` : e?.response?.data?.message || 'No se pudo guardar el producto del catálogo', 'error');
     } finally {
       setLoading(false);
     }

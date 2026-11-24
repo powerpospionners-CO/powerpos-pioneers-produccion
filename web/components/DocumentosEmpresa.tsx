@@ -1,4 +1,5 @@
 "use client";
+import { useNotificar } from "@/components/Notificaciones";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 
@@ -85,6 +86,8 @@ export default function DocumentosEmpresa({
   onCambio: () => Promise<void>;
   onUsarAviso: (r: Registro) => void;
 }) {
+  const { confirmar } = useNotificar();
+
   const [data, setData] = useState<{
     documentos: Registro[];
     entregas: Registro[];
@@ -149,10 +152,10 @@ export default function DocumentosEmpresa({
     setTimeout(() => URL.revokeObjectURL(u), 30000);
   }
   const cambiar = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
-  function cargarGuia() {
+  async function cargarGuia() {
     if (
       form.contenido &&
-      !window.confirm("¿Sustituir el contenido por la guía editable?")
+      !(await confirmar("¿Sustituir el contenido por la guía editable?"))
     )
       return;
     let contenido =
@@ -416,6 +419,7 @@ export default function DocumentosEmpresa({
             </p>
             <div className="flex flex-wrap gap-3">
               <button
+                type="button"
                 disabled={busy}
                 className="underline"
                 onClick={() => void run(() => descargar(r.id))}
@@ -423,6 +427,7 @@ export default function DocumentosEmpresa({
                 Descargar documento
               </button>
               <button
+                type="button"
                 disabled={busy}
                 className="underline"
                 onClick={() => {
@@ -458,6 +463,7 @@ export default function DocumentosEmpresa({
               </button>
               {r.datos.tipo === "POLITICA" && r.estado === "BORRADOR" && (
                 <button
+                  type="button"
                   className="text-orange-300 underline"
                   onClick={() => {
                     setSeleccion(r.id);
@@ -471,6 +477,7 @@ export default function DocumentosEmpresa({
             </div>
             {r.datos.tipo === "AVISO" && r.datos.contenido && (
               <button
+                type="button"
                 className="text-orange-300 underline"
                 onClick={() => onUsarAviso(r)}
               >
@@ -479,6 +486,7 @@ export default function DocumentosEmpresa({
             )}
             {r.datos.publicada === true && (
               <button
+                type="button"
                 disabled={busy}
                 className="block underline text-red-300"
                 onClick={() =>

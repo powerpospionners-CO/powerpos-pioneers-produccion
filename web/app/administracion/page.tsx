@@ -1,4 +1,5 @@
 "use client";
+import { useNotificar } from "@/components/Notificaciones";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
@@ -82,6 +83,7 @@ const boton =
 const panel = "rounded-xl border border-gray-800 bg-gray-900/50 p-4 space-y-3";
 
 function Controles() {
+  const { solicitar } = useNotificar();
   const usuario = useAuthStore((state) => state.usuario);
   const permitido =
     ["ADMIN_EMPRESA", "GERENTE"].includes(usuario?.rol || "") &&
@@ -283,6 +285,7 @@ function Controles() {
                 ] as [Tab, string][]
               ).map(([valor, etiqueta]) => (
                 <button
+                  type="button"
                   key={valor}
                   onClick={() => {
                     setTab(valor);
@@ -374,6 +377,7 @@ function Controles() {
                         {p.email} {p.telefono}
                       </p>
                       <button
+                        type="button"
                         disabled={ocupado}
                         className="text-orange-400"
                         onClick={() =>
@@ -510,6 +514,7 @@ function Controles() {
                       </p>
                       {!c.anulada && Number(c.saldo) > 0 && (
                         <button
+                          type="button"
                           disabled={ocupado}
                           className={boton}
                           onClick={() => {
@@ -526,10 +531,11 @@ function Controles() {
                         !c.abonos.length &&
                         usuario?.rol === "ADMIN_EMPRESA" && (
                           <button
+                            type="button"
                             disabled={ocupado}
                             className="ml-3 text-red-300"
-                            onClick={() => {
-                              const motivo = window.prompt(
+                            onClick={async () => {
+                              const motivo = await solicitar(
                                 "Motivo de anulación de esta cuenta",
                               );
                               if (motivo)
@@ -600,6 +606,7 @@ function Controles() {
                     />
                   </label>
                   <button
+                    type="button"
                     disabled={ocupado}
                     onClick={() => void cargarMovimientos()}
                     className={boton}
@@ -625,16 +632,18 @@ function Controles() {
                       </p>
                     ) : (
                       <button
+                        type="button"
                         disabled={ocupado}
                         className={boton}
-                        onClick={() => {
-                          const referencia = window.prompt(
+                        onClick={async () => {
+                          const referencia = await solicitar(
                             "Referencia del movimiento en el extracto bancario",
                           );
                           if (!referencia) return;
-                          const fechaBanco = window.prompt(
-                            "Fecha del banco (AAAA-MM-DD)",
+                          const fechaBanco = await solicitar(
+                            "Fecha del banco",
                             dia(),
+                            { tipo: "date" },
                           );
                           if (!fechaBanco) return;
                           void ejecutar(async () => {
@@ -691,6 +700,7 @@ function Controles() {
                     />
                   </label>
                   <button
+                    type="button"
                     disabled={ocupado}
                     onClick={() => void cargarPresupuestos()}
                     className={boton}
@@ -713,10 +723,11 @@ function Controles() {
                     </div>
                     {usuario?.rol === "ADMIN_EMPRESA" && (
                       <button
+                        type="button"
                         disabled={ocupado}
                         className={boton}
-                        onClick={() => {
-                          const monto = window.prompt(
+                        onClick={async () => {
+                          const monto = await solicitar(
                             "Presupuesto del mes (hasta dos decimales, usa punto decimal)",
                             p.presupuesto,
                           );

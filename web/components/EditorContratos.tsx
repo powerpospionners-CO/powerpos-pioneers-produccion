@@ -1,4 +1,5 @@
 "use client";
+import { useNotificar } from "@/components/Notificaciones";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import ContratosAutomaticos from "@/components/ContratosAutomaticos";
 import api from "@/lib/api";
@@ -88,6 +89,8 @@ export default function EditorContratos({
   empleados: Registro[];
   onEmitido: () => Promise<void>;
 }) {
+  const { confirmar } = useNotificar();
+
   const [data, setData] = useState<any>(null),
     [form, setForm] = useState<Record<string, string>>({ ...inicial }),
     [actual, setActual] = useState<Registro | null>(null),
@@ -151,12 +154,12 @@ export default function EditorContratos({
       setBusy(false);
     }
   }
-  function elegir(r: Registro | null) {
+  async function elegir(r: Registro | null) {
     if (
       dirty &&
-      !window.confirm(
+      !(await confirmar(
         "Hay cambios sin guardar. ¿Quieres descartarlos para cambiar de borrador?",
-      )
+      ))
     )
       return;
     setActual(r);
@@ -313,7 +316,7 @@ export default function EditorContratos({
           bloquear={busy || dirty}
           onCambio={cargar}
           onPreparado={async (r) => {
-            elegir(r);
+            await elegir(r);
             await cargar();
           }}
         />
@@ -366,7 +369,12 @@ export default function EditorContratos({
             ))}
           </select>
         </label>
-        <button className={button} disabled={busy} onClick={() => elegir(null)}>
+        <button
+          type="button"
+          className={button}
+          disabled={busy}
+          onClick={() => elegir(null)}
+        >
           Nuevo borrador
         </button>
       </div>
@@ -497,15 +505,15 @@ export default function EditorContratos({
               <select
                 className={input}
                 value={modeloId}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const m = data?.modelos.find(
                     (r: Registro) => r.id === e.target.value,
                   );
                   if (
                     m &&
-                    window.confirm(
+                    (await confirmar(
                       "¿Sustituir las cláusulas y anexos actuales por los de este modelo?",
-                    )
+                    ))
                   ) {
                     setModeloId(m.id);
                     setClausulas(
@@ -583,6 +591,7 @@ export default function EditorContratos({
       {actual && (
         <div className="flex flex-wrap gap-4 text-sm">
           <button
+            type="button"
             disabled={busy || dirty}
             className="text-orange-300 underline disabled:opacity-40"
             onClick={() => void run(() => descargar(actual.id))}
@@ -591,6 +600,7 @@ export default function EditorContratos({
           </button>
           {actual.datos.revision && (
             <button
+              type="button"
               disabled={busy || dirty}
               className="text-orange-300 underline disabled:opacity-40"
               onClick={() => void run(() => descargar(actual.id, "revisado"))}
@@ -599,6 +609,7 @@ export default function EditorContratos({
             </button>
           )}
           <button
+            type="button"
             disabled={busy}
             className="text-orange-300 underline"
             onClick={() =>
@@ -713,6 +724,7 @@ export default function EditorContratos({
               su contenido.
             </label>
             <button
+              type="button"
               className={button}
               disabled={
                 busy || dirty || actual.estado !== "REVISADO" || !aceptaEmitir
@@ -754,6 +766,7 @@ export default function EditorContratos({
               {r.datos.contenido.fechaElaboracion}. La información de esa
               versión permanece protegida en el expediente.
               <button
+                type="button"
                 className="ml-3 text-orange-300 underline"
                 disabled={busy}
                 onClick={() =>

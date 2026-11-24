@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import AlertaSistema from "@/components/AlertaSistema";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
@@ -12,12 +13,14 @@ import CoberturaEntrega from "./CoberturaEntrega";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
-const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "powerpospioneers.com";
+const ROOT_DOMAIN =
+  process.env.NEXT_PUBLIC_ROOT_DOMAIN || "powerpospioneers.com";
 export default function MiTienda() {
   const { usuario } = useAuthStore();
   const [config, setConfig] = useState<any>(null),
     [sucursales, setSucursales] = useState<any[]>([]),
     [mensaje, setMensaje] = useState(""),
+    [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [origin, setOrigin] = useState(""),
     [esProduccion, setEsProduccion] = useState(false);
@@ -34,7 +37,7 @@ export default function MiTienda() {
         setSucursales(s.data);
       })
       .catch((e) =>
-        setMensaje(
+        setError(
           e.response?.data?.message || "No fue posible cargar la tienda",
         ),
       );
@@ -44,25 +47,68 @@ export default function MiTienda() {
   async function subirLogo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setBusy(true); setMensaje('Analizando los colores del logo…');
+    setBusy(true);
+    setError("");
+    setMensaje("Analizando los colores del logo…");
     try {
-      const form = new FormData(); form.append('logo', file);
-      const { data } = await api.post('/empresa/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setConfig((c: any) => ({ ...c, tienda: { ...c.tienda, paletaLogo: data.paleta, ...(c.tienda.coloresAutomaticos !== false ? { color: data.paleta.principal } : {}) } }));
-      setMensaje('Logo guardado. Sus colores ya están disponibles en tu tienda.');
-    } catch (error: any) { setMensaje(error.response?.data?.message || 'No se pudo analizar el logo'); }
-    finally { setBusy(false); e.target.value = ''; }
+      const form = new FormData();
+      form.append("logo", file);
+      const { data } = await api.post("/empresa/logo", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setConfig((c: any) => ({
+        ...c,
+        tienda: {
+          ...c.tienda,
+          paletaLogo: data.paleta,
+          ...(c.tienda.coloresAutomaticos !== false
+            ? { color: data.paleta.principal }
+            : {}),
+        },
+      }));
+      setMensaje(
+        "Logo guardado. Sus colores ya están disponibles en tu tienda.",
+      );
+    } catch (error: any) {
+      setMensaje("");
+      setError(
+        error.response?.data?.message || "No se pudo analizar el logo",
+      );
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
   }
   async function subirPortada(e: React.ChangeEvent<HTMLInputElement>) {
-    const file=e.target.files?.[0];if(!file)return;
-    setBusy(true);setMensaje('Subiendo imagen de portada…');
-    try {const form=new FormData();form.append('imagen',file);const {data}=await api.post('/empresa/anuncios/imagen',form,{headers:{'Content-Type':'multipart/form-data'}});cambiar('portada',data.imagen);setMensaje('Portada cargada. Guarda los cambios para publicarla en tu tienda.');}
-    catch(error:any){setMensaje(error.response?.data?.message||'No se pudo subir la portada');}
-    finally{setBusy(false);e.target.value='';}
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    setMensaje("Subiendo imagen de portada…");
+    try {
+      const form = new FormData();
+      form.append("imagen", file);
+      const { data } = await api.post("/empresa/anuncios/imagen", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      cambiar("portada", data.imagen);
+      setMensaje(
+        "Portada cargada. Guarda los cambios para publicarla en tu tienda.",
+      );
+    } catch (error: any) {
+      setMensaje("");
+      setError(
+        error.response?.data?.message || "No se pudo subir la portada",
+      );
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
   }
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setError("");
     setMensaje("");
     try {
       const { data } = await api.patch("/tienda-admin/configuracion", {
@@ -72,7 +118,7 @@ export default function MiTienda() {
       setConfig(data);
       setMensaje("Cambios guardados. La tienda ya usa esta información.");
     } catch (e: any) {
-      setMensaje(e.response?.data?.message || "No fue posible guardar");
+      setError(e.response?.data?.message || "No fue posible guardar");
     } finally {
       setBusy(false);
     }
@@ -86,13 +132,11 @@ export default function MiTienda() {
           <p className="my-3 text-gray-400">
             Tu marca, tus productos y tus pedidos, conectados con PowerPOS.
           </p>
+          {error && <AlertaSistema tipo="error">{error}</AlertaSistema>}
           {mensaje && (
-            <p
-              role="status"
-              className="my-4 rounded-lg border border-gray-600 p-4"
-            >
+            <AlertaSistema tipo={busy ? "info" : "exito"}>
               {mensaje}
-            </p>
+            </AlertaSistema>
           )}
           {usuario?.rol !== "ADMIN_EMPRESA" ? (
             <p>
@@ -150,11 +194,66 @@ export default function MiTienda() {
                   </section>
                   <section className={card}>
                     <h2 className="text-xl font-bold">Diseño e información</h2>
-                    <p className="text-sm text-gray-400">Todas las tiendas conservan la misma plantilla. Aquí personalizas sus textos, imágenes y colores.</p>
-                    <label className="block">Imagen de portada<input className={input} type="file" accept="image/png,image/jpeg,image/webp" onChange={subirPortada}/><span className="text-sm text-gray-400">Usa una fotografía horizontal con espacio libre a la izquierda para el título. Máximo 8 MB.</span></label>
-                    <label className="block">Logo de tu empresa<input className={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={subirLogo} /><span className="text-sm text-gray-400">Sube tu logo para obtener los colores de tu marca. Máximo 8 MB.</span></label>
-                    <label className="flex items-center gap-3"><input type="checkbox" checked={config.tienda.coloresAutomaticos !== false} onChange={e => { cambiar('coloresAutomaticos', e.target.checked); if (e.target.checked && config.tienda.paletaLogo) cambiar('color', config.tienda.paletaLogo.principal); }} />Usar automáticamente los colores de mi logo</label>
-                    {config.tienda.paletaLogo && <div className="flex gap-3">{Object.values(config.tienda.paletaLogo as Record<string, string>).map((color, i) => <span key={i} className="rounded-lg border border-gray-600 px-4 py-2" style={{borderLeft:`20px solid ${color}`}}>{color}</span>)}</div>}
+                    <p className="text-sm text-gray-400">
+                      Todas las tiendas conservan la misma plantilla. Aquí
+                      personalizas sus textos, imágenes y colores.
+                    </p>
+                    <label className="block">
+                      Imagen de portada
+                      <input
+                        className={input}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={subirPortada}
+                      />
+                      <span className="text-sm text-gray-400">
+                        Usa una fotografía horizontal con espacio libre a la
+                        izquierda para el título. Máximo 8 MB.
+                      </span>
+                    </label>
+                    <label className="block">
+                      Logo de tu empresa
+                      <input
+                        className={input}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        onChange={subirLogo}
+                      />
+                      <span className="text-sm text-gray-400">
+                        Sube tu logo para obtener los colores de tu marca.
+                        Máximo 8 MB.
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={config.tienda.coloresAutomaticos !== false}
+                        onChange={(e) => {
+                          cambiar("coloresAutomaticos", e.target.checked);
+                          if (e.target.checked && config.tienda.paletaLogo)
+                            cambiar(
+                              "color",
+                              config.tienda.paletaLogo.principal,
+                            );
+                        }}
+                      />
+                      Usar automáticamente los colores de mi logo
+                    </label>
+                    {config.tienda.paletaLogo && (
+                      <div className="flex gap-3">
+                        {Object.values(
+                          config.tienda.paletaLogo as Record<string, string>,
+                        ).map((color, i) => (
+                          <span
+                            key={i}
+                            className="rounded-lg border border-gray-600 px-4 py-2"
+                            style={{ borderLeft: `20px solid ${color}` }}
+                          >
+                            {color}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-gray-400">
                       El nombre, logo y contacto se toman de{" "}
                       <a
@@ -171,9 +270,18 @@ export default function MiTienda() {
                       ["portadaEtiqueta", "Etiqueta sobre la portada"],
                       ["portadaTexto", "Texto sobre la portada"],
                       ["descripcion", "Descripción del negocio"],
-                      ["sobreNosotros", "Sobre nosotros (historia, qué los hace diferentes, etc.)"],
-                      ["pagos", "Medios y condiciones de pago (respuestas del asistente)"],
-                      ["envios", "Condiciones y plazos de entrega (respuestas del asistente)"],
+                      [
+                        "sobreNosotros",
+                        "Sobre nosotros (historia, qué los hace diferentes, etc.)",
+                      ],
+                      [
+                        "pagos",
+                        "Medios y condiciones de pago (respuestas del asistente)",
+                      ],
+                      [
+                        "envios",
+                        "Condiciones y plazos de entrega (respuestas del asistente)",
+                      ],
                       ["portada", "URL HTTPS de la imagen de portada"],
                       [
                         "whatsapp",
@@ -211,11 +319,16 @@ export default function MiTienda() {
                       />
                     </label>
                   </section>
-                  <HorariosAtencion value={config.tienda.horarios || null} anterior={config.tienda.horario || ""} onChange={v => cambiar("horarios", v)} />
+                  <HorariosAtencion
+                    value={config.tienda.horarios || null}
+                    anterior={config.tienda.horario || ""}
+                    onChange={(v) => cambiar("horarios", v)}
+                  />
                   <section className={card}>
                     <h2 className="text-xl font-bold">Redes sociales</h2>
                     <p className="text-gray-400">
-                      Pega el usuario o el enlace completo de cada red — se muestran como iconos en tu tienda.
+                      Pega el usuario o el enlace completo de cada red — se
+                      muestran como iconos en tu tienda.
                     </p>
                     {[
                       ["facebook", "Facebook (usuario o enlace)"],
@@ -297,7 +410,20 @@ export default function MiTienda() {
                       una venta automáticamente.
                     </p>
                   </section>
-                  <CoberturaEntrega ciudades={config.tienda.ciudadesEntrega || []} zonas={config.tienda.zonas} onChange={(ciudades, zonas) => setConfig((c: any) => ({...c, tienda: {...c.tienda, ciudadesEntrega: ciudades, zonas}}))} />
+                  <CoberturaEntrega
+                    ciudades={config.tienda.ciudadesEntrega || []}
+                    zonas={config.tienda.zonas}
+                    onChange={(ciudades, zonas) =>
+                      setConfig((c: any) => ({
+                        ...c,
+                        tienda: {
+                          ...c.tienda,
+                          ciudadesEntrega: ciudades,
+                          zonas,
+                        },
+                      }))
+                    }
+                  />
                   <button
                     className="rounded-lg bg-orange-600 px-7 py-3 font-bold"
                     disabled={busy}
@@ -308,7 +434,15 @@ export default function MiTienda() {
               </form>
             )
           )}
-          {usuario?.rol === "ADMIN_EMPRESA" && <div className="mt-8 space-y-6">{config && <BoldConfiguracion sucursalTienda={config.tienda.sucursalId} />}<OrigenesProductos /><ProductosTienda /></div>}
+          {usuario?.rol === "ADMIN_EMPRESA" && (
+            <div className="mt-8 space-y-6">
+              {config && (
+                <BoldConfiguracion sucursalTienda={config.tienda.sucursalId} />
+              )}
+              <OrigenesProductos />
+              <ProductosTienda />
+            </div>
+          )}
         </main>
       </div>
     </AuthGuard>
