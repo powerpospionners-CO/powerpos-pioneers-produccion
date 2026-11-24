@@ -91,6 +91,7 @@ export class PersonalService {
           },
         })),
       config: await this.config(a),
+      afiliacionesEmpresa: await this.afiliacionesEmpresa(a),
       correoConfigurado: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
       nominaDian: {
         estado: 'NO_CONECTADA',
@@ -98,6 +99,44 @@ export class PersonalService {
           'El comprobante interno no es el documento soporte de nómina electrónica validado por la DIAN.',
       },
     };
+  }
+  async afiliacionesEmpresa(a: ActorPersonal, tx?: any) {
+    return (
+      (await this.store.listar(a, 'CONFIG_AFILIACIONES', undefined, tx))[0]
+        ?.datos || {}
+    );
+  }
+  async guardarAfiliacionesEmpresa(a: ActorPersonal, d: any) {
+    await this.store.preparar();
+    const datos = {
+      cajaCompensacion: d.cajaCompensacion
+        ? texto(d.cajaCompensacion, 'caja de compensación del empleador', 200)
+        : '',
+      arl: d.arl ? texto(d.arl, 'ARL del empleador', 200) : '',
+    };
+    return this.store.prisma.$transaction(async (tx) => {
+      const anterior = (
+        await this.store.listar(a, 'CONFIG_AFILIACIONES', undefined, tx)
+      )[0];
+      if (anterior) await this.store.bloquear(a, anterior.id, tx);
+      const r = anterior
+        ? await this.store.actualizar(a, anterior, datos, 'ACTIVA', tx)
+        : await this.store.crear(
+            a,
+            'CONFIG_AFILIACIONES',
+            datos,
+            { llave: 'actual', estado: 'ACTIVA' },
+            tx,
+          );
+      await this.store.evento(
+        a,
+        r.id,
+        'CONFIGURAR_AFILIACIONES_EMPRESA',
+        {},
+        tx,
+      );
+      return r;
+    });
   }
   async config(a: ActorPersonal) {
     return (await this.store.listar(a, 'CONFIG'))[0]?.datos || null;
@@ -168,7 +207,13 @@ export class PersonalService {
       activo: d.activo !== false,
       cuentaNomina: cuentaNomina(d, anteriorEmpleado?.datos.cuentaNomina),
       ...Object.fromEntries(
-        ['domicilio', 'funciones', 'lugarServicio'].map((campo) => {
+        [
+          'domicilio',
+          'funciones',
+          'lugarServicio',
+          'eps',
+          'fondoPensiones',
+        ].map((campo) => {
           const v =
             d[campo] === undefined ? anteriorEmpleado?.datos[campo] : d[campo];
           return [

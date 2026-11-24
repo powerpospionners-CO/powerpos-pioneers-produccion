@@ -202,10 +202,26 @@ const { AppModule } = require('../dist/src/app.module'),
         acepta: true,
       })
       .expect(201);
+    await auth(http.post('/personal/afiliaciones-empresa'))
+      .send({
+        cajaCompensacion: 'Caja del empleador de prueba',
+        arl: 'ARL del empleador de prueba',
+      })
+      .expect(201);
+    const configurado = (await auth(http.get('/personal')).expect(200)).body;
+    assert.equal(
+      configurado.afiliacionesEmpresa.cajaCompensacion,
+      'Caja del empleador de prueba',
+    );
+    const otraEmpresa = (await auth(http.get('/personal'), b.token).expect(200))
+      .body;
+    assert(!otraEmpresa.afiliacionesEmpresa.cajaCompensacion);
     const empleado = (
       await auth(http.post('/personal/empleados'))
         .send({
           nombre: 'Empleado de prueba privado',
+          eps: 'EPS individual de prueba',
+          fondoPensiones: 'Fondo individual de prueba',
           identificacion: suffix,
           cargo: 'Auxiliar',
           email: 'empleado@example.com',
@@ -216,6 +232,8 @@ const { AppModule } = require('../dist/src/app.module'),
         })
         .expect(201)
     ).body;
+    assert.equal(empleado.datos.eps, 'EPS individual de prueba');
+    assert.equal(empleado.datos.fondoPensiones, 'Fondo individual de prueba');
     await auth(
       http.post(`/personal/documentos-empresa/${politicaEmpresa.id}/entregas`),
     )
