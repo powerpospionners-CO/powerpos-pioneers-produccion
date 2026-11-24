@@ -9,6 +9,7 @@ export type ProductoPublico = {
   ventaGranel?: boolean;
   unidadGranel?: string | null;
   categoria: { nombre: string };
+  categoriaId?: number;
   origen?: string;
   presentacion?: string;
 };
@@ -22,6 +23,11 @@ export type TiendaPublica = {
     titulo: string;
     descripcion: string;
     sobreNosotros: string;
+    mision?: string;
+    vision?: string;
+    galeria?: { imagen: string; descripcion: string }[];
+    preguntasFrecuentes?: { pregunta: string; respuesta: string }[];
+    imagenesCategorias?: { categoriaId: number; imagen: string }[];
     color: string;
     coloresAutomaticos?: boolean;
     paletaLogo?: { principal: string; secundario: string };

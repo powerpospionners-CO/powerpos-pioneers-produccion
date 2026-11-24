@@ -6,7 +6,7 @@ const ts=require('typescript');
 const React=require('react');
 const {renderToStaticMarkup}=require('react-dom/server');
 const handlers={ts:require.extensions['.ts'],tsx:require.extensions['.tsx'],css:require.extensions['.css']};
-for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,p);
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,p);
 require.extensions['.css']=()=>{};
 const Tienda=require(path.resolve('app/tienda/[slug]/TiendaFigma.tsx')).default;
 for(const ext of ['ts','tsx','css']){if(handlers[ext])require.extensions['.'+ext]=handlers[ext];else delete require.extensions['.'+ext];}
@@ -46,4 +46,28 @@ test('contacto solo ofrece canales configurados y separa etiqueta y dato', () =>
  const html = renderToStaticMarkup(React.createElement(Tienda, { tienda: { ...datos, telefono: '3106843264' }, slug: 'ferreteria', seccion: 'contacto' }));
  assert(html.includes('<small>WhatsApp</small><strong>3106843264</strong>'));
  assert(!html.includes('Por configurar')); assert(!html.includes('>Instagram<'));
+});
+
+test('misión y visión solo aparecen en Nosotros y no se inventan textos vacíos', () => {
+ const tienda = {...datos, config: {...datos.config, mision: 'Acompañar a nuestros clientes', vision: 'Crecer en nuestra región'}};
+ const html = renderToStaticMarkup(React.createElement(Tienda, {tienda, slug:'ferreteria', seccion:'nosotros'}));
+ for (const texto of ['Nuestra misión','Nuestra visión',tienda.config.mision,tienda.config.vision]) assert(html.includes(texto));
+ const inicio = renderToStaticMarkup(React.createElement(Tienda, {tienda, slug:'ferreteria', seccion:'inicio'}));
+ assert(!inicio.includes(tienda.config.mision));
+ const vacio = renderToStaticMarkup(React.createElement(Tienda, {tienda:datos, slug:'ferreteria', seccion:'nosotros'}));
+ assert(!vacio.includes('Nuestra misión')); assert(!vacio.includes('Nuestra visión'));
+});
+test('las categorías usan su imagen elegida sin cambiar la foto del producto', () => {
+ const tienda = {...datos, productos:datos.productos.map(p=>({...p,categoriaId:9})), config:{...datos.config,imagenesCategorias:[{categoriaId:9,imagen:'https://example.com/categoria.png'}]}};
+ const html = renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos'}));
+ assert(html.includes('https://example.com/categoria.png'), html.slice(html.indexOf('category-grid'), html.indexOf('category-grid')+900)); assert(html.includes('https://example.com/martillo.png'));
+});
+
+test('galería en Nosotros y dudas y entregas en Contacto sin mezclar páginas', () => {
+ const tienda={...datos,config:{...datos.config,galeria:[{imagen:'https://example.com/local.png',descripcion:'Nuestro local'}],preguntasFrecuentes:[{pregunta:'¿Cuánto tarda el envío?',respuesta:'Se confirma al aceptar tu pedido.'}],envios:'Entregamos en nuestra ciudad',pagos:'Efectivo y tarjeta'}};
+ const render=seccion=>renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion}));
+ const nosotros=render('nosotros'), contacto=render('contacto'), inicio=render('inicio');
+ assert(nosotros.includes('https://example.com/local.png')); assert(!contacto.includes('https://example.com/local.png'));
+ assert(contacto.includes('<details><summary>¿Cuánto tarda el envío?</summary>')); assert(contacto.includes('Entregamos en nuestra ciudad')); assert(contacto.includes('Efectivo y tarjeta'));
+ assert(!nosotros.includes('¿Cuánto tarda el envío?')); assert(!inicio.includes('https://example.com/local.png'));
 });

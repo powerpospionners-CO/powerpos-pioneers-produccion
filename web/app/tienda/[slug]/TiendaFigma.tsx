@@ -257,9 +257,10 @@ function App({
         pos: "center",
         tone: ["orange", "red", "green", "purple", "ochre"][i % 5],
         image:
-          products.find((p) => p.category === name && p.image)?.image || "",
+          t.imagenesCategorias?.find(c => c.categoriaId === tienda.productos.find(p => p.categoria.nombre === name)?.categoriaId)?.imagen ||
+          products.find((p) => p.category === name && p.image && p.image !== tienda.logo && p.image !== t.portada)?.image || "",
       })),
-    [products],
+    [products, t.imagenesCategorias, t.portada, tienda.logo, tienda.productos],
   );
   const origins = [...new Set(products.map((p) => p.country).filter(Boolean))];
   const telefono = (t.whatsapp || tienda.telefono || "").replace(/\D/g, "");
@@ -731,7 +732,7 @@ function App({
                           backgroundPosition: item.pos,
                           backgroundImage: item.image
                             ? `url(${JSON.stringify(item.image)})`
-                            : "var(--hero-image)",
+                            : "none",
                         }}
                       />
                       <span className="category-index">0{index + 1}</span>
@@ -914,7 +915,7 @@ function App({
           )}
 
           {seccion === "nosotros" && (
-            <section className="about-section" id="nosotros">
+            <><section className="about-section" id="nosotros">
               <div className="about-image">
                 <div className="about-stamp">
                   {tienda.nombre}
@@ -941,6 +942,16 @@ function App({
                   negocio para confirmar disponibilidad, presentación y opciones
                   de entrega.
                 </p>
+                {(t.mision?.trim() || t.vision?.trim()) && (
+                  <div className="about-purpose">
+                    {[["Nuestra misión", t.mision], ["Nuestra visión", t.vision]].map(([titulo, contenido]) => contenido?.trim() ? (
+                      <article key={titulo}>
+                        <h2>{titulo}</h2>
+                        <p>{contenido}</p>
+                      </article>
+                    ) : null)}
+                  </div>
+                )}
                 <Link
                   prefetch={false}
                   href={rutas.contacto}
@@ -950,6 +961,14 @@ function App({
                 </Link>
               </div>
             </section>
+            {!!t.galeria?.length && <section className="section store-gallery" aria-labelledby="titulo-galeria">
+              <div className="section-heading"><div><div className="eyebrow"><span /> Nuestro negocio</div><h2 id="titulo-galeria">Conoce nuestro espacio <em>y nuestro equipo</em></h2></div></div>
+              <div className="store-gallery-grid">{t.galeria.map((foto,i)=><figure key={foto.imagen+i}>
+                <img src={foto.imagen} alt={foto.descripcion || `${tienda.nombre}: foto ${i+1}`} loading="lazy" />
+                {foto.descripcion && <figcaption>{foto.descripcion}</figcaption>}
+              </figure>)}</div>
+            </section>}
+            </>
           )}
 
           {seccion === "contacto" && (
@@ -1020,6 +1039,13 @@ function App({
                   )}
                 </div>
               )}
+              {(t.horario || t.envios || t.pagos || t.ciudadesEntrega?.length) && <div className="store-info-grid">
+                {[["Horario de atención",t.horario],["Entregas y domicilios",t.envios],["Medios y condiciones de pago",t.pagos],["Ciudades de entrega",t.ciudadesEntrega?.join(", ")]].map(([titulo,contenido])=>contenido?.trim()?<article key={titulo}><h2>{titulo}</h2><p>{contenido}</p></article>:null)}
+              </div>}
+              {!!t.preguntasFrecuentes?.length && <div className="store-faq" aria-labelledby="titulo-preguntas">
+                <h2 id="titulo-preguntas">Preguntas frecuentes</h2>
+                {t.preguntasFrecuentes.map((p,i)=><details key={i}><summary>{p.pregunta}</summary><p>{p.respuesta}</p></details>)}
+              </div>}
             </section>
           )}
         </main>
