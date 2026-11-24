@@ -23,6 +23,7 @@ type Campo = {
   options?: { value: string; label: string }[];
   value?: string | boolean;
   optional?: boolean;
+  sugerencias?: string[];
 };
 const money = (n: number) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP" }).format(
@@ -139,6 +140,7 @@ function Formulario({
                     className={control}
                     name={c.name}
                     type={c.type || "text"}
+                    list={c.sugerencias ? `lista-${c.name}` : undefined}
                     required={!c.optional}
                     defaultValue={
                       c.type === "file" ? undefined : String(c.value || "")
@@ -152,6 +154,13 @@ function Formulario({
                   />
                 )}
               </>
+            )}
+            {c.sugerencias && (
+              <datalist id={`lista-${c.name}`}>
+                {c.sugerencias.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             )}
           </label>
         ))}
@@ -260,7 +269,12 @@ function Contenido() {
       label: "Identificación",
       value: editar?.datos.identificacion,
     },
-    { name: "cargo", label: "Cargo", value: editar?.datos.cargo },
+    {
+      name: "cargo",
+      label: "Cargo",
+      value: editar?.datos.cargo,
+      sugerencias: data?.cargosEmpresa || [],
+    },
     {
       name: "email",
       label: "Correo personal del empleado (él debe controlarlo)",

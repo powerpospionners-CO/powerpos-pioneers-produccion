@@ -6,6 +6,13 @@ const control =
   "mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-white";
 const boton =
   "rounded-lg bg-orange-600 px-4 py-2 text-white disabled:opacity-40";
+const claveCargo = (valor: string) =>
+  valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("es-CO")
+    .replace(/\s+/g, " ");
 const campos = [
   ["razonSocial", "Razón social legal del empleador"],
   ["domicilioEmpresa", "Domicilio del empleador"],
@@ -39,13 +46,24 @@ export default function ContratosAutomaticos({
     [obra, setObra] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [mensaje, setMensaje] = useState("");
+    [mensaje, setMensaje] = useState(""),
+    [perfilCargo, setPerfilCargo] = useState(""),
+    [usarGeneral, setUsarGeneral] = useState(false),
+    [confirmarGeneral, setConfirmarGeneral] = useState(false);
   const ultimo = data?.plantillasModalidad?.[0]?.datos;
   const [perfil, setPerfil] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       campos.map(([k]) => [
         k,
-        ultimo?.[k] ||
+        ([
+          "razonSocial",
+          "domicilioEmpresa",
+          "lugarCelebracion",
+          "lugarContratacion",
+          "formaPago",
+        ].includes(k)
+          ? ultimo?.[k]
+          : "") ||
           (k === "razonSocial"
             ? data?.privacidad?.responsable || data?.empresa?.nombre || ""
             : k === "domicilioEmpresa" || k === "lugarServicio"
@@ -54,10 +72,38 @@ export default function ContratosAutomaticos({
       ]),
     ),
   );
-  const emp = empleados.find((e) => e.id === empleadoId),
-    plantilla = data?.plantillasModalidad?.find(
-      (p: Registro) => p.datos.tipo === tipo,
-    );
+  const emp = empleados.find((e) => e.id === empleadoId);
+  const especifica = data?.plantillasModalidad?.find(
+    (p: Registro) =>
+      p.datos.tipo === tipo &&
+      p.datos.perfilCargo &&
+      claveCargo(p.datos.perfilCargo) === claveCargo(emp?.datos.cargo || ""),
+  );
+  const general = data?.plantillasModalidad?.find(
+    (p: Registro) => p.datos.tipo === tipo && !p.datos.perfilCargo,
+  );
+  const plantilla = especifica || (usarGeneral ? general : null);
+  const perfilesGuardados: Registro[] = (
+    data?.plantillasModalidad || []
+  ).filter(
+    (p: Registro, i: number, todos: Registro[]) =>
+      p.datos.perfilCargo &&
+      todos.findIndex(
+        (x) =>
+          claveCargo(x.datos.perfilCargo || "") ===
+          claveCargo(p.datos.perfilCargo),
+      ) === i,
+  );
+  function nuevoCargo(nombre: string) {
+    setPerfilCargo(nombre);
+    setPerfil((p) => ({
+      ...p,
+      funciones: "",
+      jornada: "",
+      descansos: "",
+      lugarServicio: "",
+    }));
+  }
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -80,9 +126,11 @@ export default function ContratosAutomaticos({
         Contratos digitales por modalidad
       </h2>
       <p>
-        Configura las condiciones habituales una vez. Después selecciona al
-        empleado y la modalidad: su nombre, identificación, correo, ingreso,
-        cargo, salario y periodicidad se toman del expediente.
+        Configura las condiciones por cargo. Cada perfil tiene sus tres
+        modalidades y conserva sus propias funciones, jornada y lugar de
+        trabajo. Después selecciona al empleado y la modalidad: su nombre,
+        identificación, correo, ingreso, cargo, salario y periodicidad se toman
+        del expediente.
       </p>
       {error && (
         <p role="alert" className="text-red-300">
@@ -96,7 +144,7 @@ export default function ContratosAutomaticos({
       )}
       <details open={!data?.plantillasModalidad?.length}>
         <summary className="cursor-pointer font-semibold">
-          Configurar las tres plantillas de esta empresa
+          Configurar plantillas por cargo
         </summary>
         <form
           className="mt-3 space-y-4"
@@ -105,11 +153,12 @@ export default function ContratosAutomaticos({
             void run(async () => {
               await api.post("/personal/editor/plantillas-modalidad", {
                 ...perfil,
+                perfilCargo,
                 aplicarATodas: true,
               });
               await onCambio();
               setMensaje(
-                "Plantillas indefinida, fija y de obra o labor guardadas para esta empresa y sede. Cada contrato individual conserva su revisión y firma.",
+                `Plantillas guardadas para ${perfilCargo}. Los demás cargos y sus versiones se conservan.`,
               );
             });
           }}
@@ -118,6 +167,91 @@ export default function ContratosAutomaticos({
             disabled={busy || bloquear}
             className="grid gap-3 md:grid-cols-2"
           >
+            <label className="md:col-span-2">
+              Editar un perfil guardado
+              <select
+                className={control}
+                defaultValue=""
+                onChange={(e) => {
+                  const p = data.plantillasModalidad.find(
+                    (r: Registro) => r.id === e.target.value,
+                  );
+                  if (p) {
+                    setPerfilCargo(p.datos.perfilCargo);
+                    setPerfil(
+                      Object.fromEntries(
+                        campos.map(([k]) => [k, p.datos[k] || ""]),
+                      ),
+                    );
+                  } else nuevoCargo("");
+                }}
+              >
+                <option value="">Crear un perfil nuevo</option>
+                {perfilesGuardados.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.datos.perfilCargo}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="md:col-span-2">
+              Cargo del perfil (usa el mismo nombre registrado en Empleados)
+              <input
+                required
+                maxLength={200}
+                list="cargos-contratos"
+                className={control}
+                value={perfilCargo}
+                onChange={(e) => nuevoCargo(e.target.value)}
+              />
+              <datalist id="cargos-contratos">
+                {Array.from(
+                  new Set<string>([
+                    ...perfilesGuardados.map((p) =>
+                      String(p.datos.perfilCargo),
+                    ),
+                    ...empleados.map((e) => String(e.datos.cargo)),
+                  ]),
+                ).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </label>
+            {emp && (
+              <button
+                type="button"
+                className="text-left text-orange-300 underline"
+                onClick={() => nuevoCargo(emp.datos.cargo)}
+              >
+                Usar el cargo del empleado seleccionado: {emp.datos.cargo}
+              </button>
+            )}
+            <label className="md:col-span-2">
+              Ejemplos opcionales de funciones (no son cargos registrados en tu
+              empresa)
+              <select
+                className={control}
+                defaultValue=""
+                onChange={(e) => {
+                  const g = data.guiasCargos.find(
+                    (g: any) => g.nombre === e.target.value,
+                  );
+                  if (g) {
+                    if (!perfilCargo) nuevoCargo(g.nombre);
+                    setPerfil((p) => ({ ...p, funciones: g.funciones }));
+                  }
+                }}
+              >
+                <option value="">
+                  Selecciona una guía o redacta tus funciones
+                </option>
+                {(data.guiasCargos || []).map((g: any) => (
+                  <option key={g.nombre} value={g.nombre}>
+                    {g.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
             {campos.map(([k, l]) => (
               <label
                 key={k}
@@ -157,7 +291,7 @@ export default function ContratosAutomaticos({
               renuncias a derechos.
             </p>
             <button className={boton}>
-              Guardar condiciones para las tres modalidades
+              Guardar las tres modalidades de este cargo
             </button>
           </fieldset>
         </form>
@@ -171,6 +305,7 @@ export default function ContratosAutomaticos({
               await api.post("/personal/editor/preparar", {
                 empleadoId,
                 plantillaId: plantilla.id,
+                confirmarPerfilGeneral: !especifica && confirmarGeneral,
                 fin: tipo === "FIJO" ? fin : undefined,
                 obra: tipo === "OBRA_LABOR" ? obra : undefined,
               })
@@ -192,7 +327,11 @@ export default function ContratosAutomaticos({
               className={control}
               required
               value={empleadoId}
-              onChange={(e) => setEmpleadoId(e.target.value)}
+              onChange={(e) => {
+                setEmpleadoId(e.target.value);
+                setUsarGeneral(false);
+                setConfirmarGeneral(false);
+              }}
             >
               <option value="">Selecciona un empleado</option>
               {empleados
@@ -211,6 +350,8 @@ export default function ContratosAutomaticos({
               value={tipo}
               onChange={(e) => {
                 setTipo(e.target.value);
+                setUsarGeneral(false);
+                setConfirmarGeneral(false);
                 setFin("");
                 setObra("");
               }}
@@ -232,6 +373,72 @@ export default function ContratosAutomaticos({
               <p>
                 Domicilio:{" "}
                 {emp.datos.domicilio || "Falta completar en Empleados"}
+              </p>
+            </div>
+          )}
+          {emp && !especifica && (
+            <div className="md:col-span-2 space-y-2 rounded-lg border border-amber-700 p-3">
+              <p>
+                No hay un perfil específico para «{emp.datos.cargo}» en esta
+                modalidad. Configúralo arriba para completar sus condiciones.
+              </p>
+              {general && (
+                <>
+                  <label className="flex gap-2">
+                    <input
+                      type="checkbox"
+                      checked={usarGeneral}
+                      onChange={(e) => {
+                        setUsarGeneral(e.target.checked);
+                        setConfirmarGeneral(false);
+                      }}
+                    />
+                    Mostrar la plantilla anterior sin cargo para una revisión
+                    expresa
+                  </label>
+                  {usarGeneral && (
+                    <>
+                      <p className="whitespace-pre-wrap">
+                        Funciones: {general.datos.funciones}
+                        <br />
+                        Jornada: {general.datos.jornada}
+                        <br />
+                        Descansos: {general.datos.descansos}
+                        <br />
+                        Lugar: {general.datos.lugarServicio}
+                      </p>
+                      <label className="flex gap-2">
+                        <input
+                          type="checkbox"
+                          checked={confirmarGeneral}
+                          onChange={(e) =>
+                            setConfirmarGeneral(e.target.checked)
+                          }
+                        />
+                        Revisé expresamente estas condiciones y corresponden a
+                        este empleado. No estoy aplicando las de otro puesto.
+                      </label>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {especifica && (
+            <div className="md:col-span-2 rounded-lg border border-gray-700 p-3">
+              <p>
+                Perfil seleccionado automáticamente:{" "}
+                <strong>{especifica.datos.perfilCargo}</strong>
+              </p>
+              <p className="whitespace-pre-wrap">
+                Funciones: {emp?.datos.funciones || especifica.datos.funciones}
+                <br />
+                Jornada: {especifica.datos.jornada}
+                <br />
+                Descansos: {especifica.datos.descansos}
+                <br />
+                Lugar:{" "}
+                {emp?.datos.lugarServicio || especifica.datos.lugarServicio}
               </p>
             </div>
           )}
@@ -273,11 +480,16 @@ export default function ContratosAutomaticos({
           <p className="md:col-span-2 text-sm">
             {plantilla
               ? `Plantilla: ${plantilla.datos.nombre} · guardada ${String(plantilla.datos.guardadaEn).slice(0, 10)}`
-              : "Primero guarda las condiciones de la empresa para habilitar esta modalidad."}
+              : "Primero guarda las condiciones del cargo para habilitar esta modalidad."}
           </p>
           <button
             className={boton}
-            disabled={!plantilla || !emp || !emp.datos.domicilio}
+            disabled={
+              !plantilla ||
+              !emp ||
+              !emp.datos.domicilio ||
+              (!especifica && !confirmarGeneral)
+            }
           >
             Completar contrato del empleado
           </button>

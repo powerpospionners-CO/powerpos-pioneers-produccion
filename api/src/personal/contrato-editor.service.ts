@@ -9,6 +9,7 @@ import {
   condicionesPlantilla,
   TIPOS_CONTRATO,
 } from './contratos-modalidades';
+import { GUIAS_CARGOS, claveCargo } from './perfiles-cargo';
 import { empleadoDocumental } from './nomina-bancaria';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import { PersonalService } from './personal.service';
@@ -127,6 +128,7 @@ export class ContratoEditorService {
       borradores: await this.store.listar(a, 'BORRADOR'),
       modelos: await this.store.listar(a, 'MODELO'),
       guia: CLAUSULAS_GUIA,
+      guiasCargos: GUIAS_CARGOS,
       plantillasModalidad: await this.store.listar(a, 'CONTRATO_BASE'),
       modalidades: TIPOS_CONTRATO.map(baseModalidad),
       privacidad: await this.personal.config(a),
@@ -165,7 +167,9 @@ export class ContratoEditorService {
       const resultado: any[] = [];
       for (const datos of preparados) {
         const anterior = versiones.find(
-          (r: any) => r.datos.tipo === datos.tipo,
+          (r: any) =>
+            r.datos.tipo === datos.tipo &&
+            claveCargo(r.datos.perfilCargo || '') === datos.perfilCargoClave,
         );
         const r = await this.store.crear(
           a,
@@ -203,7 +207,12 @@ export class ContratoEditorService {
       'EMPLEADO',
     );
     const datos = completarContrato(p.datos, e.datos, d);
-    return this.guardar(a, { ...datos, plantillaModalidadId: p.id });
+    return this.guardar(a, {
+      ...datos,
+      plantillaModalidadId: p.id,
+      autocompletar: true,
+      confirmarPerfilGeneral: d.confirmarPerfilGeneral === true,
+    });
   }
   private async empresa(a: ActorPersonal, tx?: any) {
     return this.store.db(tx).empresa.findUnique({
@@ -236,12 +245,14 @@ export class ContratoEditorService {
     if (!(await this.personal.config(a)))
       throw new BadRequestException('Configura primero el aviso de privacidad');
     const datos = datosContrato(d);
+    let plantillaAutomatica: any = null;
     if (d.plantillaModalidadId) {
       const p = await this.store.obtener(
         a,
         texto(d.plantillaModalidadId, 'plantilla por modalidad', 36),
         'CONTRATO_BASE',
       );
+      plantillaAutomatica = p;
       if (p.datos.tipo !== datos.tipo)
         throw new BadRequestException(
           'La plantilla no corresponde a la modalidad',
@@ -282,11 +293,25 @@ export class ContratoEditorService {
         throw new BadRequestException(
           'Completa el NIT y la dirección del empleador',
         );
+      const definitivos =
+        d.autocompletar === true && plantillaAutomatica
+          ? datosContrato(
+              completarContrato(plantillaAutomatica.datos, empleado.datos, {
+                ...d,
+                empleadoId: empleado.id,
+              }),
+            )
+          : datos;
       const payload = {
-        ...datos,
+        ...definitivos,
         modeloId: d.modeloId || null,
         plantillaModalidadId: d.plantillaModalidadId || null,
-        razonSocial: datos.razonSocial || empresa.nombre,
+        perfilCargo:
+          plantillaAutomatica?.datos.perfilCargo ||
+          (d.perfilCargo
+            ? texto(d.perfilCargo, 'perfil del cargo', 200)
+            : null),
+        razonSocial: definitivos.razonSocial || empresa.nombre,
         empresa,
         empleado: empleadoDocumental(empleado.datos),
         empleadoHuella: hash(
