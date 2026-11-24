@@ -207,3 +207,27 @@ button.underline:disabled { opacity: 0.5; }
 @media (prefers-reduced-motion: reduce) {
   .fade-in-up { animation: none; }
 }
+
+/* Mantener contraste también en los diálogos y avisos del tema claro. */
+:root[data-theme="claro"] button.underline {
+  background-color: #e9eef4;
+  border-color: #94a3b8;
+  color: #172338;
+}
+:root[data-theme="claro"] button.underline:hover:not(:disabled) { background-color: #dde6ef; }
+:root[data-theme="claro"] .powerpos-alerta[data-tipo="error"] {
+  background-color: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+:root[data-theme="claro"] .powerpos-alerta[data-tipo="exito"] {
+  background-color: #f0fdf4 !important;
+  border-color: #86efac !important;
+  color: #166534 !important;
+}
+:root[data-theme="claro"] .powerpos-alerta[data-tipo="info"] {
+  background-color: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1e40af !important;
+}
+:root[data-theme="claro"] :is(.bg-orange-700, .bg-red-600).text-white { color: #fff !important; }
