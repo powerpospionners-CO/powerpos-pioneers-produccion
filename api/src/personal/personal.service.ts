@@ -124,7 +124,9 @@ export class PersonalService {
   }
   async empleado(a: ActorPersonal, d: any, id?: string) {
     await this.store.preparar();
-    if (id) await this.store.obtener(a, id, 'EMPLEADO');
+    const anteriorEmpleado = id
+      ? await this.store.obtener(a, id, 'EMPLEADO')
+      : null;
     if (!(await this.config(a)))
       throw new BadRequestException(
         'Configura primero el aviso de privacidad de la empresa',
@@ -138,6 +140,16 @@ export class PersonalService {
       salarioCentavos: centavos(d.salario),
       frecuencia: texto(d.frecuencia, 'frecuencia', 20),
       activo: d.activo !== false,
+      ...Object.fromEntries(
+        ['domicilio', 'funciones', 'lugarServicio'].map((campo) => {
+          const v =
+            d[campo] === undefined ? anteriorEmpleado?.datos[campo] : d[campo];
+          return [
+            campo,
+            v ? texto(v, campo, campo === 'funciones' ? 3000 : 500) : '',
+          ];
+        }),
+      ),
     };
     if (
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email) ||
@@ -554,6 +566,25 @@ export class PersonalService {
       );
       return this.store.actualizar(a, doc, doc.datos, 'PENDIENTE_EMPLEADO', tx);
     });
+  }
+  async firmarYEnviar(a: ActorPersonal, id: string, d: any) {
+    const contrato = await this.firmarEmpleador(a, id, d);
+    try {
+      await this.invitar(a, id);
+      return {
+        ...contrato,
+        invitacionEnviada: true,
+        mensaje:
+          'Firma del empleador registrada y enlace enviado al correo del empleado.',
+      };
+    } catch {
+      return {
+        ...contrato,
+        invitacionEnviada: false,
+        mensaje:
+          'La firma del empleador quedó registrada, pero no se pudo enviar el correo. Usa Enviar al empleado para reintentar; no firmes de nuevo.',
+      };
+    }
   }
   private async enviar(
     destino: string,

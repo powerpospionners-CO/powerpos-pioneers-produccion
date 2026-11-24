@@ -699,6 +699,167 @@ const { AppModule } = require('../dist/src/app.module'),
         ).expect(200)
       ).body.length >= 3,
     );
+    // Tres modalidades y envío al firmar: solo datos ficticios en bases efímeras.
+    const hoyAuto = new Date().toLocaleDateString('en-CA', {
+      timeZone: 'America/Bogota',
+    });
+    const finAuto = new Date(hoyAuto + 'T12:00:00Z');
+    finAuto.setUTCMonth(finAuto.getUTCMonth() + 1);
+    const perfilAuto = {
+      ...contenidoEditor,
+      clausulas: undefined,
+      anexos: undefined,
+      aplicarATodas: true,
+    };
+    const basesAuto = (
+      await auth(http.post('/personal/editor/plantillas-modalidad'))
+        .send(perfilAuto)
+        .expect(201)
+    ).body;
+    assert.equal(basesAuto.length, 3);
+    assert.deepEqual(basesAuto.map((p) => p.datos.tipo).sort(), [
+      'FIJO',
+      'INDEFINIDO',
+      'OBRA_LABOR',
+    ]);
+    const empleadoAuto = (
+      await auth(http.post('/personal/empleados'))
+        .send({
+          nombre: 'Empleado automático ficticio',
+          identificacion: randomUUID(),
+          cargo: 'Auxiliar ficticio',
+          email: 'automatico@example.com',
+          ingreso: hoyAuto,
+          salario: '1750905',
+          frecuencia: 'QUINCENAL',
+          activo: true,
+          domicilio: 'Domicilio privado ficticio',
+          funciones: 'Funciones del expediente con atención de clientes.',
+        })
+        .expect(201)
+    ).body;
+    await auth(http.post('/personal/editor/preparar'), b.token)
+      .send({ empleadoId: empleadoAuto.id, plantillaId: basesAuto[0].id })
+      .expect(404);
+    await auth(http.post('/personal/editor/preparar'), 'Bearer ' + ct)
+      .send({ empleadoId: empleadoAuto.id, plantillaId: basesAuto[0].id })
+      .expect(403);
+    for (const tipoAuto of ['INDEFINIDO', 'FIJO', 'OBRA_LABOR']) {
+      const pAuto = basesAuto.find((p) => p.datos.tipo === tipoAuto);
+      const solicitudAuto = {
+        empleadoId: empleadoAuto.id,
+        plantillaId: pAuto.id,
+        fin: finAuto.toISOString().slice(0, 10),
+        obra: 'Ejecutar el inventario inicial del nuevo local hasta entregar el acta de verificación.',
+        salario: '1',
+        nombre: 'Nombre que no debe usarse',
+      };
+      if (tipoAuto === 'FIJO')
+        await auth(http.post('/personal/editor/preparar'))
+          .send({ ...solicitudAuto, fin: undefined })
+          .expect(400);
+      if (tipoAuto === 'OBRA_LABOR')
+        await auth(http.post('/personal/editor/preparar'))
+          .send({ ...solicitudAuto, obra: 'Cajero' })
+          .expect(400);
+      let automatico = (
+        await auth(http.post('/personal/editor/preparar'))
+          .send(solicitudAuto)
+          .expect(201)
+      ).body;
+      assert.equal(automatico.datos.empleado.nombre, empleadoAuto.datos.nombre);
+      assert.equal(automatico.datos.salarioCentavos, 175090500);
+      assert.equal(automatico.datos.funciones, empleadoAuto.datos.funciones);
+      assert.equal(automatico.datos.plantillaModalidadId, pAuto.id);
+      await auth(
+        http.get(`/personal/editor/borradores/${automatico.id}/pdf`),
+      ).expect(200);
+      automatico = (
+        await auth(
+          http.post(`/personal/editor/borradores/${automatico.id}/revisar`),
+        )
+          .send({ ...revisionEditor, versionEsperada: automatico.version })
+          .expect(201)
+      ).body;
+      const contratoAuto = (
+        await auth(
+          http.post(`/personal/editor/borradores/${automatico.id}/emitir`),
+        )
+          .send({ versionEsperada: automatico.version, acepta: true })
+          .expect(201)
+      ).body;
+      const firmaAuto = {
+        nombre: 'Representante ficticio',
+        identificacion: '123-prueba',
+        facultad: 'Representación de prueba',
+        password,
+        acepta: true,
+      };
+      const guardarCorreoAuto = async (to, subject, text, attachments) => {
+        sent.push({ to, subject, text, attachments });
+      };
+      personal.enviar =
+        tipoAuto === 'FIJO'
+          ? async () => {
+              throw Error('Fallo SMTP simulado');
+            }
+          : guardarCorreoAuto;
+      const envioAuto = (
+        await auth(http.post(`/personal/${contratoAuto.id}/firmar-enviar`))
+          .send(firmaAuto)
+          .expect(201)
+      ).body;
+      assert.equal(envioAuto.estado, 'PENDIENTE_EMPLEADO');
+      assert.equal(envioAuto.invitacionEnviada, tipoAuto !== 'FIJO');
+      if (tipoAuto === 'FIJO') {
+        assert.match(envioAuto.mensaje, /no se pudo enviar/);
+        personal.enviar = guardarCorreoAuto;
+        await auth(http.post(`/personal/${contratoAuto.id}/invitar`)).expect(
+          201,
+        );
+      }
+      const correoAuto = sent.at(-1);
+      assert.equal(correoAuto.to, empleadoAuto.datos.email);
+      const tokenAuto = correoAuto.text.match(/token=([a-f0-9]{64})/)[1];
+      await http
+        .post(ruta + '/codigo')
+        .send({ token: tokenAuto })
+        .expect(201);
+      const codigoAuto = sent.at(-1).text.match(/código es (\d{8})/)[1];
+      const sesionAuto = (
+        await http
+          .post(ruta + '/verificar')
+          .send({ token: tokenAuto, codigo: codigoAuto })
+          .expect(201)
+      ).body.sesion;
+      await http
+        .post(ruta + '/documento')
+        .send({ token: tokenAuto, sesion: sesionAuto })
+        .expect(201);
+      await http
+        .post(ruta + '/resolver')
+        .send({
+          token: tokenAuto,
+          sesion: sesionAuto,
+          acepta: true,
+          politica: true,
+          copiaCorreo: true,
+        })
+        .expect(201);
+      assert.equal(
+        (await personal.store.obtener(actor, contratoAuto.id)).estado,
+        'FIRMADO',
+      );
+      const firmasAuto = await personal.store.listar(
+        actor,
+        'FIRMA',
+        contratoAuto.id,
+      );
+      assert.equal(firmasAuto.length, 2);
+    }
+    console.log(
+      'PASS contratos por modalidad: datos del expediente, tres PDF, revisión, firma de empleador, envío y reintento SMTP, lectura y firma OTP del empleado',
+    );
     console.log(
       `Personal: aislamiento, cifrado, pagos concurrentes e idempotentes, evidencia financiera protegida, OTP, copias y contratos revisados OK (${mysql ? 'MariaDB' : 'PostgreSQL'}).`,
     );

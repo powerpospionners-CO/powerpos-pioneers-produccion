@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import ContratosAutomaticos from "@/components/ContratosAutomaticos";
 import api from "@/lib/api";
 type Seccion = { titulo: string; contenido: string };
 type Registro = {
@@ -305,6 +306,19 @@ export default function EditorContratos({
   const emitido = actual?.estado === "EMITIDO";
   return (
     <section className="space-y-5 rounded-xl border border-orange-700/60 bg-gray-900 p-5">
+      {data && (
+        <ContratosAutomaticos
+          data={data}
+          empleados={empleados}
+          bloquear={busy || dirty}
+          onCambio={cargar}
+          onPreparado={async (r) => {
+            elegir(r);
+            await cargar();
+          }}
+        />
+      )}
+
       <header>
         <h2 className="text-2xl font-semibold">Crear contrato en el sistema</h2>
         <p className="mt-2 text-sm text-gray-300">
