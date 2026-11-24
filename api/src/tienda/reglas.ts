@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import type { HorarioDia } from './horarios';
 
 // Subdominios que el propio sistema usa (panel, API, marca, etc.) — ninguna
 // empresa puede tomarlos como su enlace de tienda pública.
@@ -22,6 +23,8 @@ export const tiendaDefaults = {
   portada: '',
   whatsapp: '',
   horario: '',
+  horarios: null as HorarioDia[] | null,
+  ciudadesEntrega: [] as string[],
   pagos: '',
   envios: '',
   facebook: '',
@@ -29,7 +32,7 @@ export const tiendaDefaults = {
   tiktok: '',
   sucursalId: 0,
   minimo: 0,
-  zonas: [] as { nombre: string; costo: number }[],
+  zonas: [] as { id?: string; ciudad?: string; nombre: string; costo: number }[],
 };
 export const puntosDefaults = {
   habilitado: false,
@@ -42,7 +45,13 @@ export function puntosConfig(value: unknown) {
   return { ...puntosDefaults, ...((value as object) || {}) };
 }
 export function tiendaConfig(value: unknown) {
-  return { ...tiendaDefaults, ...((value as object) || {}) };
+  const t = { ...tiendaDefaults, ...((value as object) || {}) };
+  if (Array.isArray(t.zonas)) t.zonas = t.zonas.map((z, i) => {
+    const ciudad = z.ciudad || ({ PEREIRA: 'Pereira', DOSQUEBRADAS: 'Dosquebradas' }[z.nombre?.trim().toUpperCase()] || '');
+    return { ...z, id: z.id || `zona-${i + 1}`, ciudad, nombre: !z.ciudad && ciudad ? 'Todas las zonas' : z.nombre };
+  });
+  t.ciudadesEntrega = [...new Set([...(Array.isArray(t.ciudadesEntrega) ? t.ciudadesEntrega : []), ...(Array.isArray(t.zonas) ? t.zonas.map(z => z.ciudad || '').filter(Boolean) : [])])];
+  return t;
 }
 export function texto(
   value: unknown,

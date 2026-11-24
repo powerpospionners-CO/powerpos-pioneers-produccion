@@ -36,6 +36,7 @@ export function PedidoTienda({
     nombre: "",
     telefono: "",
     direccion: "",
+    ciudad: "",
     zona: "",
     observacion: "",
     metodoPago: "EFECTIVO",
@@ -48,9 +49,11 @@ export function PedidoTienda({
   const lock = useRef(false),
     clave = useRef({ body: "", id: "" });
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0),
-    zona = tienda.config.zonas.find((z) => z.nombre === form.zona),
+    zona = tienda.config.zonas.find((z) => (z.id || z.nombre) === form.zona),
     total = subtotal + (zona?.costo || 0);
   const path = `/tiendas/${encodeURIComponent(slug)}/pedidos`;
+  const ciudades = [...new Set(tienda.config.zonas.map(z => z.ciudad || '').filter(Boolean))];
+  const zonasVisibles = ciudades.length ? tienda.config.zonas.filter(z => (z.ciudad || '__OTRAS__') === form.ciudad) : tienda.config.zonas;
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("pedido");
     if (!id) return;
@@ -97,6 +100,7 @@ export function PedidoTienda({
     setError("");
     const body = JSON.stringify({
       ...form,
+      ciudad: zona?.ciudad || undefined,
       pagoBold: form.metodoPago === "TARJETA",
       totalEsperado: total,
       items: items.map((i) => ({ productoId: i.id, cantidad: i.quantity })),
@@ -276,16 +280,18 @@ export function PedidoTienda({
             />
           </label>
         ))}
+        {ciudades.length > 0 && <label>Ciudad de entrega<select required value={form.ciudad} onChange={e => setForm({...form, ciudad:e.target.value, zona:''})}><option value="">Selecciona tu ciudad</option>{ciudades.map(c => <option key={c} value={c}>{c}</option>)}{tienda.config.zonas.some(z=>!z.ciudad)&&<option value="__OTRAS__">Otras zonas atendidas</option>}</select></label>}
         <label>
           Zona de entrega
           <select
             required
+            disabled={ciudades.length > 0 && !form.ciudad}
             value={form.zona}
             onChange={(e) => setForm({ ...form, zona: e.target.value })}
           >
             <option value="">Selecciona tu zona</option>
-            {tienda.config.zonas.map((z) => (
-              <option key={z.nombre}>{z.nombre}</option>
+            {zonasVisibles.map((z) => (
+              <option key={z.id || z.nombre} value={z.id || z.nombre}>{z.nombre}</option>
             ))}
           </select>
         </label>

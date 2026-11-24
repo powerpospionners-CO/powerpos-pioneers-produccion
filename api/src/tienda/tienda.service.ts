@@ -12,6 +12,7 @@ import { paletaLogoLocal } from '../empresa/paleta-logo-local';
 import { agregarOrigen, leerOrigenes } from '../productos/origenes.service';
 import { BoldService } from './bold.service';
 import { montoBold } from './bold.reglas';
+import { validarHorarios, resumenHorarios } from './horarios';
 
 @Injectable()
 export class TiendaService {
@@ -81,6 +82,8 @@ export class TiendaService {
     t.paletaLogo = actual.tienda.paletaLogo;
     if (t.coloresAutomaticos && t.paletaLogo) t.color = t.paletaLogo.principal;
     const p = { ...actual.fidelizacion, ...body.fidelizacion };
+    t.horarios = validarHorarios(t.horarios);
+    if (t.horarios) t.horario = resumenHorarios(t.horarios);
     for (const campo of ['publicada', 'pedidosHabilitados'])
       if (typeof t[campo] !== 'boolean')
         throw new BadRequestException('Estado de tienda inválido');
@@ -117,11 +120,18 @@ export class TiendaService {
     monto(t.minimo, 'Pedido mínimo');
     if (!Array.isArray(t.zonas) || t.zonas.length > 30)
       throw new BadRequestException('Zonas no válidas');
-    t.zonas = t.zonas.map((z) => ({
+    if (t.zonas.some(z => !z || typeof z !== 'object')) throw new BadRequestException('Zona inválida');
+    if (!Array.isArray(t.ciudadesEntrega) || t.ciudadesEntrega.length > 30) throw new BadRequestException('Ciudades de entrega inválidas');
+    t.ciudadesEntrega = t.ciudadesEntrega.map(c => texto(c, 'Ciudad', 80, true));
+    if (new Set(t.ciudadesEntrega.map(c => c.toLocaleLowerCase('es'))).size !== t.ciudadesEntrega.length) throw new BadRequestException('No repita ciudades de entrega');
+    t.zonas = t.zonas.map((z, i) => ({
+      id: texto(z?.id || `zona-${i + 1}`, 'Identificador de zona', 40, true),
+      ciudad: texto(z?.ciudad || '', 'Ciudad', 80),
       nombre: texto(z.nombre, 'Zona', 80, true),
       costo: monto(z.costo, 'Tarifa'),
     }));
-    if (new Set(t.zonas.map((z) => z.nombre)).size !== t.zonas.length)
+    if (t.zonas.some(z => !/^[a-zA-Z0-9-]+$/.test(z.id!) || (z.ciudad && !t.ciudadesEntrega.includes(z.ciudad))) || new Set(t.zonas.map(z => z.id)).size !== t.zonas.length) throw new BadRequestException('Seleccione una ciudad válida e identificadores únicos para las zonas');
+    if (new Set(t.zonas.map((z) => `${z.ciudad}:${z.nombre}`.toLocaleLowerCase('es'))).size !== t.zonas.length)
       throw new BadRequestException('No repita zonas');
     if (
       t.sucursalId &&
@@ -186,6 +196,8 @@ export class TiendaService {
       portada: t.portada,
       whatsapp: t.whatsapp,
       horario: t.horario,
+      horarios: t.horarios,
+      ciudadesEntrega: t.ciudadesEntrega,
       pagos: t.pagos,
       envios: t.envios,
       facebook: t.facebook,
@@ -291,11 +303,13 @@ export class TiendaService {
     if (!/^[+\d\s()-]{7,20}$/.test(telefono))
       throw new BadRequestException('Teléfono inválido');
     const observacion = texto(body.observacion ?? '', 'Observaciones', 500);
-    const zona = t.zonas.find((z) => z.nombre === body.zona);
+    const candidatas = t.zonas.filter(z => z.id === body.zona || z.nombre === body.zona || (z.nombre === 'Todas las zonas' && z.ciudad?.toUpperCase() === String(body.zona).toUpperCase()));
+    const zona = t.zonas.find(z => z.id === body.zona) || (candidatas.length === 1 ? candidatas[0] : candidatas.find(z => z.ciudad === body.ciudad));
     if (!zona)
       throw new BadRequestException(
         'Seleccione una zona atendida por la empresa',
       );
+    if (body.ciudad !== undefined && zona.ciudad !== body.ciudad) throw new BadRequestException('La zona no pertenece a la ciudad seleccionada');
     if (
       !(await this.prisma.sucursal.findFirst({
         where: { id: t.sucursalId, empresaId: e.id, activo: true },
@@ -383,7 +397,7 @@ export class TiendaService {
           nombre,
           telefono,
           direccion,
-          zona: zona.nombre,
+          zona: zona.ciudad ? `${zona.ciudad} · ${zona.nombre}` : zona.nombre,
           observacion,
           items,
           subtotal,

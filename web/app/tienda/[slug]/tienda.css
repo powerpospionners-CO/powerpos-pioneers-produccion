@@ -1312,6 +1312,7 @@
   font-weight: 800;
 }
 .figma-store .checkout-content input,
+.figma-store .checkout-content select,
 .figma-store .checkout-content textarea {
   width: 100%;
   border: 1px solid var(--line);

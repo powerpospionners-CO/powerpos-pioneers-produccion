@@ -28,6 +28,8 @@ export type TiendaPublica = {
     portada: string;
     whatsapp: string;
     horario: string;
+    horarios?: { dia: number; abierto: boolean; apertura: string; cierre: string }[] | null;
+    ciudadesEntrega?: string[];
     pagos?: string;
     envios?: string;
     instagram: string;
@@ -35,7 +37,7 @@ export type TiendaPublica = {
     tiktok: string;
     pedidosHabilitados: boolean;
     minimo: number;
-    zonas: { nombre: string; costo: number }[];
+    zonas: { id?: string; ciudad?: string; nombre: string; costo: number }[];
     antetitulo?: string;
     portadaEtiqueta?: string;
     portadaTexto?: string;
