@@ -7,9 +7,10 @@ import {
   TiendaPublicaController,
 } from './tienda.controller';
 import { PedidosPublicosGuard } from './pedidos-publicos.guard';
+import { BoldService } from './bold.service';
 @Module({
   imports: [PedidosModule],
-  providers: [TiendaService, RolesGuard, PedidosPublicosGuard],
+  providers: [TiendaService, BoldService, RolesGuard, PedidosPublicosGuard],
   controllers: [TiendaAdminController, TiendaPublicaController],
 })
 export class TiendaModule {}

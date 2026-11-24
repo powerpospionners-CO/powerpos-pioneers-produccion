@@ -9,7 +9,7 @@ describe('Existencias de pedidos web', () => {
       sucursal: { findFirst: jest.fn().mockResolvedValue({ id: 1 }) },
       producto: { findMany: jest.fn().mockResolvedValue([{ id: 7, nombre: 'Chile', precio: 1000, stockActual }]) },
     };
-    return { db, service: new TiendaService(db, {} as any) };
+    return { db, service: new TiendaService(db, {} as any, { disponible: async () => false } as any) };
   }
   it.each([0,1])('impide pedir dos unidades cuando quedan %s', async stock => {
     const { db, service } = caso(stock);

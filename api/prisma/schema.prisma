@@ -4,6 +4,21 @@ generator client {
 }
 
 // Expediente privado: datos cifrados y separados de archivos públicos y auditoría general.
+model BoldRegistro {
+  id String @id @db.VarChar(36)
+  empresaId Int
+  sucursalId Int
+  tipo String @db.VarChar(16)
+  clave String @db.VarChar(128)
+  estado String @db.VarChar(24)
+  datos Json
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  @@unique([empresaId, sucursalId, tipo, clave])
+  @@index([empresaId, sucursalId, tipo, creadoEn])
+  @@map("bold_registros")
+}
+
 model PersonalRegistro {
   id String @id @db.VarChar(36)
   empresaId Int

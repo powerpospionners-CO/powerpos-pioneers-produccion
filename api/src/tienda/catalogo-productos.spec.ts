@@ -13,7 +13,7 @@ describe('Catálogo compartido entre Productos y Mi tienda', () => {
         update: jest.fn(({ data }) => { producto = { ...producto, ...data }; return Promise.resolve({ ...producto }); }),
       },
     };
-    return { prisma, productos: new ProductosService(prisma, {} as any), tienda: new TiendaService(prisma, {} as any), stock: (cantidad: number) => { producto.stockActual = cantidad; } };
+    return { prisma, productos: new ProductosService(prisma, {} as any), tienda: new TiendaService(prisma, {} as any, { disponible: async () => false } as any), stock: (cantidad: number) => { producto.stockActual = cantidad; } };
   }
   it('publica la misma imagen y los detalles guardados con los endpoints de Productos', async () => {
     const { productos, tienda } = preparar();
