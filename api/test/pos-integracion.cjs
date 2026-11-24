@@ -357,7 +357,7 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     // Si no hay caja o existencias, el pago recibido se conserva para conciliación.
     await http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' }).expect(400);
     assert.equal((await http.get(rutaWebBold).expect(200)).body.pagoBold.estado, 'APROBADO');
-    await http.post('/caja/abrir').set('Authorization', token).send({ montoInicial: 0 }).expect(201);
+    await http.post('/caja/abrir').set('Authorization', token).send({ montoInicial: 50000 }).expect(201);
     await db.producto.update({ where: { id: prodBold.id }, data: { stockActual: 0 } });
     await http.patch(gestionWebBold).set('Authorization', token).send({ accion: 'ACEPTAR' }).expect(400);
     assert.equal((await http.get(rutaWebBold).expect(200)).body.pagoBold.estado, 'APROBADO');
