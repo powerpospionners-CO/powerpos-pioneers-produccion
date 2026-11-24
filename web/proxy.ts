@@ -22,6 +22,11 @@ const RUTAS_PANEL = [
 ];
 
 export function proxy(request: NextRequest) {
+  if (process.env.NEXT_PUBLIC_CAPACITACION === 'true') {
+    const respuesta = NextResponse.next();
+    respuesta.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    return respuesta;
+  }
   const url = request.nextUrl;
   const host = (request.headers.get('host') || '').toLowerCase().split(':')[0];
   const panel = () => { const respuesta = NextResponse.next(); respuesta.headers.set('X-Robots-Tag', 'noindex, nofollow'); return respuesta; };

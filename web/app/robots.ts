@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { dominioTiendas, slugDelHost, urlTienda } from "../lib/seoTienda";
 export default async function robots(): Promise<MetadataRoute.Robots> {
+  if (process.env.NEXT_PUBLIC_CAPACITACION === 'true') return { rules: { userAgent: '*', disallow: '/' } };
   const slug = slugDelHost((await headers()).get("host") || "");
   return slug
     ? {

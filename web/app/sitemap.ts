@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { slugDelHost, slugPublico, urlTienda } from "../lib/seoTienda";
 import { urlPublicaTienda } from "../lib/urlPublicaTienda";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  if (process.env.NEXT_PUBLIC_CAPACITACION === 'true') return [];
   const slug = slugDelHost((await headers()).get("host") || "");
   const base =
     process.env.API_INTERNAL_URL ||

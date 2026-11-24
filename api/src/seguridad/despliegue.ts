@@ -1,4 +1,6 @@
+import { validarCapacitacion } from './capacitacion';
 export function validarDespliegue(env: NodeJS.ProcessEnv) {
+  validarCapacitacion(env);
   const procesos = Number(env.WEB_CONCURRENCY || '1');
   if (!Number.isSafeInteger(procesos) || procesos < 1)
     throw new Error('WEB_CONCURRENCY debe ser un entero positivo');
