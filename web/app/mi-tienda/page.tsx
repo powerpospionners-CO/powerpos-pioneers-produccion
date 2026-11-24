@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import AlertaSistema from "@/components/AlertaSistema";
+import { iniciarGuardado, terminarCarga } from "@/lib/cargas";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
@@ -71,9 +73,7 @@ export default function MiTienda() {
       );
     } catch (error: any) {
       setMensaje("");
-      setError(
-        error.response?.data?.message || "No se pudo analizar el logo",
-      );
+      setError(error.response?.data?.message || "No se pudo analizar el logo");
     } finally {
       setBusy(false);
       e.target.value = "";
@@ -97,9 +97,7 @@ export default function MiTienda() {
       );
     } catch (error: any) {
       setMensaje("");
-      setError(
-        error.response?.data?.message || "No se pudo subir la portada",
-      );
+      setError(error.response?.data?.message || "No se pudo subir la portada");
     } finally {
       setBusy(false);
       e.target.value = "";
@@ -107,6 +105,7 @@ export default function MiTienda() {
   }
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
+    const proceso = iniciarGuardado();
     setBusy(true);
     setError("");
     setMensaje("");
@@ -120,6 +119,7 @@ export default function MiTienda() {
     } catch (e: any) {
       setError(e.response?.data?.message || "No fue posible guardar");
     } finally {
+      terminarCarga(proceso);
       setBusy(false);
     }
   }
@@ -205,7 +205,18 @@ export default function MiTienda() {
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
                         onChange={subirPortada}
+                        disabled={busy}
                       />
+                      {config.tienda.portada && (
+                        <Image
+                          src={config.tienda.portada}
+                          width={1600}
+                          height={600}
+                          unoptimized
+                          alt="Vista previa de la portada de tu tienda"
+                          className="my-3 max-h-56 w-full rounded-lg border border-gray-700 object-cover"
+                        />
+                      )}
                       <span className="text-sm text-gray-400">
                         Usa una fotografía horizontal con espacio libre a la
                         izquierda para el título. Máximo 8 MB.
@@ -282,7 +293,6 @@ export default function MiTienda() {
                         "envios",
                         "Condiciones y plazos de entrega (respuestas del asistente)",
                       ],
-                      ["portada", "URL HTTPS de la imagen de portada"],
                       [
                         "whatsapp",
                         "WhatsApp con indicativo de país, sin + (ej. 573001234567)",
@@ -302,7 +312,7 @@ export default function MiTienda() {
                           <input
                             maxLength={500}
                             className={input}
-                            type={k === "portada" ? "url" : "text"}
+                            type="text"
                             value={config.tienda[k] || ""}
                             onChange={(e) => cambiar(k, e.target.value)}
                           />

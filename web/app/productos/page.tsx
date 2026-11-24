@@ -3,6 +3,7 @@ import { useNotificar } from '@/components/Notificaciones';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { guardarConImagen } from '@/lib/guardarConImagen';
+import { iniciarGuardado, terminarCarga } from '@/lib/cargas';
 import api from '@/lib/api';
 import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
@@ -734,6 +735,7 @@ export default function ProductosPage() {
   const guardar = async () => {
     if (!form.nombre || !form.precio || !form.categoriaId) return;
     setLoading(true);
+    const proceso = iniciarGuardado();
     let registroGuardado = false;
     try {
       const ingredientesPayload = recetaTemp
