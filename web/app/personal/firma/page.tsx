@@ -80,9 +80,11 @@ export default function FirmaLaboral() {
       a = document.createElement("a");
     a.href = url;
     a.download =
-      tipo === "documento"
-        ? "documento-laboral.pdf"
-        : "documento-y-evidencias.zip";
+      tipo === "politica"
+        ? "politica-tratamiento-datos.pdf"
+        : tipo === "documento"
+          ? "documento-laboral.pdf"
+          : "documento-y-evidencias.zip";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     if (tipo === "documento") setOriginal(true);
@@ -305,6 +307,31 @@ export default function FirmaLaboral() {
               <p className="mt-3 whitespace-pre-wrap">
                 {vista.politica.politica}
               </p>
+              {vista.politica.completa && (
+                <div className="mt-3">
+                  <p>
+                    Política completa: {vista.politica.completa.nombre} ·
+                    versión {vista.politica.completa.versionEtiqueta}
+                  </p>
+                  <button
+                    className="text-orange-300 underline"
+                    disabled={busy}
+                    onClick={() => void hacer(() => descargar("politica"))}
+                  >
+                    Descargar política completa de esta invitación
+                  </button>
+                </div>
+              )}
+              {vista.politica.enlacePolitica && (
+                <a
+                  className="mt-3 block text-orange-300 underline"
+                  href={vista.politica.enlacePolitica}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Consultar política completa
+                </a>
+              )}
               <p className="mt-3">
                 Responsable: {vista.politica.responsable}. Contacto:{" "}
                 {vista.politica.correo}

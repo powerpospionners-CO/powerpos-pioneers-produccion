@@ -115,8 +115,86 @@ const { AppModule } = require('../dist/src/app.module'),
       .send({ token: '0'.repeat(64) })
       .expect(403);
     await auth(http.get('/personal')).expect(200);
+    const plantillaEmpresa = {
+      tipo: 'POLITICA',
+      nombre: 'Política laboral ficticia',
+      versionEtiqueta: '1.0',
+      responsable: 'Empresa de prueba',
+      nit: '123-prueba',
+      correo: 'responsable@example.com',
+      telefono: '000-prueba',
+      direccion: 'Dirección ficticia',
+      domicilio: 'Pereira de prueba',
+      contenido:
+        'Contenido completo de política ficticia de prueba. Canales y procedimientos revisados.',
+    };
+    await http.get('/personal/documentos-empresa').expect(401);
+    await auth(http.get('/personal/documentos-empresa'), 'Bearer ' + ct).expect(
+      403,
+    );
+    const politicaEmpresa = (
+      await auth(http.post('/personal/documentos-empresa'))
+        .send(plantillaEmpresa)
+        .expect(201)
+    ).body;
+    const enlacePublico = `/personal-politicas/${a.e.id}/${a.s.id}/${politicaEmpresa.id}`;
+    await http.get(enlacePublico).expect(404);
+    await auth(
+      http.get(`/personal/documentos-empresa/${politicaEmpresa.id}/pdf`),
+      b.token,
+    ).expect(404);
+    await auth(
+      http.post(`/personal/documentos-empresa/${politicaEmpresa.id}/adoptar`),
+    )
+      .send({
+        vigencia: '2026-01-01',
+        revisadaPor: 'Revisor ficticio',
+        acepta: true,
+        publicar: true,
+      })
+      .expect(201);
+    const publica = await http.get(enlacePublico).expect(200);
+    assert.match(publica.headers['content-type'], /application\/pdf/);
+    assert.match(publica.headers['cache-control'], /no-store/);
+    assert.equal(publica.body.subarray(0, 5).toString(), '%PDF-');
+    await auth(
+      http.post(`/personal/documentos-empresa/${politicaEmpresa.id}/adoptar`),
+    )
+      .send({
+        vigencia: '2026-01-01',
+        revisadaPor: 'Revisor ficticio',
+        acepta: true,
+      })
+      .expect(400);
+    await auth(http.post('/personal/documentos-empresa'))
+      .send({
+        ...plantillaEmpresa,
+        versionEtiqueta: '2.0',
+        anteriorId: politicaEmpresa.id,
+        contenido: 'Nueva versión privada ficticia.',
+      })
+      .expect(201);
+    const modeloEmpresa = (
+      await auth(http.post('/personal/documentos-empresa'))
+        .send({
+          ...plantillaEmpresa,
+          tipo: 'CONTRATO',
+          nombre: 'Modelo de auxiliar ficticio',
+          contenido: 'Prestaciones legales y derechos mínimos de {{empleado}}.',
+        })
+        .expect(201)
+    ).body;
+    const modelosBiblioteca = (
+      await auth(http.get('/personal/editor')).expect(200)
+    ).body.modelos;
+    assert(
+      modelosBiblioteca.some(
+        (m) => m.datos.documentoEmpresaId === modeloEmpresa.id,
+      ),
+    );
     await auth(http.post('/personal/configuracion'))
       .send({
+        politicaId: politicaEmpresa.id,
         responsable: 'Empresa de prueba',
         correo: 'responsable@example.com',
         politica:
@@ -138,6 +216,30 @@ const { AppModule } = require('../dist/src/app.module'),
         })
         .expect(201)
     ).body;
+    await auth(
+      http.post(`/personal/documentos-empresa/${politicaEmpresa.id}/entregas`),
+    )
+      .send({
+        empleadoId: empleado.id,
+        fecha: '2026-01-02',
+        medio: 'PAPEL',
+        confirmado: true,
+      })
+      .expect(201);
+    const biblioteca = (
+      await auth(http.get('/personal/documentos-empresa')).expect(200)
+    ).body;
+    assert.equal(biblioteca.entregas[0].datos.politicaId, politicaEmpresa.id);
+    assert.match(biblioteca.entregas[0].datos.alcance, /no equivale a firma/);
+    await auth(
+      http.post(
+        `/personal/documentos-empresa/${politicaEmpresa.id}/retirar-enlace`,
+      ),
+    ).expect(201);
+    await http.get(enlacePublico).expect(404);
+    await auth(
+      http.get(`/personal/documentos-empresa/${politicaEmpresa.id}/pdf`),
+    ).expect(200);
     const cifrado = await db.personalRegistro.findUnique({
       where: { id: empleado.id },
     });
@@ -277,6 +379,19 @@ const { AppModule } = require('../dist/src/app.module'),
         .expect(201)
     ).body;
     assert.equal(vista.documento.id, pago.id);
+    assert.equal(vista.politica.completa.versionEtiqueta, '1.0');
+    await http
+      .post(ruta + '/politica')
+      .send({ token: nuevoToken })
+      .expect(403);
+    const copiaPolitica = await http
+      .post(ruta + '/politica')
+      .send(cred)
+      .expect(201);
+    assert.equal(copiaPolitica.body.subarray(0, 5).toString(), '%PDF-');
+    console.log(
+      'PASS políticas: versiones inmutables, aislamiento, publicación y retiro explícitos, entrega sin firma y acceso privado OTP',
+    );
     assert(!JSON.stringify(vista).includes('codigoHash'));
     const actor = { id: a.u.id, empresaId: a.e.id, sucursalId: a.s.id };
     let invitacionActual = await personal.acceso(actor, nuevoToken);

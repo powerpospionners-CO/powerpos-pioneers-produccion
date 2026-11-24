@@ -7,6 +7,7 @@ import {
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import * as nodemailer from 'nodemailer';
 import * as bcrypt from 'bcrypt';
+import { enlacePolitica } from './documentos-empresa.service';
 import { PersonalStore, ActorPersonal } from './personal.store';
 import {
   centavos,
@@ -49,6 +50,20 @@ export class PersonalService {
       pagos: conEntrega(await this.store.listar(a, 'PAGO')),
       plantillas: await this.store.listar(a, 'PLANTILLA'),
       contratos: conEntrega(await this.store.listar(a, 'CONTRATO')),
+      politicas: (await this.store.listar(a, 'DOC_EMPRESA'))
+        .filter(
+          (r: any) => r.datos.tipo === 'POLITICA' && r.estado === 'ADOPTADA',
+        )
+        .map((r: any) => ({
+          id: r.id,
+          empresaId: r.empresaId,
+          sucursalId: r.sucursalId,
+          datos: {
+            nombre: r.datos.nombre,
+            versionEtiqueta: r.datos.versionEtiqueta,
+            publicada: r.datos.publicada,
+          },
+        })),
       config: await this.config(a),
       correoConfigurado: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
       nominaDian: {
@@ -67,14 +82,45 @@ export class PersonalService {
       responsable: texto(d.responsable, 'responsable del tratamiento'),
       correo: texto(d.correo, 'correo de atención'),
       politica: texto(d.politica, 'aviso de privacidad y conservación', 12000),
-      version: hoy(),
+      enlacePolitica: enlacePolitica(d.enlacePolitica),
+      politicaId: d.politicaId
+        ? texto(d.politicaId, 'política completa', 36)
+        : null,
+      version: new Date().toISOString(),
       aceptadoPor: a.id,
     };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo) || d.acepta !== true)
       throw new BadRequestException(
         'Completa la política y confirma su revisión',
       );
-    return this.store.crear(a, 'CONFIG', datos);
+    if (datos.politicaId) {
+      const p = await this.store.obtener(a, datos.politicaId, 'DOC_EMPRESA');
+      if (p.estado !== 'ADOPTADA' || p.datos.tipo !== 'POLITICA')
+        throw new BadRequestException('Selecciona una política adoptada');
+      if (datos.enlacePolitica)
+        throw new BadRequestException(
+          'Selecciona una política del sistema o un enlace externo, no ambos',
+        );
+    }
+    if (!datos.politicaId && !datos.enlacePolitica)
+      throw new BadRequestException(
+        'Vincula una política completa adoptada o su enlace HTTPS',
+      );
+    if (/\[[^\]]+\]|\{\{/.test(datos.politica))
+      throw new BadRequestException(
+        'Completa los campos pendientes del aviso antes de guardar',
+      );
+    return this.store.prisma.$transaction(async (tx) => {
+      const r = await this.store.crear(a, 'CONFIG', datos, {}, tx);
+      await this.store.evento(
+        a,
+        r.id,
+        'CONFIGURAR_PRIVACIDAD',
+        { politicaId: datos.politicaId },
+        tx,
+      );
+      return r;
+    });
   }
   async empleado(a: ActorPersonal, d: any, id?: string) {
     await this.store.preparar();
@@ -562,6 +608,15 @@ export class PersonalService {
     const config = await this.config(a);
     if (!config)
       throw new BadRequestException('Configura el aviso de privacidad');
+    const politicaCompleta = config.politicaId
+      ? await this.store.obtener(a, config.politicaId, 'DOC_EMPRESA')
+      : null;
+    if (
+      politicaCompleta &&
+      (politicaCompleta.estado !== 'ADOPTADA' ||
+        politicaCompleta.datos.tipo !== 'POLITICA')
+    )
+      throw new BadRequestException('La política vinculada no está adoptada');
     const token = randomBytes(32).toString('hex');
     const r = await this.store.crear(
       a,
@@ -573,7 +628,16 @@ export class PersonalService {
         vence: Date.now() + 7 * 86400000,
         intentos: 0,
         solicitadoEn: 0,
-        politica: config,
+        politica: {
+          ...config,
+          completa: politicaCompleta
+            ? {
+                nombre: politicaCompleta.datos.nombre,
+                versionEtiqueta: politicaCompleta.datos.versionEtiqueta,
+                sha256: politicaCompleta.datos.sha256,
+              }
+            : null,
+        },
       },
       { referenciaId: id, llave: hash(token), estado: 'PENDIENTE' },
     );
