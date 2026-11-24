@@ -204,6 +204,12 @@ export class PersonalController {
   @Post('periodos') periodo(@Request() r: any, @Body() d: any) {
     return this.service.periodo(r.user, d);
   }
+  @Post('pagos/registrar-enviar') pagoYEnviar(
+    @Request() r: any,
+    @Body() d: any,
+  ) {
+    return this.service.pagoYEnviar(r.user, d);
+  }
   @Post('pagos') pago(@Request() r: any, @Body() d: any) {
     return this.service.pago(r.user, d);
   }
@@ -228,7 +234,7 @@ export class PersonalController {
     return this.service.firmarYEnviar(r.user, id, d);
   }
   @Post(':id/invitar') invitar(@Request() r: any, @Param('id') id: string) {
-    return this.service.invitar(r.user, id);
+    return this.service.invitarConEstado(r.user, id);
   }
   @Post(':id/copia') copia(@Request() r: any, @Param('id') id: string) {
     return this.service.entregarCopia(r.user, id);
