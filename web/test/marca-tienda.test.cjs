@@ -9,6 +9,7 @@ function pagina(tienda) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const cargar = (nombre) => {
+    if (nombre.endsWith('/cargarTiendaPublica')) return { cargarTiendaPublica: async () => tienda };
     if (nombre === 'react') return { cache: (fn) => fn };
     if (nombre === 'next/navigation') return { notFound() { throw Error('404'); } };
     if (nombre === './TiendaCliente') return { default: () => null };

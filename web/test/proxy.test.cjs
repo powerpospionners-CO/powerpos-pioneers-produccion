@@ -22,3 +22,13 @@ test('la raíz del dominio de empresa conserva su tienda pública', () => {
   const r = proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com/', { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } }));
   assert.equal(r.headers.get('x-middleware-rewrite'), 'https://enchilamarketpereira.powerpospioneers.com/tienda/enchilamarketpereira');
 });
+
+test('las páginas públicas separadas no se confunden con Productos del panel', () => {
+ for (const seccion of ['productos','nosotros','contacto']) {
+  const r = proxy(new NextRequest(`https://enchilamarketpereira.powerpospioneers.com/tienda/${seccion}`, { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } }));
+  assert.equal(r.headers.get('x-middleware-rewrite'), `https://enchilamarketpereira.powerpospioneers.com/tienda/enchilamarketpereira/${seccion}`);
+  assert.equal(r.headers.get('x-robots-tag'), null);
+ }
+ const panel = proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com/productos', { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } }));
+ assert.equal(panel.headers.get('x-middleware-next'), '1'); assert.equal(panel.headers.get('x-robots-tag'), 'noindex, nofollow');
+});

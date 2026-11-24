@@ -53,6 +53,14 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Las páginas públicas evitan /productos y /contacto del panel administrativo.
+  const paginaPublica = /^\/tienda\/(productos|nosotros|contacto)\/?$/.exec(url.pathname);
+  if (paginaPublica) {
+    const destino = url.clone();
+    destino.pathname = `/tienda/${subdominio}/${paginaPublica[1]}`;
+    return NextResponse.rewrite(destino);
+  }
+
   // Cualquier otra ruta bajo el subdominio de una empresa se trata como su tienda pública.
   const nuevaUrl = url.clone();
   nuevaUrl.pathname = `/tienda/${subdominio}${url.pathname === '/' ? '' : url.pathname}`;
