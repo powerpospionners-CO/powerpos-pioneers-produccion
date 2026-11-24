@@ -9,13 +9,18 @@ import {
   useContext,
   type CSSProperties,
 } from "react";
+import Link from "next/link";
+import { rutasTienda, type SeccionTienda } from "../../../lib/seccionesTienda";
 import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
-import { existenciasTienda, puedePedirProducto } from "../../../lib/existenciasTienda";
+import {
+  existenciasTienda,
+  puedePedirProducto,
+} from "../../../lib/existenciasTienda";
 import type { TiendaPublica } from "../../../lib/tiendaPublica";
 import { PedidoTienda } from "./PedidoTienda";
 import "./tienda.css";
-const Marca = createContext({ nombre: "", logo: "" });
+const Marca = createContext({ nombre: "", logo: "", inicio: "/" });
 
 type Product = {
   id: number;
@@ -120,9 +125,10 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 function Logo({ light = false }: { light?: boolean }) {
   const marca = useContext(Marca);
   return (
-    <a
+    <Link
+      prefetch={false}
       className={`logo ${light ? "logo-light" : ""}`}
-      href="#inicio"
+      href={marca.inicio}
       aria-label={`${marca.nombre}, inicio`}
     >
       {marca.logo ? (
@@ -134,7 +140,7 @@ function Logo({ light = false }: { light?: boolean }) {
         <strong>{marca.nombre}</strong>
         <small>TIENDA EN LÍNEA</small>
       </span>
-    </a>
+    </Link>
   );
 }
 
@@ -203,7 +209,19 @@ function ProductImage({
   );
 }
 
-function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
+function App({
+  tienda,
+  slug,
+  seccion = "inicio",
+  rutas = rutasTienda(slug),
+  navegar,
+}: {
+  tienda: TiendaPublica;
+  slug: string;
+  seccion?: SeccionTienda;
+  rutas?: Record<SeccionTienda, string>;
+  navegar?: (href: string) => void;
+}) {
   const t = tienda.config;
   const products: Product[] = useMemo(
     () =>
@@ -215,12 +233,19 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
         category: p.categoria.nombre,
         country: p.origen || "",
         size: p.presentacion || "Consultar presentación",
-        heat: p.disponible && Number(p.stockActual) > 0 ? "Disponible para consultar" : "Agotado",
+        heat:
+          p.disponible && Number(p.stockActual) > 0
+            ? "Disponible para consultar"
+            : "Agotado",
         imagePosition: "center",
         image: p.imagen || "",
         disponible: puedePedirProducto(p.stockActual, 1, p.disponible),
         stock: existenciasTienda(p.stockActual),
-        unidad: p.ventaGranel ? (['l', 'ml'].includes(p.unidadGranel || '') ? 'ml' : 'g') : 'unidades',
+        unidad: p.ventaGranel
+          ? ["l", "ml"].includes(p.unidadGranel || "")
+            ? "ml"
+            : "g"
+          : "unidades",
       })),
     [tienda.productos],
   );
@@ -272,7 +297,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
   const [sort, setSort] = useState("destacados");
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selected = products.find(p => p.id === selectedId) || null;
+  const selected = products.find((p) => p.id === selectedId) || null;
   const setSelected = (p: Product | null) => setSelectedId(p?.id ?? null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -366,7 +391,11 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
   const currentCart = cart.map((item) => ({
     ...item,
     ...products.find((p) => p.id === item.id),
-    disponible: products.some((p) => p.id === item.id && puedePedirProducto(p.stock, item.quantity, p.disponible)),
+    disponible: products.some(
+      (p) =>
+        p.id === item.id &&
+        puedePedirProducto(p.stock, item.quantity, p.disponible),
+    ),
   }));
   const totalCount = currentCart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = currentCart.reduce(
@@ -384,10 +413,16 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
       return found
         ? current.map((item) =>
             item.id === product.id
-              ? { ...item, quantity: Math.min(product.stock, item.quantity + quantity) }
+              ? {
+                  ...item,
+                  quantity: Math.min(product.stock, item.quantity + quantity),
+                }
               : item,
           )
-        : [...current, { ...product, quantity: Math.min(product.stock, quantity) }];
+        : [
+            ...current,
+            { ...product, quantity: Math.min(product.stock, quantity) },
+          ];
     });
     setToast(`${product.name} se agregó al carrito`);
     window.setTimeout(() => setToast(""), 2600);
@@ -395,7 +430,20 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
 
   const updateCart = (id: number, quantity: number) =>
     setCart((current) =>
-      current.map((item) => (item.id === id ? { ...item, quantity: Math.max(1, Math.min(products.find(p => p.id === id)?.stock || 0, quantity)) } : item)),
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              quantity: Math.max(
+                1,
+                Math.min(
+                  products.find((p) => p.id === id)?.stock || 0,
+                  quantity,
+                ),
+              ),
+            }
+          : item,
+      ),
     );
   const removeCart = (id: number) =>
     setCart((current) => current.filter((item) => item.id !== id));
@@ -478,7 +526,13 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
   };
 
   return (
-    <Marca.Provider value={{ nombre: tienda.nombre, logo: tienda.logo || "" }}>
+    <Marca.Provider
+      value={{
+        nombre: tienda.nombre,
+        logo: tienda.logo || "",
+        inicio: rutas.inicio,
+      }}
+    >
       <div ref={panelRef} className="figma-store app-shell" style={style}>
         <div className="announcement">
           {tienda.nombre} <span />{" "}
@@ -489,38 +543,59 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
             <button
               className="mobile-menu-button"
               onClick={() => setMobileMenu(!mobileMenu)}
-              aria-label="Abrir menú"
+              aria-label={mobileMenu ? "Cerrar menú" : "Abrir menú"}
+              aria-expanded={mobileMenu}
+              aria-controls="navegacion-tienda"
             >
               <Icon name={mobileMenu ? "close" : "menu"} />
             </button>
             <Logo />
             <nav
               className={mobileMenu ? "open" : ""}
+              id="navegacion-tienda"
               aria-label="Navegación principal"
             >
-              <a href="#inicio" onClick={() => setMobileMenu(false)}>
+              <Link
+                href={rutas.inicio}
+                aria-current={seccion === "inicio" ? "page" : undefined}
+                onClick={() => setMobileMenu(false)}
+              >
                 Inicio
-              </a>
-              <a href="#productos" onClick={() => setMobileMenu(false)}>
+              </Link>
+              <Link
+                href={rutas.productos}
+                aria-current={seccion === "productos" ? "page" : undefined}
+                onClick={() => setMobileMenu(false)}
+              >
                 Productos
-              </a>
-              <a href="#nosotros" onClick={() => setMobileMenu(false)}>
+              </Link>
+              <Link
+                href={rutas.nosotros}
+                aria-current={seccion === "nosotros" ? "page" : undefined}
+                onClick={() => setMobileMenu(false)}
+              >
                 Nosotros
-              </a>
-              <a href="#contacto" onClick={() => setMobileMenu(false)}>
+              </Link>
+              <Link
+                href={rutas.contacto}
+                aria-current={seccion === "contacto" ? "page" : undefined}
+                onClick={() => setMobileMenu(false)}
+              >
                 Contacto
-              </a>
+              </Link>
             </nav>
             <div className="header-actions">
-              <a
-                className="whatsapp-link"
-                href={whatsappUrl || "#contacto"}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Icon name="whatsapp" />
-                <span>WhatsApp</span>
-              </a>
+              {whatsappUrl && (
+                <a
+                  className="whatsapp-link"
+                  href={whatsappUrl || rutas.contacto}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Icon name="whatsapp" />
+                  <span>WhatsApp</span>
+                </a>
+              )}
               <button
                 className="cart-button"
                 onClick={() => {
@@ -539,10 +614,14 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter")
-                    document
-                      .querySelector("#productos")
-                      ?.scrollIntoView({ behavior: "smooth" });
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (seccion === "productos")
+                      document
+                        .querySelector("#productos")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    else navegar?.(rutas.productos);
+                  }
                 }}
                 id="buscador-tienda"
                 placeholder="¿Qué estás buscando?"
@@ -553,360 +632,396 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
         </header>
 
         <main>
-          <section className="hero" id="inicio">
-            <div className="hero-copy">
-              <div className="eyebrow">
-                <span /> {t.antetitulo || "DESCUBRE NUESTRA SELECCIÓN"}
-              </div>
-              <h1>
-                {palabrasTitulo.join(" ")} <em>{acento}</em>
-              </h1>
-              <p>
-                {t.descripcion ||
-                  "Encuentra tus favoritos en nuestro catálogo y consulta directamente con nuestro equipo."}
-              </p>
-              <div className="hero-actions">
-                <a className="button primary" href="#productos">
-                  Explorar productos <Icon name="arrow" />
-                </a>
-                <a
-                  className="button secondary"
-                  href={whatsappUrl || "#contacto"}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Icon name="whatsapp" /> Pedir por WhatsApp
-                </a>
-              </div>
-              <div className="hero-notes">
-                <span>
-                  <Icon name="check" size={16} /> {tienda.nombre}
-                </span>
-                <span>
-                  <Icon name="check" size={16} />{" "}
-                  {t.horario || "Atención directa"}
-                </span>
-              </div>
-            </div>
-            <div className="hero-visual">
-              <div
-                className="hero-image"
-                role="img"
-                aria-label={`Portada de ${tienda.nombre}`}
-              />
-              <div className="floating-card fc-one">
-                <small>{t.portadaEtiqueta || "NUESTRA SELECCIÓN"}</small>
-                <strong>{t.portadaTexto || "Encuentra tus favoritos"}</strong>
-              </div>
-              {origins.length > 0 && (
-                <div
-                  className="floating-card fc-two"
-                  aria-label="Orígenes de nuestros productos"
-                >
-                  <span>{origins.slice(0, 2).join(" · ")}</span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="section categories-section">
-            <div className="section-heading">
-              <div>
+          {seccion === "inicio" && (
+            <section className="hero" id="inicio">
+              <div className="hero-copy">
                 <div className="eyebrow">
-                  <span /> Explora por categoría
+                  <span /> {t.antetitulo || "DESCUBRE NUESTRA SELECCIÓN"}
                 </div>
-                <h2>
-                  Encuentra tus próximos <em>favoritos</em>
-                </h2>
-              </div>
-              <p>
-                Explora nuestra selección y encuentra lo que estás buscando.
-              </p>
-            </div>
-            <div className="category-grid">
-              {categories.map((item, index) => (
-                <button
-                  key={item.name}
-                  className={`category-card ${item.tone}`}
-                  onClick={() => applyCategory(item.name)}
-                >
-                  <div
-                    className="category-image"
-                    style={{
-                      backgroundPosition: item.pos,
-                      backgroundImage: item.image
-                        ? `url(${JSON.stringify(item.image)})`
-                        : "var(--hero-image)",
-                    }}
-                  />
-                  <span className="category-index">0{index + 1}</span>
-                  <div>
-                    <small>{item.kicker}</small>
-                    <strong>{item.name}</strong>
-                  </div>
-                  <span className="round-arrow">
-                    <Icon name="arrow" size={18} />
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="section products-section" id="productos">
-            <div className="section-heading product-title">
-              <div>
-                <div className="eyebrow">
-                  <span /> NUESTRO CATÁLOGO
-                </div>
-                <h2>
-                  Productos <em>destacados</em>
-                </h2>
-              </div>
-              <p>
-                Consulta los productos de nuestro negocio. Confirma
-                disponibilidad y entrega con nuestro equipo.
-              </p>
-            </div>
-            <div className="catalog-toolbar">
-              <div
-                className="filter-row"
-                role="group"
-                aria-label="Filtrar por categoría"
-              >
-                {["Todos", ...categories.map((c) => c.name)].map((item) => (
-                  <button
-                    key={item}
-                    className={category === item ? "active" : ""}
-                    onClick={() => setCategory(item)}
+                <h1>
+                  {palabrasTitulo.join(" ")}{" "}
+                  <em>
+                    {acento?.split(/([/–—-])/).map((parte, i) => (
+                      <span key={i}>
+                        {parte}
+                        {/^[\/–—-]$/.test(parte) && <wbr />}
+                      </span>
+                    ))}
+                  </em>
+                </h1>
+                <p>
+                  {t.descripcion ||
+                    "Encuentra tus favoritos en nuestro catálogo y consulta directamente con nuestro equipo."}
+                </p>
+                <div className="hero-actions">
+                  <Link
+                    prefetch={false}
+                    className="button primary"
+                    href={rutas.productos}
                   >
-                    {item}
-                  </button>
-                ))}
+                    Explorar productos <Icon name="arrow" />
+                  </Link>
+                  <a
+                    className="button secondary"
+                    href={whatsappUrl || rutas.contacto}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="whatsapp" /> Pedir por WhatsApp
+                  </a>
+                </div>
+                <div className="hero-notes">
+                  <span>
+                    <Icon name="check" size={16} /> {tienda.nombre}
+                  </span>
+                  <span>
+                    <Icon name="check" size={16} />{" "}
+                    {t.horario || "Atención directa"}
+                  </span>
+                </div>
               </div>
-              <div className="select-row">
+              <div className={`hero-visual${t.portada ? " custom-cover" : ""}`}>
+                <div
+                  className="hero-image"
+                  role="img"
+                  aria-label={`Portada de ${tienda.nombre}`}
+                />
+                <div className="floating-card fc-one">
+                  <small>{t.portadaEtiqueta || "NUESTRA SELECCIÓN"}</small>
+                  <strong>{t.portadaTexto || "Encuentra tus favoritos"}</strong>
+                </div>
                 {origins.length > 0 && (
+                  <div
+                    className="floating-card fc-two"
+                    aria-label="Orígenes de nuestros productos"
+                  >
+                    <span>{origins.slice(0, 2).join(" · ")}</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {seccion === "productos" && (
+            <>
+              <section className="section categories-section">
+                <div className="section-heading">
+                  <div>
+                    <div className="eyebrow">
+                      <span /> Explora por categoría
+                    </div>
+                    <h1>
+                      Encuentra tus próximos <em>favoritos</em>
+                    </h1>
+                  </div>
+                  <p>
+                    Explora nuestra selección y encuentra lo que estás buscando.
+                  </p>
+                </div>
+                <div className="category-grid">
+                  {categories.map((item, index) => (
+                    <button
+                      key={item.name}
+                      className={`category-card ${item.tone}`}
+                      onClick={() => applyCategory(item.name)}
+                    >
+                      <div
+                        className="category-image"
+                        style={{
+                          backgroundPosition: item.pos,
+                          backgroundImage: item.image
+                            ? `url(${JSON.stringify(item.image)})`
+                            : "var(--hero-image)",
+                        }}
+                      />
+                      <span className="category-index">0{index + 1}</span>
+                      <div>
+                        <small>{item.kicker}</small>
+                        <strong>{item.name}</strong>
+                      </div>
+                      <span className="round-arrow">
+                        <Icon name="arrow" size={18} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="section products-section" id="productos">
+                <div className="section-heading product-title">
+                  <div>
+                    <div className="eyebrow">
+                      <span /> NUESTRO CATÁLOGO
+                    </div>
+                    <h2>
+                      Productos <em>destacados</em>
+                    </h2>
+                  </div>
+                  <p>
+                    Consulta los productos de nuestro negocio. Confirma
+                    disponibilidad y entrega con nuestro equipo.
+                  </p>
+                </div>
+                <div className="catalog-toolbar">
                   <div
                     className="filter-row"
                     role="group"
-                    aria-label="Filtrar por origen"
+                    aria-label="Filtrar por categoría"
                   >
-                    {["Todos", ...origins].map((origin) => (
+                    {["Todos", ...categories.map((c) => c.name)].map((item) => (
                       <button
-                        key={origin}
-                        type="button"
-                        aria-pressed={country === origin}
-                        className={country === origin ? "active" : ""}
-                        onClick={() => setCountry(origin)}
+                        key={item}
+                        className={category === item ? "active" : ""}
+                        onClick={() => setCategory(item)}
                       >
-                        {origin === "Todos" ? "Todos los orígenes" : origin}
+                        {item}
                       </button>
                     ))}
                   </div>
-                )}
-                <label>
-                  Ordenar
-                  <select
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value)}
-                  >
-                    <option value="destacados">Destacados</option>
-                    <option value="menor">Menor precio</option>
-                    <option value="mayor">Mayor precio</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            {(search || category !== "Todos" || country !== "Todos") && (
-              <div className="results-bar">
-                <span>
-                  <strong>{filtered.length}</strong> resultado
-                  {filtered.length === 1 ? "" : "s"}{" "}
-                  {search && <>para “{search}”</>}
-                </span>
-                <button
-                  onClick={() => {
-                    setSearch("");
-                    setCategory("Todos");
-                    setCountry("Todos");
-                  }}
-                >
-                  Limpiar filtros <Icon name="close" size={15} />
-                </button>
-              </div>
-            )}
-            {filtered.length ? (
-              <div className="product-grid">
-                {filtered.map((product) => {
-                  const quantity = quantities[product.id] || 1;
-                  return (
-                    <article className="product-card" key={product.id}>
-                      <button
-                        className="image-button"
-                        onClick={() => setSelected(product)}
-                        aria-label={`Ver detalle de ${product.name}`}
+                  <div className="select-row">
+                    {origins.length > 0 && (
+                      <div
+                        className="filter-row"
+                        role="group"
+                        aria-label="Filtrar por origen"
                       >
-                        <ProductImage product={product} />
-                        <span className="view-label">
-                          Ver detalle <Icon name="arrow" size={16} />
-                        </span>
-                      </button>
-                      <div className="product-info">
-                        <div className="product-meta">
-                          <span>{product.category}</span>
-                          <small>{product.disponible ? "" : "Agotado"}</small>
-                        </div>
-                        <button
-                          className="product-name"
-                          onClick={() => setSelected(product)}
-                        >
-                          {product.name}
-                        </button>
-                        <p>{product.description}</p>
-                        <p>Existencias: <strong>{product.stock} {product.unidad}</strong></p>
-                        <div className="product-bottom">
-                          <strong>{money(product.price)}</strong>
-                          <Quantity
-                            compact
-                            max={product.stock}
-                            disabled={!product.disponible}
-                            value={quantity}
-                            onChange={(n) =>
-                              setQuantities((q) => ({ ...q, [product.id]: n }))
-                            }
-                          />
-                        </div>
-                        <button
-                          className="add-button"
-                          disabled={!product.disponible}
-                          onClick={() => addToCart(product)}
-                        >
-                          <Icon name="cart" size={18} /> Agregar al carrito
-                        </button>
+                        {["Todos", ...origins].map((origin) => (
+                          <button
+                            key={origin}
+                            type="button"
+                            aria-pressed={country === origin}
+                            className={country === origin ? "active" : ""}
+                            onClick={() => setCountry(origin)}
+                          >
+                            {origin === "Todos" ? "Todos los orígenes" : origin}
+                          </button>
+                        ))}
                       </div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="empty-results">
-                <div className="empty-icon">
-                  <Icon name="search" size={30} />
+                    )}
+                    <label>
+                      Ordenar
+                      <select
+                        value={sort}
+                        onChange={(e) => setSort(e.target.value)}
+                      >
+                        <option value="destacados">Destacados</option>
+                        <option value="menor">Menor precio</option>
+                        <option value="mayor">Mayor precio</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
-                <h3>No encontramos ese producto</h3>
-                <p>Prueba con otro término o consulta con nuestro equipo.</p>
-                <button
-                  className="button primary"
-                  onClick={() => setChatOpen(true)}
-                >
-                  <Icon name="chat" /> Consultar por chat
-                </button>
-              </div>
-            )}
-          </section>
+                {(search || category !== "Todos" || country !== "Todos") && (
+                  <div className="results-bar">
+                    <span>
+                      <strong>{filtered.length}</strong> resultado
+                      {filtered.length === 1 ? "" : "s"}{" "}
+                      {search && <>para “{search}”</>}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSearch("");
+                        setCategory("Todos");
+                        setCountry("Todos");
+                      }}
+                    >
+                      Limpiar filtros <Icon name="close" size={15} />
+                    </button>
+                  </div>
+                )}
+                {filtered.length ? (
+                  <div className="product-grid">
+                    {filtered.map((product) => {
+                      const quantity = quantities[product.id] || 1;
+                      return (
+                        <article className="product-card" key={product.id}>
+                          <button
+                            className="image-button"
+                            onClick={() => setSelected(product)}
+                            aria-label={`Ver detalle de ${product.name}`}
+                          >
+                            <ProductImage product={product} />
+                            <span className="view-label">
+                              Ver detalle <Icon name="arrow" size={16} />
+                            </span>
+                          </button>
+                          <div className="product-info">
+                            <div className="product-meta">
+                              <span>{product.category}</span>
+                              <small>
+                                {product.disponible ? "" : "Agotado"}
+                              </small>
+                            </div>
+                            <button
+                              className="product-name"
+                              onClick={() => setSelected(product)}
+                            >
+                              {product.name}
+                            </button>
+                            <p>{product.description}</p>
+                            <p>
+                              Existencias:{" "}
+                              <strong>
+                                {product.stock} {product.unidad}
+                              </strong>
+                            </p>
+                            <div className="product-bottom">
+                              <strong>{money(product.price)}</strong>
+                              <Quantity
+                                compact
+                                max={product.stock}
+                                disabled={!product.disponible}
+                                value={quantity}
+                                onChange={(n) =>
+                                  setQuantities((q) => ({
+                                    ...q,
+                                    [product.id]: n,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <button
+                              className="add-button"
+                              disabled={!product.disponible}
+                              onClick={() => addToCart(product)}
+                            >
+                              <Icon name="cart" size={18} /> Agregar al carrito
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="empty-results">
+                    <div className="empty-icon">
+                      <Icon name="search" size={30} />
+                    </div>
+                    <h3>No encontramos ese producto</h3>
+                    <p>
+                      Prueba con otro término o consulta con nuestro equipo.
+                    </p>
+                    <button
+                      className="button primary"
+                      onClick={() => setChatOpen(true)}
+                    >
+                      <Icon name="chat" /> Consultar por chat
+                    </button>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
 
-          <section className="about-section" id="nosotros">
-            <div className="about-image">
-              <div className="about-stamp">
-                {tienda.nombre}
-                <br />
-                <strong>CO</strong>
-              </div>
-            </div>
-            <div className="about-copy">
-              <div className="eyebrow light">
-                <span /> Sobre {tienda.nombre}
-              </div>
-              <h2>
-                Conoce nuestra
-                <br />
-                <em>historia.</em>
-              </h2>
-              <p>
-                {t.sobreNosotros ||
-                  t.descripcion ||
-                  `En ${tienda.nombre} estamos para ayudarte a encontrar tus favoritos.`}
-              </p>
-              <p>
-                Explora nuestro catálogo y consulta directamente con el negocio
-                para confirmar disponibilidad, presentación y opciones de
-                entrega.
-              </p>
-              <a href="#contacto" className="text-link">
-                Conoce cómo contactarnos <Icon name="arrow" />
-              </a>
-            </div>
-          </section>
-
-          <section className="contact-section section" id="contacto">
-            <div className="contact-card">
-              <div>
-                <div className="eyebrow">
-                  <span /> ¿Buscas algo especial?
+          {seccion === "nosotros" && (
+            <section className="about-section" id="nosotros">
+              <div className="about-image">
+                <div className="about-stamp">
+                  {tienda.nombre}
+                  <br />
+                  <strong>CO</strong>
                 </div>
-                <h2>
-                  Hablemos de <em>lo que buscas</em>
-                </h2>
+              </div>
+              <div className="about-copy">
+                <div className="eyebrow light">
+                  <span /> Sobre {tienda.nombre}
+                </div>
+                <h1>
+                  Conoce nuestra
+                  <br />
+                  <em>historia.</em>
+                </h1>
                 <p>
-                  Cuéntanos qué tienes en mente y consulta productos,
-                  disponibilidad y entrega directamente con el negocio.
+                  {t.sobreNosotros ||
+                    t.descripcion ||
+                    `En ${tienda.nombre} estamos para ayudarte a encontrar tus favoritos.`}
                 </p>
+                <p>
+                  Explora nuestro catálogo y consulta directamente con el
+                  negocio para confirmar disponibilidad, presentación y opciones
+                  de entrega.
+                </p>
+                <Link
+                  prefetch={false}
+                  href={rutas.contacto}
+                  className="text-link"
+                >
+                  Conoce cómo contactarnos <Icon name="arrow" />
+                </Link>
               </div>
-              <a
-                className="button dark"
-                href={whatsappUrl || "#contacto"}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Icon name="whatsapp" />{" "}
-                {whatsappNumero
-                  ? `Escribir al ${tienda.telefono || whatsappNumero}`
-                  : "Ver contacto"}
-              </a>
-            </div>
-            <div className="contact-links">
-              <a
-                href={whatsappUrl || "#contacto"}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>
-                  <Icon name="whatsapp" />
-                </span>
+            </section>
+          )}
+
+          {seccion === "contacto" && (
+            <section className="contact-section section" id="contacto">
+              <div className="contact-card">
                 <div>
-                  <small>WhatsApp</small>
-                  <strong>
-                    {tienda.telefono || whatsappNumero || "Por configurar"}
-                  </strong>
+                  <div className="eyebrow">
+                    <span /> ¿Buscas algo especial?
+                  </div>
+                  <h1>
+                    Hablemos de <em>lo que buscas</em>
+                  </h1>
+                  <p>
+                    Cuéntanos qué tienes en mente y consulta productos,
+                    disponibilidad y entrega directamente con el negocio.
+                  </p>
                 </div>
-                <Icon name="arrow" />
-              </a>
-              <a
-                href={instagram || "#contacto"}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>
-                  <Icon name="instagram" />
-                </span>
-                <div>
-                  <small>Instagram</small>
-                  <strong>{t.instagram || "Por configurar"}</strong>
-                </div>
-                <Icon name="arrow" />
-              </a>
-              <div>
-                <span>
-                  <Icon name="pin" />
-                </span>
-                <div>
-                  <small>Ubicación</small>
-                  <strong>
-                    {tienda.direccion || "Consulta nuestra ubicación"}
-                  </strong>
-                </div>
+                {whatsappUrl && (
+                  <a
+                    className="button dark"
+                    href={whatsappUrl || rutas.contacto}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="whatsapp" />{" "}
+                    {whatsappNumero
+                      ? `Escribir al ${tienda.telefono || whatsappNumero}`
+                      : "Ver contacto"}
+                  </a>
+                )}
               </div>
-            </div>
-          </section>
+              {(whatsappUrl || instagram || tienda.direccion) && (
+                <div className="contact-links">
+                  {whatsappUrl && (
+                    <a href={whatsappUrl} target="_blank" rel="noreferrer">
+                      <span>
+                        <Icon name="whatsapp" />
+                      </span>
+                      <div>
+                        <small>WhatsApp</small>
+                        <strong>{tienda.telefono || whatsappNumero}</strong>
+                      </div>
+                      <Icon name="arrow" />
+                    </a>
+                  )}
+                  {instagram && (
+                    <a href={instagram} target="_blank" rel="noreferrer">
+                      <span>
+                        <Icon name="instagram" />
+                      </span>
+                      <div>
+                        <small>Instagram</small>
+                        <strong>{t.instagram}</strong>
+                      </div>
+                      <Icon name="arrow" />
+                    </a>
+                  )}
+                  {tienda.direccion && (
+                    <div>
+                      <span>
+                        <Icon name="pin" />
+                      </span>
+                      <div>
+                        <small>Ubicación</small>
+                        <strong>{tienda.direccion}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </main>
 
         <footer>
@@ -917,15 +1032,27 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
             </div>
             <nav>
               <strong>Explora</strong>
-              <a href="#inicio">Inicio</a>
-              <a href="#productos">Productos</a>
-              <a href="#nosotros">Nosotros</a>
+              <Link prefetch={false} href={rutas.inicio}>
+                Inicio
+              </Link>
+              <Link prefetch={false} href={rutas.productos}>
+                Productos
+              </Link>
+              <Link prefetch={false} href={rutas.nosotros}>
+                Nosotros
+              </Link>
             </nav>
             <nav>
               <strong>Conversemos</strong>
-              <a href={whatsappUrl || "#contacto"}>WhatsApp</a>
-              <a href={instagram || "#contacto"}>Instagram</a>
-              <a href="#contacto">Contacto</a>
+              <a href={whatsappUrl || rutas.contacto}>WhatsApp</a>
+              {instagram && (
+                <a href={instagram} target="_blank" rel="noreferrer">
+                  Instagram
+                </a>
+              )}
+              <Link prefetch={false} href={rutas.contacto}>
+                Contacto
+              </Link>
             </nav>
             <div className="footer-note">
               <strong>Antes de pedir</strong>
@@ -985,7 +1112,12 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                   </div>
                 </div>
                 <div className="detail-add">
-                  <p>Existencias: <strong>{selected.stock} {selected.unidad}</strong></p>
+                  <p>
+                    Existencias:{" "}
+                    <strong>
+                      {selected.stock} {selected.unidad}
+                    </strong>
+                  </p>
                   <Quantity
                     max={selected.stock}
                     disabled={!selected.disponible}
@@ -1117,8 +1249,13 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
                     className="button primary full"
                     onClick={() => {
                       const url = new URL(window.location.href);
-                      for (const key of ['pedido', 'bold-order-id', 'bold-tx-status']) url.searchParams.delete(key);
-                      window.history.replaceState(null, '', url);
+                      for (const key of [
+                        "pedido",
+                        "bold-order-id",
+                        "bold-tx-status",
+                      ])
+                        url.searchParams.delete(key);
+                      window.history.replaceState(null, "", url);
                       setCheckout(true);
                     }}
                   >
@@ -1138,13 +1275,15 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
               <button className="back-link" onClick={() => setCheckout(false)}>
                 ← Volver al carrito
               </button>
-              {!t.pedidosHabilitados && <div className="order-mini-summary">
-                <div>
-                  <span>{totalCount} productos</span>
-                  <strong>{money(subtotal)}</strong>
+              {!t.pedidosHabilitados && (
+                <div className="order-mini-summary">
+                  <div>
+                    <span>{totalCount} productos</span>
+                    <strong>{money(subtotal)}</strong>
+                  </div>
+                  <small>Envío: Por confirmar</small>
                 </div>
-                <small>Envío: Por confirmar</small>
-              </div>}
+              )}
               {t.pedidosHabilitados ? (
                 <PedidoTienda
                   tienda={tienda}
@@ -1402,7 +1541,7 @@ function App({ tienda, slug }: { tienda: TiendaPublica; slug: string }) {
             </div>
             <a
               className="chat-whatsapp"
-              href={whatsappUrl || "#contacto"}
+              href={whatsappUrl || rutas.contacto}
               target="_blank"
               rel="noreferrer"
             >

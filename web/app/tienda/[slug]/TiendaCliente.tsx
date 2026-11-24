@@ -1,5 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  etiquetasSeccion,
+  seccionesTienda,
+  type SeccionTienda,
+} from "../../../lib/seccionesTienda";
 import TiendaFigma from "./TiendaFigma";
 import {
   solicitarTienda,
@@ -8,13 +14,27 @@ import {
 export default function TiendaCliente({
   slug,
   inicial,
+  rutas,
+  children,
 }: {
   slug: string;
   inicial: TiendaPublica;
+  rutas: Record<SeccionTienda, string>;
+  children?: ReactNode;
 }) {
+  const params = useParams<{ slug: string; seccion?: string }>();
+  const router = useRouter();
+  const seccion: SeccionTienda = seccionesTienda.includes(
+    params.seccion as SeccionTienda,
+  )
+    ? (params.seccion as SeccionTienda)
+    : "inicio";
   const [tienda, setTienda] = useState<TiendaPublica | null>(inicial),
     [error, setError] = useState(""),
     [intento, setIntento] = useState(0);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [seccion]);
   useEffect(() => {
     const controller = new AbortController();
     let sequence = 0;
@@ -29,7 +49,10 @@ export default function TiendaCliente({
         if (!controller.signal.aborted && current === sequence) {
           setTienda(data);
           setError("");
-          document.title = `${data.nombre} · Tienda en línea`;
+          document.title =
+            seccion === "inicio"
+              ? `${data.nombre} · Tienda en línea`
+              : `${etiquetasSeccion[seccion]} · ${data.nombre}`;
         }
       } catch (e) {
         if (!controller.signal.aborted && current === sequence)
@@ -47,7 +70,7 @@ export default function TiendaCliente({
       clearInterval(timer);
       window.removeEventListener("focus", focus);
     };
-  }, [slug, intento]);
+  }, [slug, intento, seccion]);
   if (!tienda)
     return (
       <main className="figma-store app-shell" style={{ padding: "15vh 8%" }}>
@@ -67,5 +90,17 @@ export default function TiendaCliente({
         )}
       </main>
     );
-  return <TiendaFigma key={slug} tienda={tienda} slug={slug} />;
+  return (
+    <>
+      {children}
+      <TiendaFigma
+        key={slug}
+        tienda={tienda}
+        slug={slug}
+        seccion={seccion}
+        rutas={rutas}
+        navegar={(href) => router.push(href)}
+      />
+    </>
+  );
 }
