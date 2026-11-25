@@ -23,6 +23,7 @@ export function fechaIso(v: unknown, campo: string) {
   const s = texto(v, campo, 10, true);
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(s) ||
+    !Number.isFinite(Date.parse(`${s}T00:00:00Z`)) ||
     new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) !== s
   )
     fallo(`${campo} inválida`);
@@ -105,9 +106,10 @@ export function normalizarTelefono(v: unknown) {
 }
 
 export function validarContrasena(v: unknown) {
-  if (typeof v !== 'string' || v.length < 10 || v.length > 128)
-    fallo('La contraseña debe tener entre 10 y 128 caracteres');
+  if (typeof v !== 'string' || v.length < 10 || v.length > 72)
+    fallo('La contraseña debe tener entre 10 y 72 caracteres');
   const s = v as string;
+  if (Buffer.byteLength(s, 'utf8') > 72) fallo('La contraseña es demasiado larga; utiliza una más corta.');
   if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(s) || !/\d/.test(s))
     fallo('La contraseña debe combinar letras y números');
   if (/^(.)\1+$/.test(s) || /^(0123456789|1234567890|contrase[ñn]a\d*|password\d*)$/i.test(s))
@@ -146,7 +148,8 @@ export function validarReserva(
   const personas = entero(body.personas, 'Número de personas', 1, config.reservaMaxPersonas);
   const limite = new Date(`${ahora.fecha}T00:00:00Z`);
   limite.setUTCDate(limite.getUTCDate() + config.reservaDiasMax);
-  if (fecha < ahora.fecha || (fecha === ahora.fecha && minutos(hora) <= ahora.minutos + 30))
+  const anticipacion = (Date.parse(`${fecha}T00:00:00Z`) - Date.parse(`${ahora.fecha}T00:00:00Z`)) / 60000 + minutos(hora) - ahora.minutos;
+  if (anticipacion < 30)
     fallo('Elige una fecha y hora con al menos 30 minutos de anticipación');
   if (fecha > limite.toISOString().slice(0, 10))
     fallo(`Solo se reciben reservas hasta ${config.reservaDiasMax} días adelante`);
@@ -154,12 +157,15 @@ export function validarReserva(
     // Los horarios empiezan en lunes (0); getUTCDay empieza en domingo.
     const dia = (new Date(`${fecha}T12:00:00Z`).getUTCDay() + 6) % 7;
     const h = config.horarios.find((x) => x.dia === dia);
-    if (!h?.abierto) fallo('La tienda no atiende ese día');
-    const inicio = minutos(h!.apertura),
-      fin = minutos(h!.cierre),
-      m = minutos(hora);
-    const dentro = fin > inicio ? m >= inicio && m < fin : m >= inicio || m < fin;
-    if (!dentro) fallo(`El horario de ese día es de ${h!.apertura} a ${h!.cierre}`);
+    const previo = config.horarios.find((x) => x.dia === (dia + 6) % 7);
+    const m = minutos(hora);
+    const dentroHoy = !!h?.abierto && m >= minutos(h.apertura) &&
+      (h.cierre < h.apertura || m < minutos(h.cierre));
+    const dentroAnterior = !!previo?.abierto && previo.cierre < previo.apertura && m < minutos(previo.cierre);
+    if (!dentroHoy && !dentroAnterior) {
+      if (!h?.abierto) fallo('La tienda no atiende ese día');
+      fallo('La hora está fuera del horario de atención de ese día');
+    }
   }
   return {
     nombre,

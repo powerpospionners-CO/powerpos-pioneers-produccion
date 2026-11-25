@@ -31,7 +31,7 @@ Cada empresa activa estas funciones en **Mi tienda → Funciones de la tienda en
 
 ## Cuentas de cliente
 
-- La contraseña debe tener entre 10 y 128 caracteres y combinar letras y números. Se guarda con bcrypt (costo 12).
+- La contraseña debe tener entre 10 y 72 caracteres (sin exceder 72 bytes UTF-8 para evitar truncamiento de bcrypt) y combinar letras y números. Se guarda con bcrypt (costo 12).
 - El correo, el nombre y el teléfono se guardan cifrados con AES-256-GCM. La búsqueda por correo usa un índice HMAC, así que el correo nunca se guarda en claro.
 - Las sesiones duran 7 días y usan una firma propia con el prefijo `cli.`. El panel nunca las acepta como sesión del personal.
 - Después de 5 intentos fallidos, la cuenta se bloquea 15 minutos. Esos intentos no cierran la sesión que el cliente ya tiene abierta.

@@ -253,3 +253,25 @@ describe('Pedido web con cupón al aceptarse en caja', () => {
     await expect(s.gestionar('w1', { accion: 'ACEPTAR' }, { id: 1, empresaId: 7, rol: 'ADMIN_EMPRESA' })).rejects.toThrow('cupón');
   });
 });
+
+describe('Correcciones de fechas y reservas nocturnas',()=>{
+ const base={nombre:'Ana',telefono:'3106843264',personas:2,consentimiento:true};
+ const config={reservaMaxPersonas:8,reservaDiasMax:30,horarios:Array.from({length:7},(_,dia)=>({dia,abierto:dia===0,apertura:'18:00',cierre:'02:00'}))};
+ it('respeta el turno del día anterior aunque hoy esté cerrado',()=>{
+  expect(validarReserva({...base,fecha:'2026-11-24',hora:'01:00'},config,{fecha:'2026-11-23',minutos:20*60}).hora).toBe('01:00');
+  expect(()=>validarReserva({...base,fecha:'2026-11-23',hora:'01:00'},config,{fecha:'2026-11-22',minutos:20*60})).toThrow();
+  expect(()=>validarReserva({...base,fecha:'2026-11-24',hora:'02:00'},config,{fecha:'2026-11-23',minutos:20*60})).toThrow();
+ });
+ it('exige 30 minutos incluso si la reserva es al día siguiente',()=>{
+  const sinHorario={...config,horarios:null};
+  expect(()=>validarReserva({...base,fecha:'2026-11-24',hora:'00:10'},sinHorario,{fecha:'2026-11-23',minutos:23*60+50})).toThrow('anticipación');
+  expect(validarReserva({...base,fecha:'2026-11-24',hora:'00:20'},sinHorario,{fecha:'2026-11-23',minutos:23*60+50}).hora).toBe('00:20');
+ });
+ it('las fechas fuera del calendario son errores de validación',()=>{
+  try {validarReserva({...base,fecha:'2026-13-01',hora:'12:00'},config,{fecha:'2026-11-23',minutos:0});throw Error('Aceptó una fecha inválida');} catch(error){expect(error.getStatus()).toBe(400);}
+ });
+ it('no permite contraseñas que bcrypt truncaría',()=>{
+  expect(()=>validarContrasena('á'.repeat(40)+'1')).toThrow('larga');
+  expect(validarContrasena('A1'+'b'.repeat(70))).toHaveLength(72);
+ });
+});

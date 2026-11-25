@@ -150,7 +150,7 @@ export default function CuentaTienda({
         <form className="store-form" onSubmit={(e) => { e.preventDefault(); void ejecutar(async () => { const r = await post<{ token: string }>("/contrasena", claves, true); guardarToken(slug, r.token); setClaves({ actual: "", nueva: "" }); setMensaje("Contraseña actualizada. Cerramos las demás sesiones."); }); }}>
           <fieldset disabled={busy}>
             <label>Contraseña actual<input required type="password" autoComplete="current-password" value={claves.actual} onChange={(e) => setClaves({ ...claves, actual: e.target.value })} /></label>
-            <label>Nueva contraseña<input required type="password" minLength={10} maxLength={128} autoComplete="new-password" value={claves.nueva} onChange={(e) => setClaves({ ...claves, nueva: e.target.value })} /></label>
+            <label>Nueva contraseña<input required type="password" minLength={10} maxLength={72} autoComplete="new-password" value={claves.nueva} onChange={(e) => setClaves({ ...claves, nueva: e.target.value })} /></label>
             <p className="store-form-help">Mínimo 10 caracteres, con letras y números.</p>
             <button className="button primary">Cambiar contraseña</button>
           </fieldset>
@@ -192,13 +192,13 @@ export default function CuentaTienda({
           {(modo === "ingresar" || modo === "registro") && (
             <label>
               Contraseña
-              <input required type="password" minLength={modo === "registro" ? 10 : undefined} maxLength={128} autoComplete={modo === "registro" ? "new-password" : "current-password"} value={form.contrasena} onChange={(e) => setForm({ ...form, contrasena: e.target.value })} />
+              <input required type="password" minLength={modo === "registro" ? 10 : undefined} maxLength={72} autoComplete={modo === "registro" ? "new-password" : "current-password"} value={form.contrasena} onChange={(e) => setForm({ ...form, contrasena: e.target.value })} />
             </label>
           )}
           {modo === "restablecer" && (
             <>
               <label>Código de 6 dígitos<input required inputMode="numeric" pattern="\d{6}" maxLength={6} autoComplete="one-time-code" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} /></label>
-              <label>Nueva contraseña<input required type="password" minLength={10} maxLength={128} autoComplete="new-password" value={form.nueva} onChange={(e) => setForm({ ...form, nueva: e.target.value })} /></label>
+              <label>Nueva contraseña<input required type="password" minLength={10} maxLength={72} autoComplete="new-password" value={form.nueva} onChange={(e) => setForm({ ...form, nueva: e.target.value })} /></label>
             </>
           )}
           {modo === "registro" && (
