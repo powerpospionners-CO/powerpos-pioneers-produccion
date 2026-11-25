@@ -11,16 +11,17 @@ import {
 type Props = {
   params: Promise<{ slug: string; seccion: string; productoId: string }>;
 };
+// Devuelve null en vez de notFound(): desde los metadatos Next saltaría al 404 raíz sin la marca.
 async function datos({ params }: Props) {
   const p = await params;
   if (!["productos", "categorias"].includes(p.seccion) || !/^\d+$/.test(p.productoId))
-    notFound();
+    return null;
   const tienda = await cargarTiendaPublica(p.slug);
   const base = await urlPublicaTienda(p.slug);
   const id = Number(p.productoId);
   if (p.seccion === "categorias") {
     const productos = tienda.productos.filter((v) => v.categoriaId === id);
-    if (!productos.length) notFound();
+    if (!productos.length) return null;
     return {
       tienda,
       categoria: { nombre: productos[0].categoria.nombre, productos },
@@ -29,12 +30,18 @@ async function datos({ params }: Props) {
     };
   }
   const producto = tienda.productos.find((v) => v.id === id);
-  if (!producto) notFound();
+  if (!producto) return null;
   const url = urlSeccionTienda(base, "productos") + "/" + producto.id;
   return { tienda, producto, url, base };
 }
 export async function generateMetadata(p: Props): Promise<Metadata> {
-  const { tienda, producto, categoria, url } = await datos(p);
+  const d = await datos(p);
+  if (!d)
+    return {
+      title: { absolute: "Página no encontrada" },
+      robots: { index: false, follow: false },
+    };
+  const { tienda, producto, categoria, url } = d;
   const {slug}=await p.params;
   const meta=await metadataInicio({params:Promise.resolve({slug})});
   if (categoria)
@@ -61,7 +68,9 @@ export async function generateMetadata(p: Props): Promise<Metadata> {
   };
 }
 export default async function ProductoPage(p: Props) {
-  const { tienda, producto, categoria, url, base } = await datos(p);
+  const d = await datos(p);
+  if (!d) notFound();
+  const { tienda, producto, categoria, url, base } = d;
   const schema = categoria
     ? {
         "@context": "https://schema.org",
