@@ -283,7 +283,7 @@ export default function MiTienda() {
                       </div>
                     )}
                     <p className="text-gray-400">
-                      El nombre, logo y contacto se toman de{" "}
+                      El nombre, logo, contacto y la dirección del mapa se toman de{" "}
                       <a
                         href="/configuracion"
                         className="text-teal-300 underline"
