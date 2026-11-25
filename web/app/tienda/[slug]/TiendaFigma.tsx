@@ -744,7 +744,7 @@ function App({
                 volver={rutas.productos}
                 onAgregar={() => {
                   const p = products.find((p) => p.id === productoId);
-                  if (p) addToCart(p);
+                  if (p) addToCart(p, 1);
                 }}
               />
             ) : (
