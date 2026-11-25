@@ -28,11 +28,22 @@ export default function TiendaCliente({
     productoId?: string;
   }>();
   const router = useRouter();
-  const seccion: SeccionTienda = seccionesTienda.includes(
-    params.seccion as SeccionTienda,
-  )
-    ? (params.seccion as SeccionTienda)
-    : "inicio";
+  const enCategoria = params.seccion === "categorias";
+  const seccion: SeccionTienda = enCategoria
+    ? "productos"
+    : seccionesTienda.includes(params.seccion as SeccionTienda)
+      ? (params.seccion as SeccionTienda)
+      : "inicio";
+  const categoriaId =
+    enCategoria && params.productoId ? Number(params.productoId) : undefined;
+  const productoId =
+    !enCategoria && params.productoId ? Number(params.productoId) : undefined;
+  // Ruta inexistente: la página responde 404 y la tienda muestra su aviso con la marca.
+  const noEncontrada =
+    (!!params.seccion &&
+      !enCategoria &&
+      !seccionesTienda.includes(params.seccion as SeccionTienda)) ||
+    (enCategoria && !params.productoId);
   const [tienda, setTienda] = useState<TiendaPublica | null>(inicial),
     [error, setError] = useState(""),
     [intento, setIntento] = useState(0);
@@ -41,7 +52,7 @@ export default function TiendaCliente({
     const destino = hash ? document.getElementById(hash) : null;
     if (destino) destino.scrollIntoView();
     else window.scrollTo(0, 0);
-  }, [seccion, params.productoId]);
+  }, [seccion, params.productoId, params.seccion]);
   useEffect(() => {
     const controller = new AbortController();
     let sequence = 0;
@@ -56,10 +67,15 @@ export default function TiendaCliente({
         if (!controller.signal.aborted && current === sequence) {
           setTienda(data);
           setError("");
-          document.title =
-            params.productoId &&
-            data.productos.find((p) => p.id === Number(params.productoId))
-              ? `${data.productos.find((p) => p.id === Number(params.productoId))!.nombre} · ${data.nombre}`
+          const categoria = data.productos.find(
+            (p) => categoriaId && p.categoriaId === categoriaId,
+          )?.categoria.nombre;
+          document.title = noEncontrada
+            ? `Página no encontrada · ${data.nombre}`
+            : categoria
+              ? `${categoria} · ${data.nombre}`
+              : productoId && data.productos.find((p) => p.id === productoId)
+              ? `${data.productos.find((p) => p.id === productoId)!.nombre} · ${data.nombre}`
               : seccion === "inicio"
                 ? `${data.nombre} · Tienda en línea`
                 : `${etiquetasSeccion[seccion]} · ${data.nombre}`;
@@ -80,7 +96,7 @@ export default function TiendaCliente({
       clearInterval(timer);
       window.removeEventListener("focus", focus);
     };
-  }, [slug, intento, seccion, params.productoId]);
+  }, [slug, intento, seccion, productoId, categoriaId, noEncontrada]);
   if (!tienda)
     return (
       <main className="figma-store app-shell" style={{ padding: "15vh 8%" }}>
@@ -108,7 +124,9 @@ export default function TiendaCliente({
         tienda={tienda}
         slug={slug}
         seccion={seccion}
-        productoId={params.productoId ? Number(params.productoId) : undefined}
+        productoId={productoId}
+        categoriaId={categoriaId}
+        noEncontrada={noEncontrada}
         rutas={rutas}
         navegar={(href) => router.push(href)}
       />

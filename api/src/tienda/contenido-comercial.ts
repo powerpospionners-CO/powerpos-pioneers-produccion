@@ -53,11 +53,11 @@ export function validarComercial(t: any) {
   )
     fallo('Políticas inválidas');
   const politicas = Object.fromEntries(
-    ['envios', 'cambios', 'devoluciones', 'privacidad'].map((k) => [
+    ['envios', 'cambios', 'devoluciones', 'privacidad', 'terminos'].map((k) => [
       k,
-      texto(t.politicas[k], `Política de ${k}`, 12000),
+      texto(t.politicas[k] ?? '', `Política de ${k}`, 12000),
     ]),
-  ) as {envios:string;cambios:string;devoluciones:string;privacidad:string};
+  ) as {envios:string;cambios:string;devoluciones:string;privacidad:string;terminos:string};
   const fichasProductos = lista(t.fichasProductos, 300).map((p) => ({
     productoId: id(p?.productoId),
     imagenes: lista(p?.imagenes, 6).map((v) => {
@@ -89,4 +89,24 @@ export function productosComerciales(c: ReturnType<typeof validarComercial>) {
       ...c.fichasProductos.map((p) => p.productoId),
     ]),
   ];
+}
+// Identidad legal visible y analítica opcional; el NIT solo se publica si la empresa lo autoriza.
+export function validarSitio(t: any) {
+  if (typeof t.mostrarNit !== 'boolean') fallo('Indique si desea publicar el NIT');
+  const correoPublico = texto(t.correoPublico ?? '', 'Correo de atención', 200);
+  if (correoPublico && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(correoPublico))
+    fallo('Correo de atención inválido');
+  const googleAnalyticsId = texto(t.googleAnalyticsId ?? '', 'Google Analytics', 20).toUpperCase();
+  if (googleAnalyticsId && !/^G-[A-Z0-9]{4,15}$/.test(googleAnalyticsId))
+    fallo('Use un ID de medición de Google Analytics con formato G-XXXXXXX');
+  const metaPixelId = texto(t.metaPixelId ?? '', 'Meta Pixel', 20);
+  if (metaPixelId && !/^\d{8,20}$/.test(metaPixelId))
+    fallo('El ID de Meta Pixel debe contener solo números');
+  return {
+    razonSocial: texto(t.razonSocial ?? '', 'Razón social', 200),
+    mostrarNit: t.mostrarNit,
+    correoPublico,
+    googleAnalyticsId,
+    metaPixelId,
+  };
 }

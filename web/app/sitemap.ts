@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { slugDelHost, slugPublico, urlTienda } from "../lib/seoTienda";
-import { seccionesTienda, urlSeccionTienda } from "../lib/seccionesTienda";
+import { seccionesTienda, urlCategoriaTienda, urlSeccionTienda } from "../lib/seccionesTienda";
 import { urlPublicaTienda } from "../lib/urlPublicaTienda";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const slug = slugDelHost((await headers()).get("host") || "");
@@ -17,7 +17,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (r.status === 404) return [];
     if (!r.ok) throw new Error("No se pudo consultar el mapa de la tienda");
     const tienda = await r.json();
-    const productos: { id: number }[] = tienda.productos || [];
+    const productos: { id: number; categoriaId?: number }[] =
+      tienda.productos || [];
+    const categorias = [
+      ...new Set(productos.map((p) => p.categoriaId).filter(Boolean)),
+    ] as number[];
     return [
       ...seccionesTienda.map((seccion) => ({
         url: urlSeccionTienda(urlTienda(slug), seccion),
@@ -28,6 +32,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         url: urlSeccionTienda(urlTienda(slug), "productos") + "/" + p.id,
         changeFrequency: "daily" as const,
         priority: 0.7,
+      })),
+      ...categorias.map((id) => ({
+        url: urlCategoriaTienda(urlTienda(slug), id),
+        changeFrequency: "daily" as const,
+        priority: 0.75,
       })),
     ];
   }

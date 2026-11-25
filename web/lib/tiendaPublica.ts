@@ -19,6 +19,7 @@ export type TiendaPublica = {
   logo: string;
   telefono: string;
   direccion: string;
+  legal?: { razonSocial: string; nit: string; correo: string };
   config: {
     titulo: string;
     descripcion: string;
@@ -38,7 +39,13 @@ export type TiendaPublica = {
       cambios: string;
       devoluciones: string;
       privacidad: string;
+      terminos?: string;
     };
+    razonSocial?: string;
+    mostrarNit?: boolean;
+    correoPublico?: string;
+    googleAnalyticsId?: string;
+    metaPixelId?: string;
     fichasProductos?: { productoId: number; imagenes: string[] }[];
     mision?: string;
     vision?: string;

@@ -22,7 +22,12 @@ export const tiendaDefaults = {
   destacadosIds: [] as number[], novedadesIds: [] as number[],
   promociones: [] as {titulo:string;detalle:string;desde:string;hasta:string;productoId:number|null}[],
   testimonios: [] as {nombre:string;texto:string;autorizado:boolean}[],
-  politicas: {envios:'',cambios:'',devoluciones:'',privacidad:''},
+  politicas: {envios:'',cambios:'',devoluciones:'',privacidad:'',terminos:''},
+  razonSocial: '',
+  mostrarNit: false,
+  correoPublico: '',
+  googleAnalyticsId: '',
+  metaPixelId: '',
   fichasProductos: [] as {productoId:number;imagenes:string[]}[],
   galeria: [] as { imagen: string; descripcion: string }[],
   preguntasFrecuentes: [] as { pregunta: string; respuesta: string }[],
@@ -56,6 +61,9 @@ export function puntosConfig(value: unknown) {
 }
 export function tiendaConfig(value: unknown) {
   const t = { ...tiendaDefaults, ...((value as object) || {}) };
+  // Configuraciones guardadas antes de agregar una política reciben su valor vacío.
+  if (t.politicas && typeof t.politicas === 'object' && !Array.isArray(t.politicas))
+    t.politicas = { ...tiendaDefaults.politicas, ...t.politicas };
   if (Array.isArray(t.zonas)) t.zonas = t.zonas.map((z, i) => {
     const ciudad = z.ciudad || ({ PEREIRA: 'Pereira', DOSQUEBRADAS: 'Dosquebradas' }[z.nombre?.trim().toUpperCase()] || '');
     return { ...z, id: z.id || `zona-${i + 1}`, ciudad, nombre: !z.ciudad && ciudad ? 'Todas las zonas' : z.nombre };

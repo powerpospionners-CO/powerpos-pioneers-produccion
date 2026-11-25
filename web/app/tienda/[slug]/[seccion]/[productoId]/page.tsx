@@ -4,62 +4,99 @@ import { jsonSeguro } from "../../../../../lib/seoTienda";
 import { notFound } from "next/navigation";
 import { cargarTiendaPublica } from "../../../../../lib/cargarTiendaPublica";
 import { urlPublicaTienda } from "../../../../../lib/urlPublicaTienda";
-import { urlSeccionTienda } from "../../../../../lib/seccionesTienda";
+import {
+  urlCategoriaTienda,
+  urlSeccionTienda,
+} from "../../../../../lib/seccionesTienda";
 type Props = {
   params: Promise<{ slug: string; seccion: string; productoId: string }>;
 };
 async function datos({ params }: Props) {
   const p = await params;
-  if (p.seccion !== "productos" || !/^\d+$/.test(p.productoId)) notFound();
+  if (!["productos", "categorias"].includes(p.seccion) || !/^\d+$/.test(p.productoId))
+    notFound();
   const tienda = await cargarTiendaPublica(p.slug);
-  const producto = tienda.productos.find((v) => v.id === Number(p.productoId));
+  const base = await urlPublicaTienda(p.slug);
+  const id = Number(p.productoId);
+  if (p.seccion === "categorias") {
+    const productos = tienda.productos.filter((v) => v.categoriaId === id);
+    if (!productos.length) notFound();
+    return {
+      tienda,
+      categoria: { nombre: productos[0].categoria.nombre, productos },
+      url: urlCategoriaTienda(base, id),
+      base,
+    };
+  }
+  const producto = tienda.productos.find((v) => v.id === id);
   if (!producto) notFound();
-  const url =
-    urlSeccionTienda(await urlPublicaTienda(p.slug), "productos") +
-    "/" +
-    producto.id;
-  return { tienda, producto, url };
+  const url = urlSeccionTienda(base, "productos") + "/" + producto.id;
+  return { tienda, producto, url, base };
 }
 export async function generateMetadata(p: Props): Promise<Metadata> {
-  const { tienda, producto, url } = await datos(p);
+  const { tienda, producto, categoria, url } = await datos(p);
   const {slug}=await p.params;
   const meta=await metadataInicio({params:Promise.resolve({slug})});
+  if (categoria)
+    return {
+      ...meta,
+      title: { absolute: `${categoria.nombre} · ${tienda.nombre}` },
+      description: `Consulta ${categoria.productos.length} productos de ${categoria.nombre} en ${tienda.nombre}.`,
+      alternates: { canonical: url },
+      openGraph: { ...meta.openGraph, title: `${categoria.nombre} · ${tienda.nombre}`, url },
+    };
   return {
     ...meta,
-    title: { absolute: `${producto.nombre} · ${tienda.nombre}` },
+    title: { absolute: `${producto!.nombre} · ${tienda.nombre}` },
     description:
-      producto.descripcion?.slice(0, 160) ||
-      `Consulta ${producto.nombre} en ${tienda.nombre}.`,
+      producto!.descripcion?.slice(0, 160) ||
+      `Consulta ${producto!.nombre} en ${tienda.nombre}.`,
     alternates: { canonical: url },
     openGraph: {
       ...meta.openGraph,
-      title: producto.nombre,
+      title: producto!.nombre,
       url,
-      images: producto.imagen ? [producto.imagen] : [],
+      images: producto!.imagen ? [producto!.imagen] : [],
     },
   };
 }
 export default async function ProductoPage(p: Props) {
-  const { tienda, producto, url } = await datos(p);
-  const schema = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: producto.nombre,
-    description: producto.descripcion,
-    image: producto.imagen || undefined,
-    url,
-    offers: {
-      "@type": "Offer",
-      priceCurrency: "COP",
-      price: Number(producto.precio),
-      availability:
-        producto.disponible && Number(producto.stockActual) > 0
-          ? "https://schema.org/InStock"
-          : "https://schema.org/OutOfStock",
-      url,
-      seller: { "@type": "Organization", name: tienda.nombre },
-    },
-  };
+  const { tienda, producto, categoria, url, base } = await datos(p);
+  const schema = categoria
+    ? {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        name: `${categoria.nombre} · ${tienda.nombre}`,
+        url,
+        mainEntity: {
+          "@type": "ItemList",
+          itemListElement: categoria.productos.map((v, i) => ({
+            "@type": "ListItem",
+            position: i + 1,
+            url: urlSeccionTienda(base, "productos") + "/" + v.id,
+            name: v.nombre,
+          })),
+        },
+      }
+    : {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: producto!.nombre,
+        description: producto!.descripcion,
+        image: producto!.imagen || undefined,
+        url,
+        offers: {
+          "@type": "Offer",
+          priceCurrency: "COP",
+          price: Number(producto!.precio),
+          availability:
+            producto!.disponible && Number(producto!.stockActual) > 0
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+          url,
+          seller: { "@type": "Organization", name: tienda.nombre },
+        },
+      };
   return (
     <script
       type="application/ld+json"
