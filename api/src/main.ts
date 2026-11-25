@@ -15,6 +15,17 @@ async function bootstrap() {
   const proxies = validarDespliegue(process.env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   if (proxies.length) app.set('trust proxy', proxies);
+  app.disable('x-powered-by');
+  // Cabeceras defensivas: la API no se incrusta en marcos ni permite adivinar tipos de contenido.
+  app.use((_req: unknown, res: { setHeader(nombre: string, valor: string): void }, next: () => void) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    if (process.env.NODE_ENV === 'production')
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
 
   app.enableCors({
     origin: (origen, callback) => callback(null, origenPermitido(origen, process.env.NODE_ENV !== 'production')),

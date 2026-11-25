@@ -8,9 +8,12 @@ import {
 } from './tienda.controller';
 import { PedidosPublicosGuard } from './pedidos-publicos.guard';
 import { BoldService } from './bold.service';
+import { TiendaRegistros } from './tienda-registros';
+import { TiendaExtrasService } from './tienda-extras.service';
+import { LimitePublicoGuard } from './limite-publico.guard';
 @Module({
   imports: [PedidosModule],
-  providers: [TiendaService, BoldService, RolesGuard, PedidosPublicosGuard],
+  providers: [TiendaService, BoldService, RolesGuard, PedidosPublicosGuard, TiendaRegistros, TiendaExtrasService, LimitePublicoGuard],
   controllers: [TiendaAdminController, TiendaPublicaController],
 })
 export class TiendaModule {}

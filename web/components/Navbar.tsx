@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet, Truck } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet, Truck, CalendarDays } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 
 const ITEMS = [
   { href: '/pos', label: 'POS', icon: ShoppingCart },
   { href: '/domicilios', label: 'Domicilios', icon: ShoppingCart },
+  { href: '/reservas', label: 'Reservas', icon: CalendarDays },
   { href: '/mi-tienda', label: 'Mi tienda', icon: Settings },
   { href: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { href: '/fidelizacion', label: 'Puntos', icon: Users },
@@ -43,6 +44,7 @@ const MODULOS_POR_PLAN: Record<string, string[]> = {
 const MODULO_POR_RUTA: Record<string, string> = {
   '/pos': 'pos',
   '/domicilios': 'pos',
+  '/reservas': 'pos',
   '/caja': 'pos',
   '/caja/recaudo': 'pos',
   '/dashboard': 'dashboard',
@@ -64,6 +66,7 @@ export default function Navbar() {
   const { usuario, logout, setTipoNegocio } = useAuthStore();
   const { tema, cambiarTema } = useTema();
   const [pendientesWeb, setPendientesWeb] = useState(0);
+  const [reservasWeb, setReservasWeb] = useState({ habilitadas: false, pendientes: 0 });
   const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
   const [recaudoEfectivoHabilitado, setRecaudoEfectivoHabilitado] = useState(false);
   const [distribuidoresHabilitado, setDistribuidoresHabilitado] = useState(false);
@@ -96,7 +99,7 @@ export default function Navbar() {
   useEffect(() => {
     if (!['CAJERO','ADMIN_EMPRESA','GERENTE'].includes(usuario?.rol || '')) return;
     let activo = true;
-    const cargar = () => api.get('/tienda-admin/resumen').then(r=>{if(activo)setPendientesWeb(r.data.pendientes);}).catch(()=>{});
+    const cargar = () => api.get('/tienda-admin/resumen').then(r=>{if(activo){setPendientesWeb(r.data.pendientes);setReservasWeb({habilitadas:!!r.data.reservasHabilitadas,pendientes:Number(r.data.reservas)||0});}}).catch(()=>{});
     void cargar(); const timer = setInterval(cargar,5000);
     return () => { activo=false; clearInterval(timer); };
   },[usuario?.rol,usuario?.empresaId]);
@@ -115,6 +118,7 @@ export default function Navbar() {
     if (item.href === '/catalogo') return usuario?.rol === 'ADMIN_EMPRESA' && !!usuario?.catalogoHabilitado;
     if (['/mi-tienda','/fidelizacion'].includes(item.href)) return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/domicilios') return ['ADMIN_EMPRESA','GERENTE','CAJERO','DOMICILIARIO'].includes(usuario?.rol || '');
+    if (item.href === '/reservas') return reservasWeb.habilitadas && ['ADMIN_EMPRESA','GERENTE','CAJERO'].includes(usuario?.rol || '');
     if (item.href === '/personal' && usuario?.rol !== 'ADMIN_EMPRESA') return false;
     if (item.href === '/suscripcion') return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/distribuidor') return usuario?.rol === 'DISTRIBUIDOR' && distribuidoresHabilitado;
@@ -188,6 +192,13 @@ export default function Navbar() {
         <div role="status" className="px-3 md:px-6 pb-3">
           <button onClick={() => router.replace('/domicilios')} className="block w-full text-left rounded-lg bg-teal-900 px-4 py-2 text-sm text-white hover:bg-teal-800 transition-colors">
             {pendientesWeb} pedido(s) web por revisar · Abrir Domicilios →
+          </button>
+        </div>
+      )}
+      {reservasWeb.pendientes > 0 && (
+        <div role="status" className="px-3 md:px-6 pb-3">
+          <button onClick={() => router.replace('/reservas')} className="block w-full text-left rounded-lg bg-indigo-900 px-4 py-2 text-sm text-white hover:bg-indigo-800 transition-colors">
+            {reservasWeb.pendientes} reserva(s) por confirmar · Abrir Reservas →
           </button>
         </div>
       )}

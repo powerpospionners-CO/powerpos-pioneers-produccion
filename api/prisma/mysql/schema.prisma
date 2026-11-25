@@ -40,6 +40,24 @@ model PersonalRegistro {
   @@map("personal_registros")
 }
 
+// Cupones, reservas, suscriptores y cuentas de la tienda pública; tabla aditiva creada por sede.
+model TiendaRegistro {
+  id String @id @db.VarChar(36)
+  empresaId Int
+  tipo String @db.VarChar(24)
+  clave String @db.VarChar(128)
+  referenciaId String? @db.VarChar(64)
+  estado String @db.VarChar(24)
+  datos Json
+  version Int @default(1)
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  @@unique([empresaId, tipo, clave])
+  @@index([empresaId, tipo, referenciaId])
+  @@index([empresaId, tipo, creadoEn])
+  @@map("tienda_registros")
+}
+
 // Canal compartido y trabajos reclamados una sola vez entre procesos.
 model EventoSistema {
   id String @id @default(uuid())

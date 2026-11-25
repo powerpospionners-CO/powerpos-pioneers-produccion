@@ -18,7 +18,7 @@ const RUTAS_PANEL = [
   '/login', '/auth', '/dashboard', '/pos', '/cocina', '/domicilios', '/productos',
   '/inventario', '/clientes', '/financiero', '/reportes', '/configuracion',
   '/mi-tienda', '/fidelizacion', '/consumo-empleados', '/cliente', '/llamado',
-  '/registro', '/catalogo', '/caja', '/distribuidores', '/distribuidor', '/suscripcion', '/compras', '/administracion', '/estadisticas',
+  '/registro', '/catalogo', '/reservas', '/caja', '/distribuidores', '/distribuidor', '/suscripcion', '/compras', '/administracion', '/estadisticas',
 ];
 
 export function proxy(request: NextRequest) {
@@ -54,7 +54,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Las páginas públicas evitan /productos y /contacto del panel administrativo.
-  const paginaPublica = /^\/tienda\/(productos|nosotros|contacto|politicas|categorias)(\/\d+)?\/?$/.exec(url.pathname);
+  const paginaPublica = /^\/tienda\/(productos|nosotros|contacto|politicas|categorias|reservas|cuenta)(\/\d+)?\/?$/.exec(url.pathname);
   if (paginaPublica) {
     const destino = url.clone();
     destino.pathname = `/tienda/${subdominio}/${paginaPublica[1]}${paginaPublica[2] || ""}`;

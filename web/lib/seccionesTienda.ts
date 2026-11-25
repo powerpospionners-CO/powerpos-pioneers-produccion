@@ -4,6 +4,8 @@ export const seccionesTienda = [
   "nosotros",
   "contacto",
   "politicas",
+  "reservas",
+  "cuenta",
 ] as const;
 export type SeccionTienda = (typeof seccionesTienda)[number];
 export const etiquetasSeccion: Record<SeccionTienda, string> = {
@@ -12,7 +14,18 @@ export const etiquetasSeccion: Record<SeccionTienda, string> = {
   nosotros: "Nosotros",
   contacto: "Contacto",
   politicas: "Políticas de compra",
+  reservas: "Reservas",
+  cuenta: "Mi cuenta",
 };
+// Secciones que dependen de una función activada por la empresa o son privadas del cliente.
+export function seccionIndexable(
+  seccion: SeccionTienda,
+  config?: { reservasHabilitadas?: boolean },
+) {
+  if (seccion === "cuenta") return false;
+  if (seccion === "reservas") return !!config?.reservasHabilitadas;
+  return true;
+}
 export function rutasTienda(
   slug: string,
   dominioEmpresa = false,
@@ -26,6 +39,8 @@ export function rutasTienda(
     nosotros: `${base}/nosotros`,
     contacto: `${base}/contacto`,
     politicas: `${base}/politicas`,
+    reservas: `${base}/reservas`,
+    cuenta: `${base}/cuenta`,
   };
 }
 // Las categorías cuelgan de la misma base que productos: /tienda/<slug>/categorias/<id>.

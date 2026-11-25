@@ -1,7 +1,12 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { slugDelHost, slugPublico, urlTienda } from "../lib/seoTienda";
-import { seccionesTienda, urlCategoriaTienda, urlSeccionTienda } from "../lib/seccionesTienda";
+import {
+  seccionIndexable,
+  seccionesTienda,
+  urlCategoriaTienda,
+  urlSeccionTienda,
+} from "../lib/seccionesTienda";
 import { urlPublicaTienda } from "../lib/urlPublicaTienda";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const slug = slugDelHost((await headers()).get("host") || "");
@@ -23,7 +28,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...new Set(productos.map((p) => p.categoriaId).filter(Boolean)),
     ] as number[];
     return [
-      ...seccionesTienda.map((seccion) => ({
+      ...seccionesTienda.filter((s) => seccionIndexable(s, tienda.config)).map((seccion) => ({
         url: urlSeccionTienda(urlTienda(slug), seccion),
         changeFrequency: "daily" as const,
         priority: seccion === "inicio" ? 1 : 0.8,
@@ -51,7 +56,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter((t) => slugPublico(t.slug))
       .map(async (t) => {
         const url = await urlPublicaTienda(t.slug);
-        return seccionesTienda.map((seccion) => ({
+        return seccionesTienda.filter((s) => seccionIndexable(s)).map((seccion) => ({
           url: urlSeccionTienda(url, seccion),
           changeFrequency: "daily" as const,
           priority: seccion === "inicio" ? 1 : 0.8,

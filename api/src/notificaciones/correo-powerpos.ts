@@ -196,3 +196,14 @@ export function correoCumpleanos(
     pie: `Este saludo fue enviado por ${empresa} a través de PowerPOS.`,
   });
 }
+
+export function correoCodigoCuenta(empresa: string, codigo: string): CorreoPowerpos {
+  return plantilla({
+    estilo: 'atencion',
+    titulo: 'Código para restablecer tu contraseña',
+    introduccion: `Recibimos una solicitud para restablecer la contraseña de tu cuenta en la tienda de ${empresa}.`,
+    mensaje: `Tu código es ${codigo}. Vence en 15 minutos.\nSi no lo solicitaste, ignora este mensaje: tu contraseña no cambiará.`,
+    contexto: [['Tienda', empresa], ['Código', codigo]],
+    pie: `Nunca compartas este código. ${empresa} no te lo pedirá por teléfono ni por chat.`,
+  });
+}

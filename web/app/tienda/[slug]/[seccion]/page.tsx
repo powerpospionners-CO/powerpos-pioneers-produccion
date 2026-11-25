@@ -33,6 +33,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: { absolute: titulo },
     alternates: { canonical: url },
     openGraph: { ...meta.openGraph, title: titulo, url },
+    // La cuenta del cliente es privada y nunca se indexa.
+    ...(seccion === "cuenta" ? { robots: { index: false, follow: false } } : {}),
   };
 }
 export default async function SeccionPage({ params }: Props) {

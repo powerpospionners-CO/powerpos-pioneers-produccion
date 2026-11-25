@@ -1,9 +1,13 @@
 import {validarComercial,productosComerciales,validarSitio} from './contenido-comercial';
+import { validarFunciones } from './tienda-extras.reglas';
+import { TiendaExtrasService } from './tienda-extras.service';
+import { TiendaRegistros } from './tienda-registros';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +18,11 @@ import { agregarOrigen, leerOrigenes } from '../productos/origenes.service';
 import { BoldService } from './bold.service';
 import { montoBold } from './bold.reglas';
 import { validarHorarios, resumenHorarios } from './horarios';
+
+// El pedido web no tiene columna de descuento: es la diferencia entre productos más domicilio y el total.
+export function descuentoPedido(p: { subtotal: unknown; costoDomicilio: unknown; total: unknown }) {
+  return Math.max(0, Math.round((Number(p.subtotal) + Number(p.costoDomicilio) - Number(p.total)) * 100) / 100);
+}
 
 @Injectable()
 export class TiendaService {
@@ -53,12 +62,17 @@ export class TiendaService {
   }
   async resumen(user: any) {
     const pendientes = await this.prisma.pedidoWeb.count({where:{empresaId:user.empresaId,estado:'RECIBIDO',...(user.rol==='CAJERO'?{sucursalId:user.sucursalId}: {})}});
-    return {pendientes};
+    const reservasHabilitadas = tiendaConfig((await this.prisma.empresa.findUnique({where:{id:user.empresaId},select:{tiendaConfig:true}}))?.tiendaConfig).reservasHabilitadas;
+    const reservas = this.extras && reservasHabilitadas ? await this.extras.reservasPendientes(user.empresaId) : 0;
+    return {pendientes, reservas, reservasHabilitadas};
   }
   constructor(
     private prisma: PrismaService,
     private pedidos: PedidosService,
     private bold: BoldService,
+    // Opcionales para conservar las pruebas que construyen el servicio sin la tienda ampliada.
+    @Optional() private registros?: TiendaRegistros,
+    @Optional() private extras?: TiendaExtrasService,
   ) {}
 
   async configuracion(empresaId: number) {
@@ -85,6 +99,10 @@ export class TiendaService {
     const p = { ...actual.fidelizacion, ...body.fidelizacion };
     const comercial = validarComercial(t);
     const sitio = validarSitio(t);
+    const funciones = validarFunciones(t);
+    // La tabla de registros se crea aquí, con sesión de administrador; nunca desde una petición pública.
+    if ((funciones.reservasHabilitadas || funciones.boletinHabilitado || funciones.cuentasHabilitadas) && this.registros)
+      await this.registros.preparar();
     const productosWeb = productosComerciales(comercial);
     if (productosWeb.length && await this.prisma.producto.count({where:{empresaId,id:{in:productosWeb}}}) !== productosWeb.length) throw new BadRequestException('Los productos de la web deben pertenecer a su empresa');
     t.horarios = validarHorarios(t.horarios);
@@ -212,6 +230,7 @@ export class TiendaService {
     const tienda = {
       ...comercial,
       ...sitio,
+      ...funciones,
       publicada: t.publicada,
       pedidosHabilitados: t.pedidosHabilitados,
       titulo: t.titulo,
@@ -324,7 +343,7 @@ export class TiendaService {
     };
   }
 
-  async solicitar(slug: string, body: any) {
+  async solicitar(slug: string, body: any, autorizacion?: unknown) {
     if (!body || typeof body !== 'object' || Array.isArray(body))
       throw new BadRequestException('Pedido inválido');
     const e = await this.empresaPublica(slug);
@@ -338,12 +357,7 @@ export class TiendaService {
       where: { empresaId_clave: { empresaId: e.id, clave } },
     });
     if (existente)
-      return {
-        id: existente.id,
-        estado: existente.estado,
-        total: existente.total,
-        subtotal: existente.subtotal, costoDomicilio: existente.costoDomicilio, items: existente.items,
-      };
+      return { id: existente.id, estado: existente.estado, total: existente.total, subtotal: existente.subtotal, costoDomicilio: existente.costoDomicilio, items: existente.items, descuento: descuentoPedido(existente) };
     const nombre = texto(body.nombre, 'Nombre', 100, true),
       telefono = texto(body.telefono, 'Teléfono', 20, true),
       direccion = texto(body.direccion, 'Dirección', 300, true);
@@ -412,7 +426,12 @@ export class TiendaService {
     const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
     if (subtotal < t.minimo)
       throw new BadRequestException(`La compra mínima es $${t.minimo}`);
-    const total = subtotal + zona.costo;
+    // El cupón solo descuenta productos; se valida de nuevo dentro de la transacción.
+    if (body.cupon !== undefined && body.cupon !== '' && !this.extras)
+      throw new BadRequestException('Cupón no válido');
+    const cupon = body.cupon ? await this.extras!.calcularCupon(e.id, body.cupon, subtotal) : null;
+    const descuento = cupon?.descuento || 0;
+    const total = Math.round((subtotal - descuento + zona.costo) * 100) / 100;
     monto(total, 'Total del pedido', 0, 99999999.99);
     if (body.metodoPago === 'TARJETA') montoBold(total);
     if (
@@ -435,8 +454,10 @@ export class TiendaService {
       throw new BadRequestException(
         'Ya recibimos varias solicitudes de este teléfono. Contacte a la empresa.',
       );
-    try {
-      const pedido = await this.prisma.pedidoWeb.create({
+    const cuenta = t.cuentasHabilitadas && this.extras
+      ? await this.extras.clienteOpcional(slug, e.id, autorizacion)
+      : null;
+    const crear = (db: any) => db.pedidoWeb.create({
         data: {
           empresaId: e.id,
           sucursalId: t.sucursalId,
@@ -453,13 +474,27 @@ export class TiendaService {
           metodoPago: body.metodoPago,
         },
       });
-      return { id: pedido.id, estado: pedido.estado, total: pedido.total, subtotal: pedido.subtotal, costoDomicilio: pedido.costoDomicilio, items: pedido.items };
+    try {
+      const pedido = cupon || cuenta
+        ? await this.prisma.$transaction(async (tx) => {
+            const p = await crear(tx);
+            if (cupon) {
+              const vigente = await this.extras!.calcularCupon(e.id, body.cupon, subtotal, tx);
+              if (vigente.descuento !== descuento)
+                throw new ConflictException('El cupón cambió. Vuelve a aplicarlo antes de confirmar.');
+              await this.extras!.aplicarCupon(vigente.r, p.id, descuento, tx);
+            }
+            if (cuenta) await this.extras!.vincularPedido(e.id, cuenta.r.id, p.id, tx);
+            return p;
+          }, { timeout: 15000 })
+        : await crear(this.prisma);
+      return { id: pedido.id, estado: pedido.estado, total: pedido.total, subtotal: pedido.subtotal, costoDomicilio: pedido.costoDomicilio, items: pedido.items, descuento };
     } catch (err) {
       if (err.code === 'P2002') {
         const p = await this.prisma.pedidoWeb.findUniqueOrThrow({
           where: { empresaId_clave: { empresaId: e.id, clave } },
         });
-        return { id: p.id, estado: p.estado, total: p.total, subtotal: p.subtotal, costoDomicilio: p.costoDomicilio, items: p.items };
+        return { id: p.id, estado: p.estado, total: p.total, subtotal: p.subtotal, costoDomicilio: p.costoDomicilio, items: p.items, descuento: descuentoPedido(p) };
       }
       throw err;
     }
@@ -479,7 +514,7 @@ export class TiendaService {
     });
     if (!p) throw new NotFoundException('Pedido no encontrado');
     const registro = await this.prisma.pedidoWeb.findFirst({ where: { id, empresaId: e.id } });
-    return { ...p, pagoBold: await this.bold.estado(registro) };
+    return { ...p, descuento: descuentoPedido(p), pagoBold: await this.bold.estado(registro) };
   }
   async pagoBold(slug: string, id: string, clave: unknown) {
     const e = await this.empresaPublica(slug);
@@ -507,7 +542,7 @@ export class TiendaService {
       orderBy: { creadoEn: 'desc' },
       take: 100,
     });
-    return Promise.all(pedidos.map(async p => ({ ...p, pagoBold: await this.bold.estado(p) })));
+    return Promise.all(pedidos.map(async p => ({ ...p, descuento: descuentoPedido(p), pagoBold: await this.bold.estado(p) })));
   }
   repartidores(user: any) {
     return this.prisma.usuario.findMany({
@@ -557,6 +592,12 @@ export class TiendaService {
             throw new ConflictException(
               'Cambió el catálogo. Contacte al cliente antes de solicitar un nuevo pedido.',
             );
+          // Solo se consulta el cupón si el pedido tiene descuento: así una sede sin la tabla
+          // de registros no invalida la transacción de la venta.
+          const descuento = descuentoPedido(p);
+          const uso = descuento > 0 ? await this.extras?.usoCupon(user.empresaId, p.id, tx) : null;
+          if (descuento > 0 && (!uso || Math.abs(uso.descuento - descuento) > 0.009))
+            throw new ConflictException('No se pudo verificar el cupón de este pedido. Contacta a soporte antes de aceptarlo.');
           // No vincular por teléfono a un cliente existente: el comprador público no autenticó su identidad.
           const venta = await this.pedidos.crearEnTransaccion(
             {
@@ -564,7 +605,8 @@ export class TiendaService {
               metodoPago: pago?.metodo || p.metodoPago,
               sucursalId: p.sucursalId,
               clienteId: body.clienteId || null,
-              observacion: `DOMICILIO: ${p.nombre} · ${p.telefono} · ${p.direccion}. ${p.observacion || ''}`,
+              ...(descuento > 0 ? { descuento } : {}),
+              observacion: `DOMICILIO: ${p.nombre} · ${p.telefono} · ${p.direccion}.${uso ? ` CUPÓN ${uso.codigo}.` : ''} ${p.observacion || ''}`,
             },
             user.id,
             user.empresaId,
@@ -587,6 +629,7 @@ export class TiendaService {
               'Solo se rechazan solicitudes sin aceptar',
             );
           await this.bold.validarRechazo(p, tx);
+          if (descuentoPedido(p) > 0) await this.extras?.liberarCupon(user.empresaId, p.id, tx);
           return tx.pedidoWeb.update({
             where: { id },
             data: {
