@@ -3,6 +3,7 @@ export const seccionesTienda = [
   "productos",
   "nosotros",
   "contacto",
+  "politicas",
 ] as const;
 export type SeccionTienda = (typeof seccionesTienda)[number];
 export const etiquetasSeccion: Record<SeccionTienda, string> = {
@@ -10,6 +11,7 @@ export const etiquetasSeccion: Record<SeccionTienda, string> = {
   productos: "Productos",
   nosotros: "Nosotros",
   contacto: "Contacto",
+  politicas: "Políticas de compra",
 };
 export function rutasTienda(
   slug: string,
@@ -23,6 +25,7 @@ export function rutasTienda(
     productos: `${base}/productos`,
     nosotros: `${base}/nosotros`,
     contacto: `${base}/contacto`,
+    politicas: `${base}/politicas`,
   };
 }
 export function urlSeccionTienda(base: string, seccion: SeccionTienda) {

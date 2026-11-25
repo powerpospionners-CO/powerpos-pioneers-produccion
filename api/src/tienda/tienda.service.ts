@@ -1,3 +1,4 @@
+import {validarComercial,productosComerciales} from './contenido-comercial';
 import {
   BadRequestException,
   ConflictException,
@@ -82,6 +83,9 @@ export class TiendaService {
     t.paletaLogo = actual.tienda.paletaLogo;
     if (t.coloresAutomaticos && t.paletaLogo) t.color = t.paletaLogo.principal;
     const p = { ...actual.fidelizacion, ...body.fidelizacion };
+    const comercial = validarComercial(t);
+    const productosWeb = productosComerciales(comercial);
+    if (productosWeb.length && await this.prisma.producto.count({where:{empresaId,id:{in:productosWeb}}}) !== productosWeb.length) throw new BadRequestException('Los productos de la web deben pertenecer a su empresa');
     t.horarios = validarHorarios(t.horarios);
     if (t.horarios) t.horario = resumenHorarios(t.horarios);
     for (const campo of ['publicada', 'pedidosHabilitados'])
@@ -205,6 +209,7 @@ export class TiendaService {
       );
     // Lista explícita: no persistir claves arbitrarias recibidas del navegador.
     const tienda = {
+      ...comercial,
       publicada: t.publicada,
       pedidosHabilitados: t.pedidosHabilitados,
       titulo: t.titulo,
@@ -299,7 +304,14 @@ export class TiendaService {
       logo: e.logo,
       direccion: e.direccion,
       telefono: e.telefono,
-      config,
+      config: {
+        ...config,
+        testimonios: config.testimonios.filter(t=>t.autorizado),
+        fichasProductos: config.fichasProductos.filter(f=>productos.some(p=>p.id===f.productoId)),
+        destacadosIds: config.destacadosIds.filter(id=>productos.some(p=>p.id===id)),
+        novedadesIds: config.novedadesIds.filter(id=>productos.some(p=>p.id===id)),
+        promociones: config.promociones.filter(v=>!v.productoId||productos.some(p=>p.id===v.productoId)),
+      },
       bold: { habilitado: await this.bold.disponible({ empresaId: e.id, sucursalId: config.sucursalId }) },
       productos: productos.map(p => agregarOrigen(p, leerOrigenes(e.tiendaConfig))),
     };

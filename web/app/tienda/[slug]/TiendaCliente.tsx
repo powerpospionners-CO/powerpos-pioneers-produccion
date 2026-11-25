@@ -22,7 +22,11 @@ export default function TiendaCliente({
   rutas: Record<SeccionTienda, string>;
   children?: ReactNode;
 }) {
-  const params = useParams<{ slug: string; seccion?: string }>();
+  const params = useParams<{
+    slug: string;
+    seccion?: string;
+    productoId?: string;
+  }>();
   const router = useRouter();
   const seccion: SeccionTienda = seccionesTienda.includes(
     params.seccion as SeccionTienda,
@@ -33,8 +37,11 @@ export default function TiendaCliente({
     [error, setError] = useState(""),
     [intento, setIntento] = useState(0);
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [seccion]);
+    const hash = window.location.hash.slice(1);
+    const destino = hash ? document.getElementById(hash) : null;
+    if (destino) destino.scrollIntoView();
+    else window.scrollTo(0, 0);
+  }, [seccion, params.productoId]);
   useEffect(() => {
     const controller = new AbortController();
     let sequence = 0;
@@ -50,9 +57,12 @@ export default function TiendaCliente({
           setTienda(data);
           setError("");
           document.title =
-            seccion === "inicio"
-              ? `${data.nombre} · Tienda en línea`
-              : `${etiquetasSeccion[seccion]} · ${data.nombre}`;
+            params.productoId &&
+            data.productos.find((p) => p.id === Number(params.productoId))
+              ? `${data.productos.find((p) => p.id === Number(params.productoId))!.nombre} · ${data.nombre}`
+              : seccion === "inicio"
+                ? `${data.nombre} · Tienda en línea`
+                : `${etiquetasSeccion[seccion]} · ${data.nombre}`;
         }
       } catch (e) {
         if (!controller.signal.aborted && current === sequence)
@@ -70,7 +80,7 @@ export default function TiendaCliente({
       clearInterval(timer);
       window.removeEventListener("focus", focus);
     };
-  }, [slug, intento, seccion]);
+  }, [slug, intento, seccion, params.productoId]);
   if (!tienda)
     return (
       <main className="figma-store app-shell" style={{ padding: "15vh 8%" }}>
@@ -98,6 +108,7 @@ export default function TiendaCliente({
         tienda={tienda}
         slug={slug}
         seccion={seccion}
+        productoId={params.productoId ? Number(params.productoId) : undefined}
         rutas={rutas}
         navegar={(href) => router.push(href)}
       />

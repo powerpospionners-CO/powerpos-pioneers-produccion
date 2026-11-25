@@ -80,3 +80,15 @@ test('cada mapa usa la dirección propia y no aparece cuando falta la dirección
  assert(!render('').includes('<iframe')); assert(!render(direccion,'inicio').includes('<iframe'));
  assert(!render('Bogotá').includes('Dosquebradas'));
 });
+
+test('Inicio ofrece productos seleccionados y testimonios autorizados sin inventar opiniones',()=>{
+ const tienda={...datos,config:{...datos.config,destacadosIds:[800],testimonios:[{nombre:'Cliente real',texto:'Buena atención',autorizado:true},{nombre:'Privado',texto:'No publicar',autorizado:false}],politicas:{envios:'Entrega local',cambios:'',devoluciones:'',privacidad:'Tratamiento de datos'},facebook:'negocio'}};
+ const html=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria'}));
+ assert(html.includes('/productos/800'));assert(html.includes('Buena atención'));assert(!html.includes('No publicar'));assert(html.includes('facebook.com/negocio'));assert(html.includes('/politicas#politica-envios'));
+ const politica=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'politicas'}));assert(politica.includes('Entrega local'));assert(!politica.includes('id="inicio"'));
+});
+test('la ficha individual conserva precio y disponibilidad y muestra fotos adicionales',()=>{
+ const tienda={...datos,config:{...datos.config,fichasProductos:[{productoId:800,imagenes:['https://example.com/otra.png']}]}};
+ const html=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos',productoId:800}));
+ assert(html.includes('<h1>Martillo</h1>'));assert(html.includes('Ver foto 2'));assert(html.includes('Agotado'));assert(!html.includes('category-grid'));assert(html.includes('disabled=""'));
+});
