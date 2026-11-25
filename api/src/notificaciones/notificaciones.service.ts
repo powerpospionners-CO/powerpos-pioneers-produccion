@@ -16,6 +16,7 @@ import {
   correoAlerta,
   correoPrueba,
   correoCumpleanos,
+  correoCodigoCuenta,
   correoSuscripcion,
   logoCorreo,
 } from './correo-powerpos';
@@ -109,6 +110,21 @@ export class NotificacionesService {
         this.logger.warn('No se pudo entregar la alerta por correo');
       }
       return { enviado: false, canales: [{ canal: 'email', exitoso: false }] };
+    }
+  }
+
+  async enviarCodigoCuenta(correo: string, empresa: string, codigo: string) {
+    try {
+      await this.enviarEmail(
+        `Código para restablecer tu contraseña · ${empresa}`,
+        correoCodigoCuenta(empresa, codigo),
+        [correo],
+      );
+      return true;
+    } catch (e) {
+      // No registrar el destinatario: es un dato personal del comprador.
+      this.logger.warn(`No se pudo enviar un código de cuenta de tienda: ${e}`);
+      return false;
     }
   }
 

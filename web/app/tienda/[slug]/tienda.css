@@ -2423,3 +2423,39 @@
 .figma-store .web-order-steps li.hecho { border-color: var(--orange); color: inherit; }
 .figma-store .web-order-steps li.actual { font-weight: 700; }
 .figma-store .web-order-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+
+/* Reservas, cuenta de cliente, boletín y cupón. */
+.figma-store .store-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.figma-store .store-form-page { max-width: 760px; }
+.figma-store .store-form-page h1 { font-size: clamp(32px, 5vw, 52px); }
+.figma-store .store-form-page h2 { margin-top: 32px; font-size: 24px; }
+.figma-store .store-form fieldset { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; border: 0; }
+.figma-store .store-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--black); }
+.figma-store .store-form input,
+.figma-store .store-form textarea,
+.figma-store .store-newsletter input,
+.figma-store .web-coupon input { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: white; padding: 11px 12px; font-size: 14px; font-weight: 400; }
+.figma-store .store-form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.figma-store .store-form label.store-check,
+.figma-store .store-newsletter .store-check { flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 400; }
+.figma-store .store-check input { width: auto; margin-top: 3px; accent-color: var(--orange); }
+.figma-store .store-form-result { padding: 16px; border-radius: 10px; background: var(--cream); }
+.figma-store .store-form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.figma-store .store-form-help { color: var(--muted, #6b625a); font-size: 13px; }
+.figma-store .store-link-button { border: 0; background: none; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; }
+.figma-store .store-account-orders { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.figma-store .store-account-orders li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.figma-store .store-account-orders li > div:first-child { display: grid; gap: 4px; }
+.figma-store .store-account-orders small { color: var(--muted, #6b625a); }
+.figma-store .store-account-delete { margin-top: 32px; }
+.figma-store .store-account-delete summary { cursor: pointer; font-weight: 700; }
+.figma-store .store-newsletter { display: grid; gap: 10px; max-width: 300px; color: #d2cbc4; font-size: 12px; }
+.figma-store .store-newsletter strong { color: white; }
+.figma-store .store-newsletter a { color: inherit; }
+.figma-store .web-coupon { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
+.figma-store .web-coupon label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 800; }
+.figma-store .web-coupon small { grid-column: 1 / -1; }
+.figma-store .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 640px) {
+  .figma-store .store-form-grid { grid-template-columns: 1fr; }
+}

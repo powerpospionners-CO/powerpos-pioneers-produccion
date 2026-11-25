@@ -15,6 +15,9 @@ import MapaEmpresa from "../../../components/MapaEmpresa";
 import ProductoWeb from "../../../components/ProductoWeb";
 import InicioComercial from "../../../components/InicioComercial";
 import AnaliticaTienda from "../../../components/AnaliticaTienda";
+import ReservaTienda from "../../../components/tienda/ReservaTienda";
+import CuentaTienda from "../../../components/tienda/CuentaTienda";
+import BoletinTienda from "../../../components/tienda/BoletinTienda";
 import { redesTienda } from "../../../lib/comercioTienda";
 import {
   rutaCategoria,
@@ -66,6 +69,12 @@ const politicasPublicadas = (p?: Record<string, string>) =>
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
+    usuario: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+      </>
+    ),
     search: (
       <>
         <circle cx="11" cy="11" r="7" />
@@ -638,6 +647,15 @@ function App({
               >
                 Contacto
               </Link>
+              {t.reservasHabilitadas && (
+                <Link
+                  href={rutas.reservas}
+                  aria-current={vista === "reservas" ? "page" : undefined}
+                  onClick={() => setMobileMenu(false)}
+                >
+                  Reservas
+                </Link>
+              )}
             </nav>
             <div className="header-actions">
               {whatsappUrl && (
@@ -650,6 +668,17 @@ function App({
                   <Icon name="whatsapp" />
                   <span>WhatsApp</span>
                 </a>
+              )}
+              {t.cuentasHabilitadas && (
+                <Link
+                  className="cart-button"
+                  href={rutas.cuenta}
+                  prefetch={false}
+                  aria-label="Mi cuenta"
+                  aria-current={vista === "cuenta" ? "page" : undefined}
+                >
+                  <Icon name="usuario" />
+                </Link>
               )}
               <button
                 className="cart-button"
@@ -1249,6 +1278,41 @@ function App({
               </div>
             </section>
           )}
+          {vista === "reservas" && (
+            <ReservaTienda
+              slug={slug}
+              nombreTienda={tienda.nombre}
+              habilitadas={!!t.reservasHabilitadas}
+              maxPersonas={t.reservaMaxPersonas}
+              diasMax={t.reservaDiasMax}
+              privacidadHref={
+                t.politicas?.privacidad?.trim()
+                  ? `${rutas.politicas}#politica-privacidad`
+                  : undefined
+              }
+            />
+          )}
+          {vista === "cuenta" && (
+            <CuentaTienda
+              slug={slug}
+              nombreTienda={tienda.nombre}
+              habilitadas={!!t.cuentasHabilitadas}
+              inicioHref={rutas.inicio}
+              privacidadHref={
+                t.politicas?.privacidad?.trim()
+                  ? `${rutas.politicas}#politica-privacidad`
+                  : undefined
+              }
+              onRepetir={(items) => {
+                for (const item of items) {
+                  const p = products.find((x) => x.id === item.productoId);
+                  if (p) addToCart(p, item.cantidad);
+                }
+                setCartOpen(true);
+                setCheckout(false);
+              }}
+            />
+          )}
           {vista === "politicas" && (
             <section className="section store-policies">
               <h1>Políticas de compra</h1>
@@ -1321,13 +1385,25 @@ function App({
                 Contacto
               </Link>
             </nav>
-            <div className="footer-note">
-              <strong>Antes de pedir</strong>
-              <p>
-                Disponibilidad, envío y pago se confirman directamente por
-                WhatsApp.
-              </p>
-            </div>
+            {t.boletinHabilitado ? (
+              <BoletinTienda
+                slug={slug}
+                nombreTienda={tienda.nombre}
+                privacidadHref={
+                  t.politicas?.privacidad?.trim()
+                  ? `${rutas.politicas}#politica-privacidad`
+                  : undefined
+                }
+              />
+            ) : (
+              <div className="footer-note">
+                <strong>Antes de pedir</strong>
+                <p>
+                  Disponibilidad, envío y pago se confirman directamente por
+                  WhatsApp.
+                </p>
+              </div>
+            )}
           </div>
           <address className="footer-legal">
             {tienda.legal?.razonSocial && (

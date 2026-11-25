@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
       { key: 'X-Frame-Options', value: 'DENY' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
+      { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+      // La web no usa cámara, micrófono ni ubicación; el mapa incrustado tampoco los necesita.
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()' },
+      { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
     ] }];
   },
   // Identificador constante de la compilación, también fuera de Vercel.

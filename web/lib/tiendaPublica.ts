@@ -46,6 +46,11 @@ export type TiendaPublica = {
     correoPublico?: string;
     googleAnalyticsId?: string;
     metaPixelId?: string;
+    reservasHabilitadas?: boolean;
+    reservaMaxPersonas?: number;
+    reservaDiasMax?: number;
+    boletinHabilitado?: boolean;
+    cuentasHabilitadas?: boolean;
     fichasProductos?: { productoId: number; imagenes: string[] }[];
     mision?: string;
     vision?: string;

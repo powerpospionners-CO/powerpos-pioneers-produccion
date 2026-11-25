@@ -39,3 +39,10 @@ test('las páginas de categoría del dominio de empresa se reescriben a su tiend
   const r = proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com/tienda/categorias/12', { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } }));
   assert.equal(r.headers.get('x-middleware-rewrite'), 'https://enchilamarketpereira.powerpospioneers.com/tienda/enchilamarketpereira/categorias/12');
 });
+
+test('reservas y cuenta públicas se reescriben a la tienda y el panel de reservas no', () => {
+  const host = { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } };
+  assert.equal(proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com/tienda/reservas', host)).headers.get('x-middleware-rewrite'), 'https://enchilamarketpereira.powerpospioneers.com/tienda/enchilamarketpereira/reservas');
+  const panel = proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com/reservas', host));
+  assert.equal(panel.headers.get('x-middleware-rewrite'), null); assert.equal(panel.headers.get('x-robots-tag'), 'noindex, nofollow');
+});

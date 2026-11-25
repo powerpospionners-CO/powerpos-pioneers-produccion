@@ -19,8 +19,10 @@ async function audit() {
       return indices.get(name).get(JSON.stringify(relation.relationFromFields.map(key=>row[key])));
     };
     for (const model of models) {
-      if(model.name==='PersonalRegistro'){
-        const existe=await tx.$queryRawUnsafe("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='personal_registros'");
+      // Tablas aditivas que cada sede crea al habilitar la función.
+      const opcional={PersonalRegistro:'personal_registros',BoldRegistro:'bold_registros',TiendaRegistro:'tienda_registros'}[model.name];
+      if(opcional){
+        const existe=await tx.$queryRawUnsafe("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1",opcional);
         if(!existe.length){rows.set(model.name,[]);continue;}
       }
       const needed = new Set(['id']);

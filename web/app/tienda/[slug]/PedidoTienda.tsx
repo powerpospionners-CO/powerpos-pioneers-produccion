@@ -5,12 +5,14 @@ import {
   solicitarTienda,
   type TiendaPublica,
 } from "../../../lib/tiendaPublica";
+import { encabezadoCuenta, leerToken } from "../../../lib/cuentaTienda";
 type Estado = {
   id: string;
   estado: string;
   total: number;
   subtotal?: number;
   costoDomicilio?: number;
+  descuento?: number;
   items?: { nombre: string; cantidad: number; precio: number }[];
   motivo?: string;
   pagoBold?: { estado: string; referencia?: string } | null;
@@ -55,7 +57,10 @@ export function PedidoTienda({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [copiado, setCopiado] = useState(false),
-    [anterior, setAnterior] = useState("");
+    [anterior, setAnterior] = useState(""),
+    [cuponTexto, setCuponTexto] = useState(""),
+    [cupon, setCupon] = useState<{ codigo: string; descuento: number; descripcion: string } | null>(null),
+    [cuponError, setCuponError] = useState("");
   const recientes = `pedidos:${slug}`;
   const telefono = (tienda.config.whatsapp || tienda.telefono || "").replace(/\D/g, "");
   const whatsapp = /^\d{10,15}$/.test(telefono.length === 10 ? "57" + telefono : telefono)
@@ -72,8 +77,39 @@ export function PedidoTienda({
     clave = useRef({ body: "", id: "" });
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0),
     zona = tienda.config.zonas.find((z) => (z.id || z.nombre) === form.zona),
-    total = subtotal + (zona?.costo || 0);
+    descuento = cupon?.descuento || 0,
+    total = Math.round((subtotal - descuento + (zona?.costo || 0)) * 100) / 100;
   const path = `/tiendas/${encodeURIComponent(slug)}/pedidos`;
+  // Si cambia el carrito, el cupón se vuelve a validar con el nuevo subtotal.
+  useEffect(() => {
+    setCupon(null);
+  }, [subtotal]);
+  // Con sesión iniciada se proponen los datos de la cuenta; el cliente puede cambiarlos.
+  useEffect(() => {
+    if (!tienda.config.cuentasHabilitadas || !leerToken(slug)) return;
+    solicitarTienda<{ cliente: { nombre: string; telefono: string } }>(
+      `/tiendas/${encodeURIComponent(slug)}/cuenta`,
+      { headers: encabezadoCuenta(slug) },
+    )
+      .then(({ cliente }) =>
+        setForm((f) => ({ ...f, nombre: f.nombre || cliente.nombre, telefono: f.telefono || cliente.telefono })),
+      )
+      .catch(() => undefined);
+  }, [slug, tienda.config.cuentasHabilitadas]);
+  async function aplicarCupon() {
+    setCuponError("");
+    try {
+      setCupon(
+        await solicitarTienda(`/tiendas/${encodeURIComponent(slug)}/cupones/validar`, {
+          method: "POST",
+          body: JSON.stringify({ codigo: cuponTexto, subtotal }),
+        }),
+      );
+    } catch (e) {
+      setCupon(null);
+      setCuponError(e instanceof Error ? e.message : "Cupón no válido");
+    }
+  }
   const ciudades = [...new Set(tienda.config.zonas.map(z => z.ciudad || '').filter(Boolean))];
   const zonasVisibles = ciudades.length ? tienda.config.zonas.filter(z => (z.ciudad || '__OTRAS__') === form.ciudad) : tienda.config.zonas;
   useEffect(() => {
@@ -125,6 +161,7 @@ export function PedidoTienda({
       ciudad: zona?.ciudad || undefined,
       pagoBold: form.metodoPago === "TARJETA",
       totalEsperado: total,
+      ...(cupon ? { cupon: cupon.codigo } : {}),
       items: items.map((i) => ({ productoId: i.id, cantidad: i.quantity })),
     });
     if (clave.current.body !== body)
@@ -132,6 +169,7 @@ export function PedidoTienda({
     try {
       const result = await solicitarTienda<Estado>(path, {
         method: "POST",
+        headers: encabezadoCuenta(slug),
         body: JSON.stringify({ ...JSON.parse(body), clave: clave.current.id }),
       });
       setEstado(result);
@@ -262,6 +300,12 @@ export function PedidoTienda({
               <dd>{dinero(Number(estado.subtotal))}</dd>
             </div>
           )}
+          {!!estado.descuento && (
+            <div>
+              <dt>Descuento</dt>
+              <dd>−{dinero(Number(estado.descuento))}</dd>
+            </div>
+          )}
           {estado.costoDomicilio !== undefined && (
             <div>
               <dt>Domicilio</dt>
@@ -383,6 +427,34 @@ export function PedidoTienda({
             )}
           </select>
         </label>
+        <div className="web-coupon">
+          <label>
+            ¿Tienes un cupón?
+            <input
+              maxLength={24}
+              value={cuponTexto}
+              onChange={(e) => {
+                setCuponTexto(e.target.value.toUpperCase());
+                setCupon(null);
+                setCuponError("");
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="button text"
+            disabled={!cuponTexto.trim() || !subtotal}
+            onClick={() => void aplicarCupon()}
+          >
+            Aplicar
+          </button>
+          {cupon?.descripcion && <small>{cupon.descripcion}</small>}
+          {cuponError && (
+            <small role="alert" className="error">
+              {cuponError}
+            </small>
+          )}
+        </div>
         <label>
           Indicaciones
           <textarea
@@ -393,6 +465,11 @@ export function PedidoTienda({
         </label>
         <div className="order-mini-summary">
           <p>Productos: {dinero(subtotal)}</p>
+          {cupon && (
+            <p>
+              Cupón {cupon.codigo}: −{dinero(cupon.descuento)}
+            </p>
+          )}
           <p>Domicilio: {zona ? dinero(zona.costo) : "Por seleccionar"}</p>
           <strong>Total: {dinero(total)}</strong>
         </div>

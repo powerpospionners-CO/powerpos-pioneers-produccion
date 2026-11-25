@@ -117,3 +117,13 @@ test('la medición no se carga antes del consentimiento ni con identificadores i
  const html=renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,config:{...datos.config,googleAnalyticsId:'G-ABC1234',metaPixelId:'123456789012'}},slug:'ferreteria'}));
  assert(!html.includes('googletagmanager')); assert(!html.includes('fbevents'));
 });
+
+test('reservas, cuenta y boletín solo aparecen cuando la empresa los activa', () => {
+ const render=(config,seccion)=>renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,config:{...datos.config,...config}},slug:'ferreteria',seccion}));
+ const apagado=render({},'inicio');
+ assert(!apagado.includes('href="/tienda/ferreteria/reservas"')); assert(!apagado.includes('aria-label="Mi cuenta"')); assert(!apagado.includes('Recibe nuestras novedades'));
+ assert(render({},'reservas').includes('no recibe reservas en línea')); assert(render({},'cuenta').includes('no tiene cuentas de cliente'));
+ const activo=render({reservasHabilitadas:true,cuentasHabilitadas:true,boletinHabilitado:true,reservaMaxPersonas:6},'reservas');
+ assert(activo.includes('href="/tienda/ferreteria/reservas"')); assert(activo.includes('aria-label="Mi cuenta"')); assert(activo.includes('Recibe nuestras novedades'));
+ assert(activo.includes('Reserva tu mesa')); assert(activo.includes('max="6"')); assert(activo.includes('store-trap'));
+});
