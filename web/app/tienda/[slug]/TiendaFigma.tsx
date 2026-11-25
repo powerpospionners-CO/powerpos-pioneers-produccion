@@ -14,8 +14,13 @@ import HorarioTienda from "../../../components/HorarioTienda";
 import MapaEmpresa from "../../../components/MapaEmpresa";
 import ProductoWeb from "../../../components/ProductoWeb";
 import InicioComercial from "../../../components/InicioComercial";
+import AnaliticaTienda from "../../../components/AnaliticaTienda";
 import { redesTienda } from "../../../lib/comercioTienda";
-import { rutasTienda, type SeccionTienda } from "../../../lib/seccionesTienda";
+import {
+  rutaCategoria,
+  rutasTienda,
+  type SeccionTienda,
+} from "../../../lib/seccionesTienda";
 import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
 import {
@@ -46,6 +51,18 @@ type Product = {
 type CartItem = Product & { quantity: number };
 
 const money = (value: number) => `$${value.toLocaleString("es-CO")}`;
+const nombresPoliticas: Record<string, [string, string]> = {
+  terminos: ["Términos y condiciones", "Términos"],
+  envios: ["Envíos y entregas", "Envíos"],
+  cambios: ["Cambios", "Cambios"],
+  devoluciones: ["Devoluciones y derecho de retracto", "Devoluciones"],
+  privacidad: ["Privacidad y tratamiento de datos", "Privacidad"],
+};
+// Términos primero; el resto conserva el orden guardado por la empresa.
+const politicasPublicadas = (p?: Record<string, string>) =>
+  Object.entries(p || {})
+    .filter(([, texto]) => texto?.trim())
+    .sort(([a], [b]) => Number(b === "terminos") - Number(a === "terminos"));
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
@@ -219,6 +236,8 @@ function App({
   slug,
   seccion = "inicio",
   productoId,
+  categoriaId,
+  noEncontrada = false,
   rutas = rutasTienda(slug),
   navegar,
 }: {
@@ -226,6 +245,8 @@ function App({
   slug: string;
   seccion?: SeccionTienda;
   productoId?: number;
+  categoriaId?: number;
+  noEncontrada?: boolean;
   rutas?: Record<SeccionTienda, string>;
   navegar?: (href: string) => void;
 }) {
@@ -260,6 +281,9 @@ function App({
     () =>
       [...new Set(products.map((p) => p.category))].map((name, i) => ({
         name,
+        id:
+          tienda.productos.find((p) => p.categoria.nombre === name)
+            ?.categoriaId || 0,
         kicker: "Descubre la selección",
         pos: "center",
         tone: ["orange", "red", "green", "purple", "ochre"][i % 5],
@@ -309,7 +333,16 @@ function App({
   } as CSSProperties;
   const [mobileMenu, setMobileMenu] = useState(false);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("Todos");
+  const categoriaActual = categoriaId
+    ? tienda.productos.find((p) => p.categoriaId === categoriaId)?.categoria
+        .nombre
+    : undefined;
+  const vista =
+    noEncontrada || (categoriaId && !categoriaActual) ? "no-encontrada" : seccion;
+  const [category, setCategory] = useState(categoriaActual || "Todos");
+  useEffect(() => {
+    setCategory(categoriaActual || "Todos");
+  }, [categoriaId, categoriaActual]);
   const [country, setCountry] = useState("Todos");
   const [sort, setSort] = useState("destacados");
   const [quantities, setQuantities] = useState<Record<number, number>>({});
@@ -579,28 +612,28 @@ function App({
             >
               <Link
                 href={rutas.inicio}
-                aria-current={seccion === "inicio" ? "page" : undefined}
+                aria-current={vista === "inicio" ? "page" : undefined}
                 onClick={() => setMobileMenu(false)}
               >
                 Inicio
               </Link>
               <Link
                 href={rutas.productos}
-                aria-current={seccion === "productos" ? "page" : undefined}
+                aria-current={vista === "productos" ? "page" : undefined}
                 onClick={() => setMobileMenu(false)}
               >
                 Productos
               </Link>
               <Link
                 href={rutas.nosotros}
-                aria-current={seccion === "nosotros" ? "page" : undefined}
+                aria-current={vista === "nosotros" ? "page" : undefined}
                 onClick={() => setMobileMenu(false)}
               >
                 Nosotros
               </Link>
               <Link
                 href={rutas.contacto}
-                aria-current={seccion === "contacto" ? "page" : undefined}
+                aria-current={vista === "contacto" ? "page" : undefined}
                 onClick={() => setMobileMenu(false)}
               >
                 Contacto
@@ -654,7 +687,7 @@ function App({
         </header>
 
         <main>
-          {seccion === "inicio" && (
+          {vista === "inicio" && (
             <section className="hero" id="inicio">
               <div className="hero-copy">
                 <div className="eyebrow">
@@ -724,14 +757,14 @@ function App({
             </section>
           )}
 
-          {seccion === "inicio" && (
+          {vista === "inicio" && (
             <InicioComercial
               tienda={tienda}
               productosHref={rutas.productos}
               nosotrosHref={rutas.nosotros}
             />
           )}
-          {seccion === "productos" &&
+          {vista === "productos" &&
             productoId &&
             (tienda.productos.find((p) => p.id === productoId) ? (
               <ProductoWeb
@@ -753,8 +786,29 @@ function App({
                 <Link href={rutas.productos}>Volver al catálogo</Link>
               </section>
             ))}
-          {seccion === "productos" && !productoId && (
+          {vista === "productos" && !productoId && (
             <>
+              {categoriaActual ? (
+                <section className="section categories-section category-page">
+                  <nav className="store-breadcrumb" aria-label="Ruta de navegación">
+                    <Link href={rutas.productos}>Productos</Link>
+                    <span aria-hidden="true">/</span>
+                    <span aria-current="page">{categoriaActual}</span>
+                  </nav>
+                  <div className="section-heading">
+                    <div>
+                      <div className="eyebrow">
+                        <span /> Categoría
+                      </div>
+                      <h1>{categoriaActual}</h1>
+                    </div>
+                    <p>
+                      {tienda.productos.filter((p) => p.categoriaId === categoriaId).length}{" "}
+                      productos de {categoriaActual} en {tienda.nombre}.
+                    </p>
+                  </div>
+                </section>
+              ) : (
               <section className="section categories-section">
                 <div className="section-heading">
                   <div>
@@ -771,10 +825,18 @@ function App({
                 </div>
                 <div className="category-grid">
                   {categories.map((item, index) => (
-                    <button
+                    <Link
                       key={item.name}
                       className={`category-card ${item.tone}`}
-                      onClick={() => applyCategory(item.name)}
+                      href={
+                        item.id ? rutaCategoria(rutas, item.id) : rutas.productos
+                      }
+                      onClick={(e) => {
+                        if (!item.id) {
+                          e.preventDefault();
+                          applyCategory(item.name);
+                        }
+                      }}
                     >
                       <div
                         className="category-image"
@@ -793,10 +855,11 @@ function App({
                       <span className="round-arrow">
                         <Icon name="arrow" size={18} />
                       </span>
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </section>
+              )}
 
               <section className="section products-section" id="productos">
                 <div className="section-heading product-title">
@@ -805,7 +868,15 @@ function App({
                       <span /> NUESTRO CATÁLOGO
                     </div>
                     <h2>
-                      Productos <em>destacados</em>
+                      {categoriaActual ? (
+                        <>
+                          Todo en <em>{categoriaActual}</em>
+                        </>
+                      ) : (
+                        <>
+                          Productos <em>destacados</em>
+                        </>
+                      )}
                     </h2>
                   </div>
                   <p>
@@ -966,7 +1037,7 @@ function App({
             </>
           )}
 
-          {seccion === "nosotros" && (
+          {vista === "nosotros" && (
             <>
               <section className="about-section" id="nosotros">
                 <div className="about-image">
@@ -1056,7 +1127,7 @@ function App({
             </>
           )}
 
-          {seccion === "contacto" && (
+          {vista === "contacto" && (
             <section className="contact-section section" id="contacto">
               <div className="contact-card">
                 <div>
@@ -1158,28 +1229,38 @@ function App({
               )}
             </section>
           )}
-          {seccion === "politicas" && (
+          {vista === "no-encontrada" && (
+            <section className="section store-not-found" role="alert">
+              <div className="eyebrow">
+                <span /> Error 404
+              </div>
+              <h1>No encontramos esta página</h1>
+              <p>
+                El enlace puede haber cambiado o el producto ya no está
+                publicado en {tienda.nombre}.
+              </p>
+              <div className="store-not-found-actions">
+                <Link className="button primary" href={rutas.productos}>
+                  Ver productos
+                </Link>
+                <Link className="button text" href={rutas.inicio}>
+                  Ir al inicio
+                </Link>
+              </div>
+            </section>
+          )}
+          {vista === "politicas" && (
             <section className="section store-policies">
               <h1>Políticas de compra</h1>
               <p>Condiciones publicadas por {tienda.nombre}.</p>
-              {Object.entries(t.politicas || {})
-                .filter(([, texto]) => texto.trim())
+              {politicasPublicadas(t.politicas)
                 .map(([campo, texto]) => (
                   <article key={campo} id={`politica-${campo}`}>
-                    <h2>
-                      {(
-                        {
-                          envios: "Envíos y entregas",
-                          cambios: "Cambios",
-                          devoluciones: "Devoluciones",
-                          privacidad: "Privacidad y tratamiento de datos",
-                        } as Record<string, string>
-                      )[campo] || campo}
-                    </h2>
+                    <h2>{nombresPoliticas[campo]?.[0] || campo}</h2>
                     <p className="preserve-lines">{texto}</p>
                   </article>
                 ))}
-              {!Object.values(t.politicas || {}).some((v) => v.trim()) && (
+              {!politicasPublicadas(t.politicas).length && (
                 <p>
                   Consulta con la empresa las condiciones aplicables a tu
                   compra.
@@ -1221,26 +1302,15 @@ function App({
                     {r.nombre}
                   </a>
                 ))}
-              {Object.entries(t.politicas || {})
-                .filter(([, v]) => v.trim())
-                .map(([campo]) => (
-                  <Link
-                    key={campo}
-                    prefetch={false}
-                    href={`${rutas.politicas}#politica-${campo}`}
-                  >
-                    {
-                      (
-                        {
-                          envios: "Envíos",
-                          cambios: "Cambios",
-                          devoluciones: "Devoluciones",
-                          privacidad: "Privacidad",
-                        } as Record<string, string>
-                      )[campo]
-                    }
-                  </Link>
-                ))}
+              {politicasPublicadas(t.politicas).map(([campo]) => (
+                <Link
+                  key={campo}
+                  prefetch={false}
+                  href={`${rutas.politicas}#politica-${campo}`}
+                >
+                  {nombresPoliticas[campo]?.[1] || campo}
+                </Link>
+              ))}
               <a href={whatsappUrl || rutas.contacto}>WhatsApp</a>
               {instagram && (
                 <a href={instagram} target="_blank" rel="noreferrer">
@@ -1259,11 +1329,39 @@ function App({
               </p>
             </div>
           </div>
+          <address className="footer-legal">
+            {tienda.legal?.razonSocial && (
+              <span>{tienda.legal.razonSocial}</span>
+            )}
+            {tienda.legal?.nit && <span>NIT {tienda.legal.nit}</span>}
+            {tienda.direccion && <span>{tienda.direccion}</span>}
+            {tienda.telefono && (
+              <a href={`tel:${tienda.telefono.replace(/[^\d+]/g, "")}`}>
+                {tienda.telefono}
+              </a>
+            )}
+            {tienda.legal?.correo && (
+              <a href={`mailto:${tienda.legal.correo}`}>{tienda.legal.correo}</a>
+            )}
+          </address>
           <div className="footer-bottom">
-            <span>© {tienda.nombre}</span>
+            <span>
+              © {new Date().getFullYear()}{" "}
+              {tienda.legal?.razonSocial || tienda.nombre}
+            </span>
             <span>Tienda conectada con PowerPOS</span>
           </div>
         </footer>
+        <AnaliticaTienda
+          slug={slug}
+          googleAnalyticsId={t.googleAnalyticsId}
+          metaPixelId={t.metaPixelId}
+          privacidadHref={
+            t.politicas?.privacidad?.trim()
+              ? `${rutas.politicas}#politica-privacidad`
+              : undefined
+          }
+        />
 
         {selected && (
           <div
@@ -1486,6 +1584,11 @@ function App({
                   tienda={tienda}
                   slug={slug}
                   items={currentCart}
+                  politicasHref={
+                    politicasPublicadas(t.politicas).length
+                      ? rutas.politicas
+                      : undefined
+                  }
                   onRecibido={() => {
                     setCart([]);
                   }}

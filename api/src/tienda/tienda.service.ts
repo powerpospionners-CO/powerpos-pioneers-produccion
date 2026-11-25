@@ -1,4 +1,4 @@
-import {validarComercial,productosComerciales} from './contenido-comercial';
+import {validarComercial,productosComerciales,validarSitio} from './contenido-comercial';
 import {
   BadRequestException,
   ConflictException,
@@ -84,6 +84,7 @@ export class TiendaService {
     if (t.coloresAutomaticos && t.paletaLogo) t.color = t.paletaLogo.principal;
     const p = { ...actual.fidelizacion, ...body.fidelizacion };
     const comercial = validarComercial(t);
+    const sitio = validarSitio(t);
     const productosWeb = productosComerciales(comercial);
     if (productosWeb.length && await this.prisma.producto.count({where:{empresaId,id:{in:productosWeb}}}) !== productosWeb.length) throw new BadRequestException('Los productos de la web deben pertenecer a su empresa');
     t.horarios = validarHorarios(t.horarios);
@@ -210,6 +211,7 @@ export class TiendaService {
     // Lista explícita: no persistir claves arbitrarias recibidas del navegador.
     const tienda = {
       ...comercial,
+      ...sitio,
       publicada: t.publicada,
       pedidosHabilitados: t.pedidosHabilitados,
       titulo: t.titulo,
@@ -304,6 +306,11 @@ export class TiendaService {
       logo: e.logo,
       direccion: e.direccion,
       telefono: e.telefono,
+      legal: {
+        razonSocial: config.razonSocial || '',
+        nit: config.mostrarNit ? e.nit : '',
+        correo: config.correoPublico || '',
+      },
       config: {
         ...config,
         testimonios: config.testimonios.filter(t=>t.autorizado),

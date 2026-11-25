@@ -15,6 +15,12 @@ type Estado = {
   motivo?: string;
   pagoBold?: { estado: string; referencia?: string } | null;
 };
+const pasosPedido = [
+  ["RECIBIDO", "Recibido"],
+  ["ACEPTADO", "Aceptado"],
+  ["EN_CAMINO", "En camino"],
+  ["ENTREGADO", "Entregado"],
+] as const;
 const dinero = (n: number) =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -25,11 +31,13 @@ export function PedidoTienda({
   tienda,
   slug,
   items,
+  politicasHref,
   onRecibido,
 }: {
   tienda: TiendaPublica;
   slug: string;
   items: { id: number; price: number; quantity: number; disponible: boolean }[];
+  politicasHref?: string;
   onRecibido: () => void;
 }) {
   const [form, setForm] = useState({
@@ -45,7 +53,21 @@ export function PedidoTienda({
     [recuperando, setRecuperando] = useState(false),
     [clavePago, setClavePago] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [copiado, setCopiado] = useState(false),
+    [anterior, setAnterior] = useState("");
+  const recientes = `pedidos:${slug}`;
+  const telefono = (tienda.config.whatsapp || tienda.telefono || "").replace(/\D/g, "");
+  const whatsapp = /^\d{10,15}$/.test(telefono.length === 10 ? "57" + telefono : telefono)
+    ? `https://wa.me/${telefono.length === 10 ? "57" + telefono : telefono}`
+    : "";
+  useEffect(() => {
+    try {
+      setAnterior(localStorage.getItem(recientes) || "");
+    } catch {
+      /* Sin almacenamiento no se recuerda el último pedido. */
+    }
+  }, [recientes]);
   const lock = useRef(false),
     clave = useRef({ body: "", id: "" });
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0),
@@ -123,6 +145,11 @@ export function PedidoTienda({
         setEstado({ ...result, pagoBold: { estado: "PENDIENTE" } });
       }
       onRecibido();
+      try {
+        localStorage.setItem(recientes, result.id);
+      } catch {
+        /* El enlace de la barra de direcciones sigue sirviendo para consultar. */
+      }
       const url = new URL(window.location.href);
       url.searchParams.set("pedido", result.id);
       window.history.replaceState(null, "", url);
@@ -176,6 +203,46 @@ export function PedidoTienda({
             } as Record<string, string>
           )[estado.estado] || estado.estado.replaceAll("_", " ")}
         </p>
+        {estado.estado !== "RECHAZADO" && (
+          <ol className="web-order-steps" aria-label="Avance del pedido">
+            {pasosPedido.map(([clave, texto], i) => {
+              const actual = pasosPedido.findIndex(([c]) => c === estado.estado);
+              return (
+                <li
+                  key={clave}
+                  className={`${i <= actual ? "hecho" : ""} ${i === actual ? "actual" : ""}`}
+                  aria-current={i === actual ? "step" : undefined}
+                >
+                  {texto}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        <div className="web-order-actions">
+          <button
+            type="button"
+            className="button text"
+            onClick={() => {
+              void navigator.clipboard
+                ?.writeText(window.location.href)
+                .then(() => setCopiado(true))
+                .catch(() => setCopiado(false));
+            }}
+          >
+            {copiado ? "Enlace copiado" : "Copiar enlace de seguimiento"}
+          </button>
+          {whatsapp && (
+            <a
+              className="button text"
+              href={`${whatsapp}?text=${encodeURIComponent(`Hola, consulto por mi pedido #${estado.id.slice(0, 8)}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Consultar por WhatsApp
+            </a>
+          )}
+        </div>
         {!!estado.items?.length && (
           <ul className="web-order-items">
             {estado.items.map((item, i) => (
@@ -254,6 +321,13 @@ export function PedidoTienda({
     );
   return (
     <form onSubmit={enviar}>
+      {anterior && (
+        <p className="web-order-help">
+          <a href={`?pedido=${encodeURIComponent(anterior)}`}>
+            Consultar el estado de mi pedido anterior
+          </a>
+        </p>
+      )}
       <fieldset disabled={busy}>
         {(["nombre", "telefono", "direccion"] as const).map((k) => (
           <label key={k}>
@@ -327,7 +401,17 @@ export function PedidoTienda({
         )}
         <label>
           <input type="checkbox" required /> Autorizo a {tienda.nombre} a usar
-          estos datos para atender y entregar este pedido.
+          estos datos para atender y entregar este pedido
+          {politicasHref ? (
+            <>
+              {" "}
+              y acepto sus{" "}
+              <a href={politicasHref} target="_blank" rel="noopener noreferrer">
+                políticas de compra
+              </a>
+            </>
+          ) : null}
+          .
         </label>
         <p>
           {form.metodoPago === "TARJETA"

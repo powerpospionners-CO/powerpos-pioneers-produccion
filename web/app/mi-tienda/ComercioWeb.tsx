@@ -9,10 +9,11 @@ const input =
 const boton = "rounded-lg border border-gray-600 px-4 py-2 disabled:opacity-50";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
 const politicas = [
-  ["envios", "Envíos y entregas"],
-  ["cambios", "Cambios"],
-  ["devoluciones", "Devoluciones"],
-  ["privacidad", "Privacidad y tratamiento de datos"],
+  ["terminos", "Términos y condiciones", "Quién vende, cómo se confirman precios, pedidos, pagos y entregas."],
+  ["envios", "Envíos y entregas", "Zonas, tiempos estimados, costos y qué pasa si no hay quien reciba."],
+  ["cambios", "Cambios", "Plazos y condiciones para cambiar un producto."],
+  ["devoluciones", "Devoluciones y derecho de retracto", "En ventas a distancia el cliente puede retractarse dentro de los 5 días hábiles siguientes a la entrega, salvo las excepciones de ley (por ejemplo, perecederos). Indica cómo solicitarlo y cómo se reembolsa."],
+  ["privacidad", "Privacidad y tratamiento de datos", "Responsable, finalidad del uso de los datos, derechos del titular y canal para ejercerlos."],
 ] as const;
 export default function ComercioWeb({
   config,
@@ -386,9 +387,10 @@ export default function ComercioWeb({
           tu empresa; la privacidad de clientes es distinta de los expedientes
           laborales.
         </p>
-        {politicas.map(([campo, titulo]) => (
+        {politicas.map(([campo, titulo, ayuda]) => (
           <label key={campo} className="block">
             {titulo}
+            <span className="mt-1 block text-sm text-gray-400">{ayuda}</span>
             <textarea
               rows={5}
               maxLength={12000}
@@ -401,6 +403,7 @@ export default function ComercioWeb({
                   cambios: "",
                   devoluciones: "",
                   privacidad: "",
+                  terminos: "",
                   ...config.politicas,
                   [campo]: e.target.value,
                 })
@@ -408,6 +411,79 @@ export default function ComercioWeb({
             />
           </label>
         ))}
+      </section>
+      <section className={card}>
+        <h2 className="text-xl font-bold">Datos legales del pie de página</h2>
+        <p className="text-gray-400">
+          Se muestran al final de cada página de la tienda junto con la
+          dirección y el teléfono de la empresa. Revisa que coincidan con el
+          RUT.
+        </p>
+        <label className="block">
+          Razón social
+          <input
+            maxLength={200}
+            disabled={busy}
+            className={input}
+            value={config.razonSocial || ""}
+            onChange={(e) => onChange("razonSocial", e.target.value)}
+          />
+        </label>
+        <label className="block">
+          Correo de atención al cliente
+          <input
+            type="email"
+            maxLength={200}
+            disabled={busy}
+            className={input}
+            value={config.correoPublico || ""}
+            onChange={(e) => onChange("correoPublico", e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            disabled={busy}
+            checked={!!config.mostrarNit}
+            onChange={(e) => onChange("mostrarNit", e.target.checked)}
+          />
+          Publicar el NIT registrado de la empresa
+        </label>
+        <p className="text-sm text-gray-400">
+          Si la empresa está registrada con la cédula de una persona natural,
+          decide si deseas publicarla.
+        </p>
+      </section>
+      <section className={card}>
+        <h2 className="text-xl font-bold">Medición de visitas</h2>
+        <p className="text-gray-400">
+          Opcional. Los visitantes ven un aviso y la medición solo se activa si
+          la aceptan. Menciona estas herramientas en tu política de privacidad.
+        </p>
+        <label className="block">
+          ID de medición de Google Analytics
+          <input
+            placeholder="G-XXXXXXXXXX"
+            maxLength={20}
+            disabled={busy}
+            className={input}
+            value={config.googleAnalyticsId || ""}
+            onChange={(e) =>
+              onChange("googleAnalyticsId", e.target.value.trim().toUpperCase())
+            }
+          />
+        </label>
+        <label className="block">
+          ID de Meta Pixel
+          <input
+            inputMode="numeric"
+            maxLength={20}
+            disabled={busy}
+            className={input}
+            value={config.metaPixelId || ""}
+            onChange={(e) => onChange("metaPixelId", e.target.value.trim())}
+          />
+        </label>
       </section>
     </>
   );

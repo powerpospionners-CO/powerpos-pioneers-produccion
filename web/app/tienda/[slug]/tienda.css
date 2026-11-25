@@ -2401,3 +2401,25 @@
 @media(max-width:760px) { .figma-store .product-page-grid { grid-template-columns:minmax(0,1fr); }.figma-store .product-page-photo img { height:320px; } }
 
 .figma-store .product-page > .text-link, .figma-store .home-story .text-link, .figma-store .home-products .text-link { color: var(--black); }
+
+/* Categorías enlazables, aviso 404, datos legales, consentimiento y seguimiento. */
+.figma-store a.category-card { display: block; text-decoration: none; }
+.figma-store .store-breadcrumb { display: flex; gap: 8px; margin-bottom: 18px; font-size: 13px; color: var(--muted, #6b625a); }
+.figma-store .store-breadcrumb a { color: inherit; }
+.figma-store .category-page { padding-bottom: 0; }
+.figma-store .store-not-found { max-width: 760px; min-height: 50vh; }
+.figma-store .store-not-found h1 { font-size: clamp(32px, 5vw, 56px); }
+.figma-store .store-not-found-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.figma-store .footer-legal { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 16px 0; border-top: 1px solid #333; color: #aaa29a; font-size: 12px; font-style: normal; }
+.figma-store .footer-legal a { color: inherit; }
+.figma-store .footer-legal:empty { display: none; }
+.figma-store .cookie-consent { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 90; max-width: 560px; margin: 0 auto; padding: 18px; border-radius: 14px; background: var(--black, #111); color: #f4efe9; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3); }
+.figma-store .cookie-consent p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+.figma-store .cookie-consent a { color: inherit; }
+.figma-store .cookie-consent div { display: flex; justify-content: flex-end; gap: 10px; }
+.figma-store .cookie-consent .button.text { color: #f4efe9; }
+.figma-store .web-order-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0; padding: 0; list-style: none; font-size: 11px; text-align: center; }
+.figma-store .web-order-steps li { padding-top: 10px; border-top: 4px solid var(--line, #e6ddd3); color: #8a8178; }
+.figma-store .web-order-steps li.hecho { border-color: var(--orange); color: inherit; }
+.figma-store .web-order-steps li.actual { font-weight: 700; }
+.figma-store .web-order-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }

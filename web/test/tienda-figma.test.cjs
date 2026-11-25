@@ -92,3 +92,28 @@ test('la ficha individual conserva precio y disponibilidad y muestra fotos adici
  const html=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos',productoId:800}));
  assert(html.includes('<h1>Martillo</h1>'));assert(html.includes('Ver foto 2'));assert(html.includes('Agotado'));assert(!html.includes('category-grid'));assert(html.includes('disabled=""'));
 });
+
+test('cada categoría tiene su propia página enlazada y responde 404 si no existe', () => {
+ const tienda={...datos,productos:[...datos.productos.map(p=>({...p,categoriaId:9})),{id:801,nombre:'Pintura',descripcion:'',precio:'1000',imagen:'',disponible:true,stockActual:3,categoriaId:10,categoria:{nombre:'Pinturas'}}]};
+ const listado=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos'}));
+ assert(listado.includes('href="/tienda/ferreteria/categorias/9"')); assert(listado.includes('href="/tienda/ferreteria/categorias/10"'));
+ const categoria=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos',categoriaId:10}));
+ assert(categoria.includes('<h1>Pinturas</h1>')); assert(categoria.includes('Pintura')); assert(!categoria.includes('Martillo')); assert(!categoria.includes('category-grid'));
+ assert.equal((categoria.match(/<h1>/g)||[]).length,1);
+ const inexistente=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos',categoriaId:99}));
+ assert(inexistente.includes('No encontramos esta página')); assert(!inexistente.includes('Martillo'));
+ const ruta=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',noEncontrada:true}));
+ assert(ruta.includes('No encontramos esta página')); assert(!ruta.includes('id="inicio"'));
+});
+test('términos encabezan las políticas y el pie muestra solo los datos legales autorizados', () => {
+ const config={...datos.config,politicas:{envios:'Entregas en 24 horas',cambios:'',devoluciones:'',privacidad:'Tus datos',terminos:'Condiciones generales'}};
+ const html=renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,telefono:'3106843264',legal:{razonSocial:'Ferretería Azul S.A.S.',nit:'',correo:'hola@azul.co'},config},slug:'ferreteria',seccion:'politicas'}));
+ assert(html.indexOf('Términos y condiciones')<html.indexOf('Envíos y entregas')); assert(!html.includes('<h2>Cambios</h2>'));
+ assert(html.includes('Ferretería Azul S.A.S.')); assert(html.includes('mailto:hola@azul.co')); assert(html.includes('tel:3106843264')); assert(!html.includes('NIT'));
+ const conNit=renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,legal:{razonSocial:'',nit:'900123456-7',correo:''},config},slug:'ferreteria'}));
+ assert(conNit.includes('NIT 900123456-7'));
+});
+test('la medición no se carga antes del consentimiento ni con identificadores inválidos', () => {
+ const html=renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,config:{...datos.config,googleAnalyticsId:'G-ABC1234',metaPixelId:'123456789012'}},slug:'ferreteria'}));
+ assert(!html.includes('googletagmanager')); assert(!html.includes('fbevents'));
+});

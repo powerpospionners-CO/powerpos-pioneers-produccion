@@ -10,6 +10,11 @@ import {
 } from "../../../../lib/seccionesTienda";
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string; seccion: string }> };
+// Un notFound() en metadatos salta al 404 raíz; la página lanza el 404 para conservar la marca.
+const noEncontrada: Metadata = {
+  title: { absolute: "Página no encontrada" },
+  robots: { index: false, follow: false },
+};
 function validar(valor: string): SeccionTienda {
   if (valor === "inicio" || !seccionesTienda.includes(valor as SeccionTienda))
     notFound();
@@ -17,7 +22,9 @@ function validar(valor: string): SeccionTienda {
 }
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, seccion: valor } = await params;
-  const seccion = validar(valor);
+  if (valor === "inicio" || !seccionesTienda.includes(valor as SeccionTienda))
+    return noEncontrada;
+  const seccion = valor as SeccionTienda;
   const meta = await metadataInicio({ params: Promise.resolve({ slug }) });
   const titulo = `${etiquetasSeccion[seccion]} · ${meta.applicationName}`;
   const url = urlSeccionTienda(await urlPublicaTienda(slug), seccion);

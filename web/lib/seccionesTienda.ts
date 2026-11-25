@@ -28,6 +28,13 @@ export function rutasTienda(
     politicas: `${base}/politicas`,
   };
 }
+// Las categorías cuelgan de la misma base que productos: /tienda/<slug>/categorias/<id>.
+export function rutaCategoria(rutas: Record<SeccionTienda, string>, id: number) {
+  return `${rutas.productos.replace(/\/productos$/, "")}/categorias/${id}`;
+}
+export function urlCategoriaTienda(base: string, id: number) {
+  return urlSeccionTienda(base, "productos").replace(/\/productos$/, `/categorias/${id}`);
+}
 export function urlSeccionTienda(base: string, seccion: SeccionTienda) {
   if (seccion === "inicio") return base;
   const url = new URL(base);
