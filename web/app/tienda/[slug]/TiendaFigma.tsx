@@ -11,6 +11,7 @@ import {
 } from "react";
 import Link from "next/link";
 import HorarioTienda from "../../../components/HorarioTienda";
+import MapaEmpresa from "../../../components/MapaEmpresa";
 import { rutasTienda, type SeccionTienda } from "../../../lib/seccionesTienda";
 import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
@@ -1040,6 +1041,7 @@ function App({
                   )}
                 </div>
               )}
+              <MapaEmpresa nombre={tienda.nombre} direccion={tienda.direccion} />
               <HorarioTienda horarios={t.horarios} anterior={t.horario} />
               {(t.envios || t.pagos || t.ciudadesEntrega?.length) && <div className="store-info-grid">
                 {[["Entregas y domicilios",t.envios],["Medios y condiciones de pago",t.pagos],["Ciudades de entrega",t.ciudadesEntrega?.join(", ")]].map(([titulo,contenido])=>contenido?.trim()?<article key={titulo}><h2>{titulo}</h2><p>{contenido}</p></article>:null)}

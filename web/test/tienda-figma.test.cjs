@@ -71,3 +71,12 @@ test('galería en Nosotros y dudas y entregas en Contacto sin mezclar páginas',
  assert(contacto.includes('<details><summary>¿Cuánto tarda el envío?</summary>')); assert(contacto.includes('Entregamos en nuestra ciudad')); assert(contacto.includes('Efectivo y tarjeta'));
  assert(!nosotros.includes('¿Cuánto tarda el envío?')); assert(!inicio.includes('https://example.com/local.png'));
 });
+
+test('cada mapa usa la dirección propia y no aparece cuando falta la dirección', () => {
+ const render = (direccion,seccion='contacto')=>renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,direccion},slug:'ferreteria',seccion}));
+ const direccion='Carrera 16 # 20A - 11, Dosquebradas, Risaralda';
+ const html=render(direccion); const query=new URLSearchParams({q:direccion,output:'embed',hl:'es'}).toString().replaceAll('&','&amp;');
+ assert(html.includes('https://www.google.com/maps?'+query)); assert(html.includes('Cómo llegar')); assert(html.includes('destination=Carrera+16+%23+20A'));
+ assert(!render('').includes('<iframe')); assert(!render(direccion,'inicio').includes('<iframe'));
+ assert(!render('Bogotá').includes('Dosquebradas'));
+});
