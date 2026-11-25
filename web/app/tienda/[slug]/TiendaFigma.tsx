@@ -12,6 +12,9 @@ import {
 import Link from "next/link";
 import HorarioTienda from "../../../components/HorarioTienda";
 import MapaEmpresa from "../../../components/MapaEmpresa";
+import ProductoWeb from "../../../components/ProductoWeb";
+import InicioComercial from "../../../components/InicioComercial";
+import { redesTienda } from "../../../lib/comercioTienda";
 import { rutasTienda, type SeccionTienda } from "../../../lib/seccionesTienda";
 import { responderTienda } from "../../../lib/atencionTienda";
 import { temaTienda } from "../../../lib/temaTienda";
@@ -215,12 +218,14 @@ function App({
   tienda,
   slug,
   seccion = "inicio",
+  productoId,
   rutas = rutasTienda(slug),
   navegar,
 }: {
   tienda: TiendaPublica;
   slug: string;
   seccion?: SeccionTienda;
+  productoId?: number;
   rutas?: Record<SeccionTienda, string>;
   navegar?: (href: string) => void;
 }) {
@@ -259,8 +264,20 @@ function App({
         pos: "center",
         tone: ["orange", "red", "green", "purple", "ochre"][i % 5],
         image:
-          t.imagenesCategorias?.find(c => c.categoriaId === tienda.productos.find(p => p.categoria.nombre === name)?.categoriaId)?.imagen ||
-          products.find((p) => p.category === name && p.image && p.image !== tienda.logo && p.image !== t.portada)?.image || "",
+          t.imagenesCategorias?.find(
+            (c) =>
+              c.categoriaId ===
+              tienda.productos.find((p) => p.categoria.nombre === name)
+                ?.categoriaId,
+          )?.imagen ||
+          products.find(
+            (p) =>
+              p.category === name &&
+              p.image &&
+              p.image !== tienda.logo &&
+              p.image !== t.portada,
+          )?.image ||
+          "",
       })),
     [products, t.imagenesCategorias, t.portada, tienda.logo, tienda.productos],
   );
@@ -270,11 +287,8 @@ function App({
   const whatsappUrl = /^\d{10,15}$/.test(whatsappNumero)
     ? "https://wa.me/" + whatsappNumero
     : "";
-  const instagram = t.instagram
-    ? /^https:\/\//.test(t.instagram)
-      ? t.instagram
-      : "https://instagram.com/" + t.instagram.replace(/^@/, "")
-    : "";
+  const instagram =
+    redesTienda(t).find((r) => r.nombre === "Instagram")?.url || "";
   const titulo = t.titulo || tienda.nombre;
   const palabrasTitulo = titulo.trim().split(/\s+/);
   const acento = palabrasTitulo.pop();
@@ -539,7 +553,12 @@ function App({
       <div ref={panelRef} className="figma-store app-shell" style={style}>
         <div className="announcement">
           {tienda.nombre} <span />{" "}
-          <HorarioTienda horarios={t.horarios} anterior={t.horario} compacto href={`${rutas.contacto}#horarios`} />
+          <HorarioTienda
+            horarios={t.horarios}
+            anterior={t.horario}
+            compacto
+            href={`${rutas.contacto}#horarios`}
+          />
         </div>
         <header className="site-header">
           <div className="nav-wrap">
@@ -705,7 +724,36 @@ function App({
             </section>
           )}
 
-          {seccion === "productos" && (
+          {seccion === "inicio" && (
+            <InicioComercial
+              tienda={tienda}
+              productosHref={rutas.productos}
+              nosotrosHref={rutas.nosotros}
+            />
+          )}
+          {seccion === "productos" &&
+            productoId &&
+            (tienda.productos.find((p) => p.id === productoId) ? (
+              <ProductoWeb
+                key={productoId}
+                producto={tienda.productos.find((p) => p.id === productoId)!}
+                imagenes={
+                  t.fichasProductos?.find((f) => f.productoId === productoId)
+                    ?.imagenes || []
+                }
+                volver={rutas.productos}
+                onAgregar={() => {
+                  const p = products.find((p) => p.id === productoId);
+                  if (p) addToCart(p, 1);
+                }}
+              />
+            ) : (
+              <section className="section">
+                <h1>Producto no disponible</h1>
+                <Link href={rutas.productos}>Volver al catálogo</Link>
+              </section>
+            ))}
+          {seccion === "productos" && !productoId && (
             <>
               <section className="section categories-section">
                 <div className="section-heading">
@@ -838,16 +886,17 @@ function App({
                       const quantity = quantities[product.id] || 1;
                       return (
                         <article className="product-card" key={product.id}>
-                          <button
+                          <Link
+                            prefetch={false}
+                            href={`${rutas.productos}/${product.id}`}
                             className="image-button"
-                            onClick={() => setSelected(product)}
                             aria-label={`Ver detalle de ${product.name}`}
                           >
                             <ProductImage product={product} />
                             <span className="view-label">
                               Ver detalle <Icon name="arrow" size={16} />
                             </span>
-                          </button>
+                          </Link>
                           <div className="product-info">
                             <div className="product-meta">
                               <span>{product.category}</span>
@@ -855,12 +904,13 @@ function App({
                                 {product.disponible ? "" : "Agotado"}
                               </small>
                             </div>
-                            <button
+                            <Link
+                              prefetch={false}
+                              href={`${rutas.productos}/${product.id}`}
                               className="product-name"
-                              onClick={() => setSelected(product)}
                             >
                               {product.name}
-                            </button>
+                            </Link>
                             <p>{product.description}</p>
                             <p>
                               Existencias:{" "}
@@ -917,59 +967,92 @@ function App({
           )}
 
           {seccion === "nosotros" && (
-            <><section className="about-section" id="nosotros">
-              <div className="about-image">
-                <div className="about-stamp">
-                  {tienda.nombre}
-                  <br />
-                  <strong>CO</strong>
-                </div>
-              </div>
-              <div className="about-copy">
-                <div className="eyebrow light">
-                  <span /> Sobre {tienda.nombre}
-                </div>
-                <h1>
-                  Conoce nuestra
-                  <br />
-                  <em>historia.</em>
-                </h1>
-                <p>
-                  {t.sobreNosotros ||
-                    t.descripcion ||
-                    `En ${tienda.nombre} estamos para ayudarte a encontrar tus favoritos.`}
-                </p>
-                <p>
-                  Explora nuestro catálogo y consulta directamente con el
-                  negocio para confirmar disponibilidad, presentación y opciones
-                  de entrega.
-                </p>
-                {(t.mision?.trim() || t.vision?.trim()) && (
-                  <div className="about-purpose">
-                    {[["Nuestra misión", t.mision], ["Nuestra visión", t.vision]].map(([titulo, contenido]) => contenido?.trim() ? (
-                      <article key={titulo}>
-                        <h2>{titulo}</h2>
-                        <p>{contenido}</p>
-                      </article>
-                    ) : null)}
+            <>
+              <section className="about-section" id="nosotros">
+                <div className="about-image">
+                  <div className="about-stamp">
+                    {tienda.nombre}
+                    <br />
+                    <strong>CO</strong>
                   </div>
-                )}
-                <Link
-                  prefetch={false}
-                  href={rutas.contacto}
-                  className="text-link"
+                </div>
+                <div className="about-copy">
+                  <div className="eyebrow light">
+                    <span /> Sobre {tienda.nombre}
+                  </div>
+                  <h1>
+                    Conoce nuestra
+                    <br />
+                    <em>historia.</em>
+                  </h1>
+                  <p>
+                    {t.sobreNosotros ||
+                      t.descripcion ||
+                      `En ${tienda.nombre} estamos para ayudarte a encontrar tus favoritos.`}
+                  </p>
+                  <p>
+                    Explora nuestro catálogo y consulta directamente con el
+                    negocio para confirmar disponibilidad, presentación y
+                    opciones de entrega.
+                  </p>
+                  {(t.mision?.trim() || t.vision?.trim()) && (
+                    <div className="about-purpose">
+                      {[
+                        ["Nuestra misión", t.mision],
+                        ["Nuestra visión", t.vision],
+                      ].map(([titulo, contenido]) =>
+                        contenido?.trim() ? (
+                          <article key={titulo}>
+                            <h2>{titulo}</h2>
+                            <p>{contenido}</p>
+                          </article>
+                        ) : null,
+                      )}
+                    </div>
+                  )}
+                  <Link
+                    prefetch={false}
+                    href={rutas.contacto}
+                    className="text-link"
+                  >
+                    Conoce cómo contactarnos <Icon name="arrow" />
+                  </Link>
+                </div>
+              </section>
+              {!!t.galeria?.length && (
+                <section
+                  className="section store-gallery"
+                  aria-labelledby="titulo-galeria"
                 >
-                  Conoce cómo contactarnos <Icon name="arrow" />
-                </Link>
-              </div>
-            </section>
-            {!!t.galeria?.length && <section className="section store-gallery" aria-labelledby="titulo-galeria">
-              <div className="section-heading"><div><div className="eyebrow"><span /> Nuestro negocio</div><h2 id="titulo-galeria">Conoce nuestro espacio <em>y nuestro equipo</em></h2></div></div>
-              <div className="store-gallery-grid">{t.galeria.map((foto,i)=><figure key={foto.imagen+i}>
-                <img src={foto.imagen} alt={foto.descripcion || `${tienda.nombre}: foto ${i+1}`} loading="lazy" />
-                {foto.descripcion && <figcaption>{foto.descripcion}</figcaption>}
-              </figure>)}</div>
-            </section>}
+                  <div className="section-heading">
+                    <div>
+                      <div className="eyebrow">
+                        <span /> Nuestro negocio
+                      </div>
+                      <h2 id="titulo-galeria">
+                        Conoce nuestro espacio <em>y nuestro equipo</em>
+                      </h2>
+                    </div>
+                  </div>
+                  <div className="store-gallery-grid">
+                    {t.galeria.map((foto, i) => (
+                      <figure key={foto.imagen + i}>
+                        <img
+                          src={foto.imagen}
+                          alt={
+                            foto.descripcion ||
+                            `${tienda.nombre}: foto ${i + 1}`
+                          }
+                          loading="lazy"
+                        />
+                        {foto.descripcion && (
+                          <figcaption>{foto.descripcion}</figcaption>
+                        )}
+                      </figure>
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
 
@@ -1041,15 +1124,67 @@ function App({
                   )}
                 </div>
               )}
-              <MapaEmpresa nombre={tienda.nombre} direccion={tienda.direccion} />
+              <MapaEmpresa
+                nombre={tienda.nombre}
+                direccion={tienda.direccion}
+              />
               <HorarioTienda horarios={t.horarios} anterior={t.horario} />
-              {(t.envios || t.pagos || t.ciudadesEntrega?.length) && <div className="store-info-grid">
-                {[["Entregas y domicilios",t.envios],["Medios y condiciones de pago",t.pagos],["Ciudades de entrega",t.ciudadesEntrega?.join(", ")]].map(([titulo,contenido])=>contenido?.trim()?<article key={titulo}><h2>{titulo}</h2><p>{contenido}</p></article>:null)}
-              </div>}
-              {!!t.preguntasFrecuentes?.length && <div className="store-faq" aria-labelledby="titulo-preguntas">
-                <h2 id="titulo-preguntas">Preguntas frecuentes</h2>
-                {t.preguntasFrecuentes.map((p,i)=><details key={i}><summary>{p.pregunta}</summary><p>{p.respuesta}</p></details>)}
-              </div>}
+              {(t.envios || t.pagos || t.ciudadesEntrega?.length) && (
+                <div className="store-info-grid">
+                  {[
+                    ["Entregas y domicilios", t.envios],
+                    ["Medios y condiciones de pago", t.pagos],
+                    ["Ciudades de entrega", t.ciudadesEntrega?.join(", ")],
+                  ].map(([titulo, contenido]) =>
+                    contenido?.trim() ? (
+                      <article key={titulo}>
+                        <h2>{titulo}</h2>
+                        <p>{contenido}</p>
+                      </article>
+                    ) : null,
+                  )}
+                </div>
+              )}
+              {!!t.preguntasFrecuentes?.length && (
+                <div className="store-faq" aria-labelledby="titulo-preguntas">
+                  <h2 id="titulo-preguntas">Preguntas frecuentes</h2>
+                  {t.preguntasFrecuentes.map((p, i) => (
+                    <details key={i}>
+                      <summary>{p.pregunta}</summary>
+                      <p>{p.respuesta}</p>
+                    </details>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+          {seccion === "politicas" && (
+            <section className="section store-policies">
+              <h1>Políticas de compra</h1>
+              <p>Condiciones publicadas por {tienda.nombre}.</p>
+              {Object.entries(t.politicas || {})
+                .filter(([, texto]) => texto.trim())
+                .map(([campo, texto]) => (
+                  <article key={campo} id={`politica-${campo}`}>
+                    <h2>
+                      {(
+                        {
+                          envios: "Envíos y entregas",
+                          cambios: "Cambios",
+                          devoluciones: "Devoluciones",
+                          privacidad: "Privacidad y tratamiento de datos",
+                        } as Record<string, string>
+                      )[campo] || campo}
+                    </h2>
+                    <p className="preserve-lines">{texto}</p>
+                  </article>
+                ))}
+              {!Object.values(t.politicas || {}).some((v) => v.trim()) && (
+                <p>
+                  Consulta con la empresa las condiciones aplicables a tu
+                  compra.
+                </p>
+              )}
             </section>
           )}
         </main>
@@ -1074,6 +1209,38 @@ function App({
             </nav>
             <nav>
               <strong>Conversemos</strong>
+              {redesTienda(t)
+                .filter((r) => r.nombre !== "Instagram")
+                .map((r) => (
+                  <a
+                    key={r.nombre}
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {r.nombre}
+                  </a>
+                ))}
+              {Object.entries(t.politicas || {})
+                .filter(([, v]) => v.trim())
+                .map(([campo]) => (
+                  <Link
+                    key={campo}
+                    prefetch={false}
+                    href={`${rutas.politicas}#politica-${campo}`}
+                  >
+                    {
+                      (
+                        {
+                          envios: "Envíos",
+                          cambios: "Cambios",
+                          devoluciones: "Devoluciones",
+                          privacidad: "Privacidad",
+                        } as Record<string, string>
+                      )[campo]
+                    }
+                  </Link>
+                ))}
               <a href={whatsappUrl || rutas.contacto}>WhatsApp</a>
               {instagram && (
                 <a href={instagram} target="_blank" rel="noreferrer">

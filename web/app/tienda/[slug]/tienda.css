@@ -2368,3 +2368,36 @@
 .figma-store .store-map-footer p { margin: 0; color: var(--muted); font-size: 12px; }
 .figma-store .store-map-footer a { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 @media(max-width:760px) { .figma-store .store-map-heading { flex-direction: column; align-items: stretch; } .figma-store .store-map-heading .button { justify-content: center; } .figma-store .store-map-frame { height: 320px; } }
+
+.figma-store .preserve-lines { white-space: pre-line; overflow-wrap: anywhere; line-height: 1.8; }
+.figma-store .commercial-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:24px; }
+.figma-store .home-story { max-width:1100px; }
+.figma-store .home-story p { font-size:18px; max-width:800px; line-height:1.8; }
+.figma-store .home-story h2,.figma-store .home-promotions h2,.figma-store .home-products h2,.figma-store .home-testimonials h2,.figma-store .home-social h2 { font-size:clamp(28px,4vw,48px);line-height:1.15; margin:18px 0 28px;letter-spacing:-.035em; }
+.figma-store .home-promotions article { padding:28px; background:var(--cream); border-radius:24px; border:1px solid var(--line); min-width:0; }
+.figma-store .home-promotions h3 { font-size:26px; margin:16px 0;overflow-wrap:anywhere; }
+.figma-store .home-product-card { display:block; border:1px solid var(--line); border-radius:20px; overflow:hidden; padding:20px; background:white;min-width:0; }
+.figma-store .home-product-card img,.figma-store .home-product-placeholder { width:100%;height:240px;object-fit:contain;background:var(--cream);border-radius:12px;margin-bottom:18px; }
+.figma-store .home-product-placeholder { display:grid;place-items:center; }
+.figma-store .home-product-card h3 { font-size:20px;overflow-wrap:anywhere; }
+.figma-store .home-testimonials figure { margin:0;padding:28px;border-radius:20px;background:white;border:1px solid var(--line);min-width:0; }
+.figma-store .home-testimonials blockquote { margin:0 0 20px;font-size:18px;line-height:1.8;white-space:pre-line;overflow-wrap:anywhere; }
+.figma-store .home-testimonials figcaption { font-weight:700; }
+.figma-store .social-links { display:flex;flex-wrap:wrap;gap:12px; }
+.figma-store .product-page-grid { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(24px,5vw,70px);margin-top:32px; }
+.figma-store .product-page-photo { background:var(--cream);border-radius:24px;min-height:300px;display:grid;place-items:center; }
+.figma-store .product-page-photo img { width:100%;height:480px;object-fit:contain; }
+.figma-store .product-thumbs { display:flex;flex-wrap:wrap;gap:12px;margin-top:16px; }
+.figma-store .product-thumbs button { padding:4px;border:2px solid transparent;border-radius:12px;background:white; }
+.figma-store .product-thumbs button[aria-pressed=true] { border-color:var(--orange); }
+.figma-store .product-thumbs img { width:72px;height:72px;object-fit:contain; }
+.figma-store .product-page h1 { font-size:clamp(30px,4vw,52px);line-height:1.15;overflow-wrap:anywhere; }
+.figma-store .product-page-price { display:block;font-size:30px;margin:24px 0; }
+.figma-store .product-page dl { display:grid;grid-template-columns:auto 1fr;gap:12px 24px;margin:28px 0; }
+.figma-store .product-page dt { font-weight:700; }.figma-store .product-page dd { margin:0;overflow-wrap:anywhere; }
+.figma-store .product-page .button:disabled { opacity:.5;cursor:not-allowed; }
+.figma-store .store-policies { max-width:1100px; }.figma-store .store-policies h1 { font-size:clamp(32px,5vw,56px); }
+.figma-store .store-policies article { padding:28px 0;border-bottom:1px solid var(--line);scroll-margin-top:150px; }.figma-store .store-policies h2 { font-size:28px; }
+@media(max-width:760px) { .figma-store .product-page-grid { grid-template-columns:minmax(0,1fr); }.figma-store .product-page-photo img { height:320px; } }
+
+.figma-store .product-page > .text-link, .figma-store .home-story .text-link, .figma-store .home-products .text-link { color: var(--black); }

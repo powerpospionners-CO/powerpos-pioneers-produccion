@@ -32,3 +32,5 @@ test('las páginas públicas separadas no se confunden con Productos del panel',
  const panel = proxy(new NextRequest('https://enchilamarketpereira.powerpospioneers.com/productos', { headers: { host: 'enchilamarketpereira.powerpospioneers.com' } }));
  assert.equal(panel.headers.get('x-middleware-next'), '1'); assert.equal(panel.headers.get('x-robots-tag'), 'noindex, nofollow');
 });
+
+test('reescribe fichas y políticas públicas sin confundir el panel',()=>{for(const [ruta,destino] of [['/tienda/productos/800','/tienda/empresa/productos/800'],['/tienda/politicas','/tienda/empresa/politicas']]){const r=proxy(new NextRequest('https://empresa.powerpospioneers.com'+ruta,{headers:{host:'empresa.powerpospioneers.com'}}));assert.equal(r.headers.get('x-middleware-rewrite'),'https://empresa.powerpospioneers.com'+destino);}});

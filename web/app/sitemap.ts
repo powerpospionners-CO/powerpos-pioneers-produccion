@@ -16,11 +16,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
     if (r.status === 404) return [];
     if (!r.ok) throw new Error("No se pudo consultar el mapa de la tienda");
-    return seccionesTienda.map((seccion) => ({
-      url: urlSeccionTienda(urlTienda(slug), seccion),
-      changeFrequency: "daily" as const,
-      priority: seccion === "inicio" ? 1 : 0.8,
-    }));
+    const tienda = await r.json();
+    const productos: { id: number }[] = tienda.productos || [];
+    return [
+      ...seccionesTienda.map((seccion) => ({
+        url: urlSeccionTienda(urlTienda(slug), seccion),
+        changeFrequency: "daily" as const,
+        priority: seccion === "inicio" ? 1 : 0.8,
+      })),
+      ...productos.map((p) => ({
+        url: urlSeccionTienda(urlTienda(slug), "productos") + "/" + p.id,
+        changeFrequency: "daily" as const,
+        priority: 0.7,
+      })),
+    ];
   }
   const r = await fetch(`${base}/tiendas/mapa`, {
     cache: "no-store",

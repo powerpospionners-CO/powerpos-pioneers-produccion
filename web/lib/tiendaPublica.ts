@@ -23,6 +23,23 @@ export type TiendaPublica = {
     titulo: string;
     descripcion: string;
     sobreNosotros: string;
+    destacadosIds?: number[];
+    novedadesIds?: number[];
+    promociones?: {
+      titulo: string;
+      detalle: string;
+      desde: string;
+      hasta: string;
+      productoId: number | null;
+    }[];
+    testimonios?: { nombre: string; texto: string; autorizado: boolean }[];
+    politicas?: {
+      envios: string;
+      cambios: string;
+      devoluciones: string;
+      privacidad: string;
+    };
+    fichasProductos?: { productoId: number; imagenes: string[] }[];
     mision?: string;
     vision?: string;
     galeria?: { imagen: string; descripcion: string }[];
@@ -34,7 +51,9 @@ export type TiendaPublica = {
     portada: string;
     whatsapp: string;
     horario: string;
-    horarios?: { dia: number; abierto: boolean; apertura: string; cierre: string }[] | null;
+    horarios?:
+      | { dia: number; abierto: boolean; apertura: string; cierre: string }[]
+      | null;
     ciudadesEntrega?: string[];
     pagos?: string;
     envios?: string;
