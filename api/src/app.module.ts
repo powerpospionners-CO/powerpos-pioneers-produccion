@@ -39,11 +39,13 @@ import { AccesoBarrasModule } from './acceso-barras/acceso-barras.module';
 import { AccesoGastosModule } from './acceso-gastos/acceso-gastos.module';
 import { PersonalModule } from './personal/personal.module';
 import { PropinasModule } from './propinas/propinas.module';
+import { MesasModule } from './mesas/mesas.module';
 
 @Module({
   imports: [
     PersonalModule,
     PropinasModule,
+    MesasModule,
     AccesoBarrasModule,
     AccesoGastosModule,
     EventosModule,

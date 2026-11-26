@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { esPerfilMesero } from '@/lib/mesero';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
@@ -52,7 +53,7 @@ export default function LoginPage() {
     // acredita que exista un dominio, DNS ni certificado para esa empresa.
     setAuth(data.access_token, usuario);
     // Si la empresa exige la verificación en dos pasos y falta activarla, primero va a Seguridad.
-    router.push(usuario.dosPasosPendiente ? '/seguridad' : rutaPorRol(usuario.rol));
+    router.push(usuario.dosPasosPendiente ? '/seguridad' : esPerfilMesero(usuario) ? '/mesas' : rutaPorRol(usuario.rol));
   };
 
   const handleLogin = async (e: React.FormEvent) => {

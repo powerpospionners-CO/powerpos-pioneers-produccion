@@ -25,6 +25,7 @@ export const RUTAS_MODULO: Array<[string, string]> = [
   ['/pedidos-distribuidor', 'distribuidores'],
   ['/catalogo', 'catalogo'],
   ['/consumo-empleados', 'pos'],
+  ['/mesas', 'pos'],
 ];
 
 export function moduloRuta(ruta: string) {
@@ -48,4 +49,17 @@ export function permisoIndividual(
     return false;
   const valor = permiso as Record<string, unknown>;
   return valor.ver === true && (!escritura || valor.editar === true);
+}
+
+// Perfil mesero: un CAJERO que toma pedidos en las mesas pero no maneja la caja ni cobra.
+export function esMesero(permisos: unknown) {
+  return !!permisos && typeof permisos === 'object' && !Array.isArray(permisos) && (permisos as Record<string, unknown>).perfil === 'MESERO';
+}
+
+const PREFIJOS_SIN_MESERO = ['/caja', '/tienda-admin', '/consumo-empleados', '/pedidos-distribuidor', '/propinas/reporte'];
+export function rutaBloqueadaMesero(ruta: string, metodo: string) {
+  const escritura = !['GET', 'HEAD', 'OPTIONS'].includes(metodo);
+  if (PREFIJOS_SIN_MESERO.some((p) => ruta === p || ruta.startsWith(p + '/'))) return true;
+  if (escritura && (ruta === '/pedidos' || ruta.startsWith('/pedidos/'))) return true;
+  return /^\/mesas\/cuentas\/[^/]+\/cobrar$/.test(ruta);
 }

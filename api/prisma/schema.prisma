@@ -76,6 +76,23 @@ model PropinaRegistro {
   @@index([empresaId, tipo, creadoEn])
   @@map("propina_registros")
 }
+model MesaRegistro {
+  id String @id @db.VarChar(36)
+  empresaId Int
+  sucursalId Int
+  tipo String @db.VarChar(16)
+  clave String @db.VarChar(64)
+  estado String @db.VarChar(16)
+  mesa Int?
+  datos Json
+  version Int @default(1)
+  usuarioId Int
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  @@unique([empresaId, sucursalId, tipo, clave])
+  @@index([empresaId, sucursalId, tipo, estado])
+  @@map("mesa_registros")
+}
 model SeguridadRegistro {
   id String @id @db.VarChar(36)
   usuarioId Int

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
 import { suscripcionSuspendida } from './fechas';
-import { moduloRuta, permisoIndividual } from '../auth/permisos';
+import { esMesero, moduloRuta, permisoIndividual, rutaBloqueadaMesero } from '../auth/permisos';
 
 const MODULOS_POR_PLAN: Record<string, string[]> = {
   BASICO: ['pos', 'productos'],
@@ -48,6 +48,10 @@ export class PlanAccessInterceptor implements NestInterceptor {
 
     const ruta = String(request.originalUrl || request.url || '').split('?')[0];
     if (ruta.startsWith('/suscripciones')) return next.handle();
+
+    if (usuario.rol === 'CAJERO' && esMesero(usuario.permisosUsuario) && rutaBloqueadaMesero(ruta, request.method || 'GET')) {
+      return throwError(() => new ForbiddenException({ error: 'USER_PERMISSION_DENIED', message: 'El perfil de mesero no maneja la caja ni cobra.' }));
+    }
 
     if (
       !usuario.distribuidoresHabilitado &&
