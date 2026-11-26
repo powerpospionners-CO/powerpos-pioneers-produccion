@@ -45,7 +45,7 @@ export default function EquipoSeguridad({ politica, dosPasosPropia, onCambio }: 
         await onCambio();
       } else {
         await api.post(`/auth/seguridad/equipo/${pendiente.id}/restablecer-2fa`, confirmacion);
-        setMensaje(`Restablecimos la verificación de ${pendiente.nombre}. Cerramos sus sesiones y le avisamos por correo.`);
+        setMensaje(`Restablecimos la verificación de ${pendiente.nombre}. Cerramos sus sesiones. El aviso se envía a su correo personal si está configurado.`);
         await cargar();
       }
       setPendiente(null);

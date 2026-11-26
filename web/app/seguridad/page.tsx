@@ -9,6 +9,7 @@ import { useNotificar } from "@/components/Notificaciones";
 import EquipoSeguridad from "./EquipoSeguridad";
 
 type Resumen = {
+  correoPersonal?: string;
   dosPasos: boolean;
   dosPasosRecomendado: boolean;
   dosPasosObligatorio?: boolean;
@@ -24,6 +25,7 @@ export default function Seguridad() {
   const { confirmar } = useNotificar();
   const [resumen, setResumen] = useState<Resumen | null>(null),
     [configurando, setConfigurando] = useState<{ secreto: string; qr: string } | null>(null),
+    [contacto, setContacto] = useState({ correo: "", password: "", codigo: "" }),
     [codigo, setCodigo] = useState(""),
     [recuperacion, setRecuperacion] = useState<string[] | null>(null),
     [desactivar, setDesactivar] = useState({ password: "", codigo: "" }),
@@ -32,7 +34,9 @@ export default function Seguridad() {
     [error, setError] = useState("");
   const cargar = useCallback(async () => {
     try {
-      setResumen((await api.get("/auth/seguridad")).data);
+      const { data } = await api.get("/auth/seguridad");
+      setResumen(data);
+      setContacto((c) => ({ ...c, correo: data.correoPersonal || "" }));
     } catch (e: any) {
       setError(e.response?.data?.message || "No se pudo cargar la seguridad de la cuenta");
     }
@@ -72,6 +76,24 @@ export default function Seguridad() {
           {error && <p role="alert" className="rounded-xl bg-red-950 p-4">{error}</p>}
           {resumen && (
             <>
+              <section className={card}>
+                <h2 className="text-xl font-bold">Correo personal para avisos de seguridad</h2>
+                <p className="text-gray-400">Es distinto del correo para iniciar sesión. Aquí recibirás los avisos de nuevos accesos y restablecimiento de verificación en dos pasos. Si no lo configuras, no enviaremos esos avisos al correo de acceso.</p>
+                <form className="space-y-3" onSubmit={(e) => {
+                  e.preventDefault();
+                  void accion(async () => {
+                    await api.post("/auth/seguridad/correo-personal", contacto);
+                    setContacto((c) => ({ ...c, password: "", codigo: "" }));
+                    await cargar();
+                    setMensaje("Correo personal guardado para tus avisos de seguridad.");
+                  });
+                }}>
+                  <label className="block">Correo personal<input type="email" autoComplete="email" maxLength={254} className={input} disabled={busy} value={contacto.correo} onChange={(e) => setContacto({ ...contacto, correo: e.target.value })} /></label>
+                  <label className="block">Tu contraseña para confirmar<input type="password" required autoComplete="current-password" className={input} disabled={busy} value={contacto.password} onChange={(e) => setContacto({ ...contacto, password: e.target.value })} /></label>
+                  {resumen.dosPasos && <label className="block">Código de tu app<input required autoComplete="one-time-code" maxLength={11} className={input} disabled={busy} value={contacto.codigo} onChange={(e) => setContacto({ ...contacto, codigo: e.target.value })} /></label>}
+                  <button type="submit" className={primario} disabled={busy}>Guardar correo personal</button>
+                </form>
+              </section>
               <section className={card}>
                 <h2 className="text-xl font-bold">Verificación en dos pasos</h2>
                 {resumen.dosPasos ? (

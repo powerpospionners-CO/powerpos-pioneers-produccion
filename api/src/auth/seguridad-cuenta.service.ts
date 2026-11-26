@@ -10,6 +10,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { validarPreferencias } from '../notificaciones/preferencias-alertas';
 import { motorBase } from '../prisma/mysql-adapter';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import {
@@ -77,6 +78,37 @@ export class SeguridadCuentaService {
       if (e?.code === 'P2021') return null;
       throw e;
     }
+  }
+
+  // El identificador de acceso nunca es un destinatario implícito.
+  async correoPersonal(db: any, usuario: { id: number; empresaId?: number | null }) {
+    const r = await this.registro(db, usuario.id, 'CONTACTO', 'correoPersonal');
+    if (r) return abrirSecreto(r.datos, `${usuario.id}:correoPersonal`);
+    // Correos personales ya registrados por la empresa para alertas operativas.
+    if (usuario.empresaId && db.auditoria) {
+      const evento = await db.auditoria.findFirst({
+        where: { empresaId: usuario.empresaId, entidad: 'UsuarioAlertas', accion: 'CONFIGURAR', entidadId: usuario.id },
+        orderBy: { id: 'desc' }, select: { detalle: true },
+      });
+      if (evento) {
+        try { return validarPreferencias(evento.detalle).email; } catch { return ''; }
+      }
+    }
+    return '';
+  }
+
+  async guardarCorreoPersonal(u: Actor, correo: unknown, password: unknown, codigo: unknown) {
+    const email = validarPreferencias({ email: correo, stock: false, caja: false }).email;
+    const db = await this.base(u);
+    await this.confirmarAdministrador(db, u, password, codigo);
+    await this.preparar(db);
+    const datos = cifrarSecreto(email, `${u.id}:correoPersonal`);
+    await db.seguridadRegistro.upsert({
+      where: { usuarioId_tipo_clave: { usuarioId: u.id, tipo: 'CONTACTO', clave: 'correoPersonal' } },
+      create: { id: randomUUID(), usuarioId: u.id, tipo: 'CONTACTO', clave: 'correoPersonal', estado: 'ACTIVO', datos },
+      update: { datos },
+    });
+    return { correoPersonal: email };
   }
 
   async dosPasosActivo(db: any, usuarioId: number) {
@@ -215,13 +247,14 @@ export class SeguridadCuentaService {
     if (!restablecida) throw new BadRequestException('Ese usuario no tiene activa la verificación en dos pasos');
     this.olvidarPendientes();
     this.logger.log(`Empresa ${u.empresaId}: el usuario ${u.id} restableció la verificación en dos pasos del usuario ${id}`);
-    if (this.notificaciones)
-      void this.notificaciones.enviarAvisoDosPasos(objetivo.email, objetivo.nombre, u.nombre || 'el administrador').catch(() => undefined);
+    const correoPersonal = await this.correoPersonal(db, { id: objetivo.id, empresaId: u.empresaId }).catch(() => '');
+    if (this.notificaciones && correoPersonal)
+      void this.notificaciones.enviarAvisoDosPasos(correoPersonal, objetivo.nombre, u.nombre || 'el administrador').catch(() => undefined);
     return { ok: true };
   }
 
   // ---------- Sesiones ----------
-  async crearSesion(db: any, usuario: { id: number; email: string; nombre: string }, meta: Meta) {
+  async crearSesion(db: any, usuario: { id: number; email: string; nombre: string; empresaId?: number | null }, meta: Meta) {
     await this.preparar(db);
     const sid = randomUUID();
     const agente = String(meta.agente || '').slice(0, 300);
@@ -237,10 +270,12 @@ export class SeguridadCuentaService {
     });
     // Limpieza: el historial de sesiones se conserva 90 días para reconocer dispositivos.
     await db.seguridadRegistro.deleteMany({ where: { usuarioId: usuario.id, tipo: 'SESION', creadoEn: { lt: desde } } }).catch(() => undefined);
-    if (previas.length && !previas.some((p: any) => p.datos?.huella === huella) && this.notificaciones)
-      void this.notificaciones
-        .enviarAvisoAcceso(usuario.email, usuario.nombre, describirAgente(agente), meta.ip, new Date())
+    if (previas.length && !previas.some((p: any) => p.datos?.huella === huella) && this.notificaciones) {
+      const correoPersonal = await this.correoPersonal(db, usuario).catch(() => '');
+      if (correoPersonal) void this.notificaciones
+        .enviarAvisoAcceso(correoPersonal, usuario.nombre, describirAgente(agente), meta.ip, new Date())
         .catch(() => undefined);
+    }
     return sid;
   }
 
@@ -264,6 +299,7 @@ export class SeguridadCuentaService {
     const politica = u.rol !== 'SUPERADMIN' && (await this.politicaActiva(db, u.empresaId));
     return {
       dosPasos: await this.dosPasosActivo(db, u.id),
+      correoPersonal: await this.correoPersonal(db, u),
       dosPasosRecomendado: ['SUPERADMIN', 'ADMIN_EMPRESA', 'GERENTE'].includes(u.rol),
       dosPasosObligatorio: u.rol === 'SUPERADMIN' || (politica && ROLES_DOS_PASOS.includes(u.rol)),
       ...(u.rol === 'ADMIN_EMPRESA' ? { politicaEmpresa: politica } : {}),

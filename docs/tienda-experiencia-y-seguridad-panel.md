@@ -53,3 +53,5 @@ Mi tienda muestra, para 7, 30 o 90 días: ventas aceptadas, ticket promedio, tas
 La política de 2FA se identifica por empresa incluso cuando varias empresas comparten una base; activarla para una no obliga a los usuarios de otra.
 
 El superadmin debe activar la verificación en dos pasos obligatoriamente, aunque no pertenezca a una empresa. Mientras no lo haga solo accede a Seguridad. No puede desactivarla; conserva sus diez códigos de recuperación para iniciar sesión si pierde el teléfono.
+
+Los avisos de acceso nuevo y restablecimiento de 2FA usan exclusivamente el correo personal de Seguridad (cifrado por usuario), o el correo personal previamente configurado en Alertas de administradores para esa empresa y usuario. Nunca usan el identificador de acceso como alternativa. Todos los roles, incluido superadmin, pueden guardar su correo en Seguridad confirmando contraseña y su segundo factor si lo tienen activo. No se vinculan automáticamente expedientes laborales ni se inventan direcciones.
