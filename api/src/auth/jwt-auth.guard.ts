@@ -16,7 +16,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       if (!rutaPermitidaSinDosPasos(req?.originalUrl || req?.url))
         throw new ForbiddenException({
           error: DOS_PASOS_REQUERIDO,
-          message: 'Tu empresa exige la verificación en dos pasos. Actívala en Seguridad para continuar.',
+          message: 'La seguridad de tu cuenta exige la verificación en dos pasos. Actívala en Seguridad para continuar.',
         });
     }
     return usuario;

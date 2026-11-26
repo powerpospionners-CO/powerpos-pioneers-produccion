@@ -65,7 +65,7 @@ export default function Seguridad() {
           </div>
           {resumen?.dosPasosObligatorio && !resumen.dosPasos && (
             <p role="alert" className="rounded-xl border border-amber-600 bg-amber-950/50 p-4">
-              Tu empresa exige la verificación en dos pasos. Actívala aquí para seguir usando el panel.
+              Tu cuenta requiere la verificación en dos pasos. Actívala aquí para seguir usando el panel.
             </p>
           )}
           {mensaje && <p role="status" className="rounded-xl bg-teal-900 p-4">{mensaje}</p>}
@@ -78,7 +78,7 @@ export default function Seguridad() {
                   <>
                     <p className="text-teal-300">Activa. Al iniciar sesión se pide un código de tu app de autenticación.</p>
                     {resumen.dosPasosObligatorio ? (
-                      <p className="text-sm text-gray-400">Tu empresa la exige, así que no se puede desactivar.</p>
+                      <p className="text-sm text-gray-400">Es obligatoria para tu cuenta, así que no se puede desactivar.</p>
                     ) : (
                     <form
                       className="space-y-3"

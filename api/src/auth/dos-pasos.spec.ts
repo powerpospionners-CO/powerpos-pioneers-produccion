@@ -215,3 +215,21 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
     expect(guardia.handleRequest(null, { id: 9 }, null, contexto('/ventas'))).toEqual({ id: 9 });
   });
 });
+
+
+describe('Protección obligatoria del superadmin', () => {
+  it('exige configurar 2FA aun sin empresa y permite continuar después de activarla', async () => {
+    const db = baseFalsa();
+    const s = new SeguridadCuentaService({ control: db, aislamientoActivo: true } as any);
+    const u = { id: 1, rol: 'SUPERADMIN', empresaId: null, sucursalId: null, email: 'super@prueba.co' };
+    expect(await s.dosPasosPendiente(db, u)).toBe(true);
+    expect((await s.resumen(u)).dosPasosObligatorio).toBe(true);
+    const { secreto } = await s.iniciar(u);
+    const { recuperacion } = await s.activar(u, codigoTotp(secreto, Math.floor(Date.now() / 30000)));
+    expect(await s.dosPasosPendiente(db, u)).toBe(false);
+    expect((await s.resumen(u)).dosPasosObligatorio).toBe(true);
+    await expect(s.desactivar(u, 'clave', recuperacion[0])).rejects.toThrow('obligatoria para el superadmin');
+    expect(await s.verificar(db, u.id, recuperacion[0])).toBe(true);
+    expect(await s.verificar(db, u.id, recuperacion[0])).toBe(false);
+  });
+});

@@ -51,3 +51,5 @@ Mi tienda muestra, para 7, 30 o 90 días: ventas aceptadas, ticket promedio, tas
 - **Restablecer la 2FA de otro usuario**: para quien perdió el teléfono y los códigos. Solo el administrador de la empresa con su propia 2FA activa, nunca sobre sí mismo ni sobre usuarios de otra empresa, confirmando contraseña y código propios (5 contraseñas fallidas bloquean 15 minutos). Quita la 2FA del usuario y cierra sus sesiones en todas las sedes donde exista su correo, y le avisa por correo.
 
 La política de 2FA se identifica por empresa incluso cuando varias empresas comparten una base; activarla para una no obliga a los usuarios de otra.
+
+El superadmin debe activar la verificación en dos pasos obligatoriamente, aunque no pertenezca a una empresa. Mientras no lo haga solo accede a Seguridad. No puede desactivarla; conserva sus diez códigos de recuperación para iniciar sesión si pierde el teléfono.
