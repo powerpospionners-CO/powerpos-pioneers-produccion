@@ -38,10 +38,12 @@ import { ActividadInterceptor } from './auditoria/actividad.interceptor';
 import { AccesoBarrasModule } from './acceso-barras/acceso-barras.module';
 import { AccesoGastosModule } from './acceso-gastos/acceso-gastos.module';
 import { PersonalModule } from './personal/personal.module';
+import { PropinasModule } from './propinas/propinas.module';
 
 @Module({
   imports: [
     PersonalModule,
+    PropinasModule,
     AccesoBarrasModule,
     AccesoGastosModule,
     EventosModule,

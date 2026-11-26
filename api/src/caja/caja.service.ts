@@ -5,6 +5,7 @@ import {
   ConflictException,
   NotFoundException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
@@ -12,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { ImpresionService } from '../impresion/impresion.service';
 import { bloquearCajaSucursal } from './caja-lock';
+import { PropinasService, ResumenPropinas } from '../propinas/propinas.service';
 import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { impresionEnEscritorio } from '../impresion/transporte-escritorio';
 import { disponibleRecaudo, idsGastosRecaudo, SNAPSHOT_RECAUDO } from './gastos-recaudo';
@@ -23,7 +25,30 @@ export class CajaService {
     private prisma: PrismaService,
     private notificaciones: NotificacionesService,
     private impresion: ImpresionService,
+    @Optional() private readonly propinas?: PropinasService,
   ) {}
+
+  private sinPropinas(): ResumenPropinas {
+    return { total: 0, efectivo: 0, cantidad: 0, porMetodo: [], reparto: null };
+  }
+
+  // Propinas de la caja, sin las de ventas anuladas. Las de efectivo quedan en el cajón.
+  private async propinasCaja(empresaId: number, cajaId: number, pedidos: { id: number; estado: string }[], tx?: any) {
+    if (!this.propinas) return this.sinPropinas();
+    return this.propinas.deCaja(empresaId, cajaId, new Set(pedidos.filter((p) => p.estado !== 'ANULADO').map((p) => p.id)), tx);
+  }
+
+  // Antes de abrir una transacción: en PostgreSQL una tabla inexistente anularía toda la transacción.
+  private async propinasListas() {
+    if (!this.propinas) return false;
+    try {
+      await this.propinas.preparar();
+      return true;
+    } catch (e) {
+      this.logger.warn(`No se pudo preparar el registro de propinas: ${e}`);
+      throw new BadRequestException('No se pudo consultar el registro de propinas. Reintenta el cierre para conservar el efectivo correcto.');
+    }
+  }
 
   // Reparte el total de cada venta entre sus medios de pago reales (tabla
   // `pagos`); las ventas anteriores a los pagos mixtos no tienen filas ahí,
@@ -249,6 +274,7 @@ export class CajaService {
       referencia.sucursal.empresaId !== empresaId
     )
       throw new NotFoundException('Caja no encontrada');
+    const conPropinas = await this.propinasListas();
     const resultado = await this.prisma.$transaction(async (tx) => {
       await bloquearCajaSucursal(tx, referencia.sucursalId);
       const caja = await tx.caja.findUnique({
@@ -278,6 +304,9 @@ export class CajaService {
       const ventasPorMetodoPago = this.desglosePorMetodo(pedidosValidos, operaciones);
       const totalEfectivo = ventasPorMetodoPago.find((d) => d.metodo === 'EFECTIVO')?.total || 0;
       const productosVendidos = this.productosVendidos(pedidosValidos);
+      const propinas = conPropinas ? await this.propinasCaja(caja.sucursal.empresaId, caja.id, caja.pedidos, tx) : this.sinPropinas();
+      if (conPropinas && propinas.total > 0 && !propinas.reparto)
+        propinas.reparto = await this.propinas!.repartir(tx, caja, caja.sucursal.empresaId, usuarioId, propinas, datos?.propinaParticipantes);
 
       const recaudoHabilitado =
         caja.sucursal.empresa.recaudoEfectivoHabilitado &&
@@ -300,7 +329,7 @@ export class CajaService {
         );
       }
       const montoEsperado =
-        Number(caja.montoInicial) + totalEfectivo - montoRetirado;
+        Number(caja.montoInicial) + totalEfectivo + propinas.efectivo - montoRetirado;
       const montoFinal =
         datos?.montoFinal !== undefined &&
         datos.montoFinal !== null &&
@@ -368,6 +397,7 @@ export class CajaService {
         ventasPorMetodoPago,
         productosVendidos,
         cantidadVentas: pedidosValidos.length,
+        propinas,
       };
     }, { timeout: 15000, maxWait: 5000 });
     const {
@@ -383,6 +413,7 @@ export class CajaService {
       ventasPorMetodoPago,
       productosVendidos,
       cantidadVentas,
+      propinas,
     } = resultado;
     if (Math.abs(diferencia) > 1000) {
       void this.notificaciones
@@ -429,6 +460,7 @@ export class CajaService {
             cantidadVentas,
             ventasPorMetodoPago,
             productosVendidos,
+            propinas,
           },
           empresaId!,
         )
@@ -445,6 +477,7 @@ export class CajaService {
       ventasPorMetodoPago,
       productosVendidos,
       cantidadVentas,
+      propinas,
       automatico,
     };
   }
@@ -465,7 +498,7 @@ export class CajaService {
         },
         pedidos: {
           where: { estado: { not: 'ANULADO' } },
-          select: { total: true, metodoPago: true, estado: true, pagos: { select: { metodoPago: true, monto: true } } },
+          select: { id: true, usuarioId: true, total: true, metodoPago: true, estado: true, pagos: { select: { metodoPago: true, monto: true } } },
         },
       },
     });
@@ -481,13 +514,16 @@ export class CajaService {
     );
     const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { cajaId: caja.id } });
     const totalEfectivo = this.sumarEfectivo(pedidosValidos, operaciones);
-    const totalEsperado = Number(caja.montoInicial) + totalEfectivo;
+    const propinas = await this.propinasCaja(empresaId, caja.id, pedidosValidos);
+    const totalEsperado = Number(caja.montoInicial) + totalEfectivo + propinas.efectivo;
 
     return {
       ...caja,
       totalVentas,
       totalEfectivo,
       totalEsperado,
+      // Para el reparto: quienes registraron ventas en el turno y el cajero.
+      propinas: { ...propinas, sugeridos: [...new Set([caja.usuarioId, ...pedidosValidos.map((p) => p.usuarioId)])] },
       recaudoEfectivoHabilitado:
         caja.sucursal.empresa.recaudoEfectivoHabilitado &&
         caja.sucursal.baseEfectivoCaja !== null,
@@ -567,9 +603,11 @@ export class CajaService {
     const ventasPorMetodoPago = this.desglosePorMetodo(caja.pedidos, operaciones);
     const totalEfectivo = ventasPorMetodoPago.find((d) => d.metodo === 'EFECTIVO')?.total || 0;
     const retiro = caja.retiroEfectivo;
+    const propinas = await this.propinasCaja(empresaId, caja.id, caja.pedidos);
     const montoEsperado =
       Number(caja.montoInicial) +
-      totalEfectivo -
+      totalEfectivo +
+      propinas.efectivo -
       (retiro ? Number(retiro.montoRetirado) : 0);
 
     return {
@@ -587,6 +625,7 @@ export class CajaService {
       cantidadVentas: caja.pedidos.length,
       ventasPorMetodoPago,
       productosVendidos: this.productosVendidos(caja.pedidos),
+      propinas,
       retiroEfectivo: retiro
         ? {
             montoEsperado: Number(retiro.montoEsperado),
@@ -663,9 +702,11 @@ export class CajaService {
     const pedidosValidos = caja.pedidos.filter((p) => p.estado !== 'ANULADO');
     const operaciones = await this.prisma.operacionVentaCaja.findMany({ where: { cajaId: caja.id } });
     const totalEfectivo = this.sumarEfectivo(pedidosValidos, operaciones);
+    const propinas = await this.propinasCaja(empresaId, caja.id, pedidosValidos);
     const montoEsperado =
       Number(caja.montoInicial) +
-      totalEfectivo -
+      totalEfectivo +
+      propinas.efectivo -
       (caja.retiroEfectivo ? Number(caja.retiroEfectivo.montoRetirado) : 0);
     const montoAnterior = caja.montoFinal !== null ? Number(caja.montoFinal) : null;
     const diferencia = monto - montoEsperado;
@@ -855,13 +896,17 @@ export class CajaService {
     const motivo = typeof datos?.motivo === 'string' ? datos.motivo.trim() : '';
     if (!Number.isSafeInteger(id) || id < 1 || !['string', 'number'].includes(typeof datos?.montoRetirado) || datos?.montoRetirado === '' || datos?.montoRetirado == null || !Number.isFinite(monto) || monto < 0 || monto > 99999999.99 || Math.abs(monto * 100 - Math.round(monto * 100)) > 0.000001 || motivo.length < 5 || motivo.length > 250)
       throw new BadRequestException('Indica el retiro real y un motivo de 5 a 250 caracteres');
+    // Las propinas en efectivo también quedan en el cajón; se leen fuera de la transacción.
+    const previo = !this.propinas ? null : await this.prisma.retiroEfectivoCaja.findFirst({ where: { id, sucursalId, empresaId }, select: { cajaId: true } });
+    const pedidosCaja = previo ? await this.prisma.pedido.findMany({ where: { cajaId: previo.cajaId }, select: { id: true, estado: true } }) : [];
+    const propinasEfectivo = previo ? (await this.propinasCaja(empresaId, previo.cajaId, pedidosCaja)).efectivo : 0;
     return this.prisma.$transaction(async tx => {
       await bloquearCajaSucursal(tx, sucursalId);
       const retiro = await tx.retiroEfectivoCaja.findFirst({ where: { id, sucursalId, empresaId }, include: { caja: true } });
       if (!retiro || retiro.caja.estado !== 'CERRADA') throw new NotFoundException('No se encontró un retiro de caja cerrada en esta sede');
       if (datos?.montoAnterior == null || Number(datos.montoAnterior) !== Number(retiro.montoRetirado))
         throw new ConflictException('El retiro cambió. Actualiza el resumen antes de corregirlo');
-      const esperado = new Prisma.Decimal(retiro.caja.montoInicial).plus(retiro.montoEsperado).minus(monto);
+      const esperado = new Prisma.Decimal(retiro.caja.montoInicial).plus(retiro.montoEsperado).plus(retiro.cajaId === previo?.cajaId ? propinasEfectivo : 0).minus(monto);
       const diferencia = retiro.caja.montoFinal === null ? null : new Prisma.Decimal(retiro.caja.montoFinal).minus(esperado).toDecimalPlaces(2);
       await tx.retiroEfectivoCaja.update({ where: { id }, data: { montoRetirado: monto } });
       await tx.caja.update({ where: { id: retiro.cajaId }, data: { diferencia } });

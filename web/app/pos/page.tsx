@@ -118,6 +118,8 @@ function RestaurantePOS() {
   const puntosRestaurados = useRef<number | null>(null);
   const clienteAnterior = useRef(borrador.almacen.getSnapshot().datos.clienteSeleccionado?.id);
   useEffect(() => { if (!usuario) return; api.get('/tienda-admin/configuracion').then(r=>setReglasPuntos(r.data.fidelizacion)).catch(()=>setReglasPuntos(null)); }, [usuario]);
+  const [configPropinas, setConfigPropinas] = useState<{ habilitado: boolean; porcentaje: number } | null>(null);
+  useEffect(() => { if (!usuario) return; api.get('/propinas/config').then(r => setConfigPropinas(r.data)).catch(() => setConfigPropinas(null)); }, [usuario]);
   useEffect(() => {
     const id = clienteSeleccionado?.id;
     if (id !== borrador.almacen.getSnapshot().datos.clienteSeleccionado?.id || clienteAnterior.current === id) return;
@@ -579,6 +581,15 @@ function RestaurantePOS() {
             <span>TOTAL</span>
             <span>$${Number(pedido.total).toLocaleString()}</span>
           </div>
+          ${Number(pedido.propina?.monto) > 0 ? `
+          <div class="total-fila">
+            <span>Propina voluntaria (${pedido.propina.metodoPago})</span>
+            <span>$${Number(pedido.propina.monto).toLocaleString()}</span>
+          </div>
+          <div class="total-fila">
+            <strong>TOTAL CON PROPINA</strong>
+            <strong>$${(Number(pedido.total) + Number(pedido.propina.monto)).toLocaleString()}</strong>
+          </div>` : ''}
         </div>
 
         ${Array.isArray(pedido.pagos) && pedido.pagos.length > 1
@@ -911,6 +922,7 @@ function RestaurantePOS() {
         clienteId: clienteSeleccionado?.id || null,
         puntosCanjeados: canjeAplicado,
         cambio: pago.cambio,
+        ...(pago.propina ? { propina: pago.propina } : {}),
         items: carrito.map((item) => ({
           productoId: item.producto.id,
           cantidad: item.cantidad,
@@ -1481,7 +1493,7 @@ function RestaurantePOS() {
     <VentasTurno cajaId={cajaAbierta?.id ?? null} sucursalId={usuario?.sucursalId} puedeGestionar={!cajaBloqueadaPorUsuario} />
 
         {modalCobroAbierto && (
-          <ModalCobro borradorInicial={cobroGuardado} onBorradorChange={setCobroGuardado} opcionesImpresion={esTrailer ? <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading} /> : undefined} permitirCredito={!!clienteSeleccionado && !canjeAplicado} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
+          <ModalCobro borradorInicial={cobroGuardado} onBorradorChange={setCobroGuardado} opcionesImpresion={esTrailer ? <OpcionesImpresionTrailer comandas={imprimirComanda} recibo={imprimirReciboCliente} onComandas={setImprimirComanda} onRecibo={setImprimirReciboCliente} disabled={loading} /> : undefined} permitirCredito={!!clienteSeleccionado && !canjeAplicado} propina={configPropinas?.habilitado ? { porcentaje: configPropinas.porcentaje } : null} total={total} procesando={loading} onConfirmar={confirmarPedido} textoCancelar="Volver a productos" onCancelar={() => setModalCobroAbierto(false)} />
         )}
         {cambioAMostrar !== null && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">

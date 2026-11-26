@@ -566,6 +566,12 @@ export class ImpresionService {
       lineas.push(`${this.lineaMonto('Descuento', -descuento, ancho)}\n`);
     }
     lineas.push(...this.negrita(`${this.lineaMonto('TOTAL', total, ancho)}\n`));
+    // La propina es voluntaria y va aparte de la venta (Ley 1935 de 2018).
+    const propina = Number(pedido.propina?.monto ?? 0);
+    if (propina > 0) {
+      lineas.push(`${this.lineaMonto(`Propina (${pedido.propina.metodoPago})`, propina, ancho)}\n`);
+      lineas.push(...this.negrita(`${this.lineaMonto('TOTAL CON PROPINA', total + propina, ancho)}\n`));
+    }
     lineas.push(separador('-'));
     if (Array.isArray(pedido.pagos) && pedido.pagos.length > 1) {
       for (const pago of pedido.pagos) {
@@ -587,7 +593,8 @@ export class ImpresionService {
         (Array.isArray(pedido.pagos) ? pedido.pagos.find((p: any) => p.metodoPago === 'EFECTIVO')?.monto : undefined) ?? (pedido.abonosCredito || []).find((p: any)=>p.metodoPago==='EFECTIVO')?.monto ?? total,
       );
       lineas.push(separador('-'));
-      lineas.push(`${this.lineaMonto('Recibido', efectivoAtribuido + cambio, ancho)}\n`);
+      const propinaEfectivo = pedido.propina?.metodoPago === 'EFECTIVO' ? propina : 0;
+      lineas.push(`${this.lineaMonto('Recibido', efectivoAtribuido + propinaEfectivo + cambio, ancho)}\n`);
       lineas.push(`${this.lineaMonto('Cambio', cambio, ancho)}\n`);
     }
 
@@ -641,6 +648,12 @@ export class ImpresionService {
             `VENTAS PARA RECAUDO: ${Number(resumen.retiroEfectivo.montoEsperado).toFixed(0)}\n`,
           ]
         : []),
+      ...(resumen.propinas?.total > 0
+        ? [
+            `PROPINAS: ${Number(resumen.propinas.total).toFixed(0)}\n`,
+            `PROPINAS EFECTIVO: ${Number(resumen.propinas.efectivo).toFixed(0)}\n`,
+          ]
+        : []),
       `EFECTIVO ESPERADO: ${Number(resumen.montoEsperado).toFixed(0)}\n`,
       `EFECTIVO CONTADO: ${Number(resumen.montoFinal).toFixed(0)}\n`,
       `DIFERENCIA: ${Number(resumen.diferencia).toFixed(0)}\n`,
@@ -656,6 +669,11 @@ export class ImpresionService {
           : p.nombre;
         lineas.push(`${p.cantidad}x ${nombre}\n`);
       }
+    }
+    if (resumen.propinas?.reparto?.length) {
+      lineas.push('--------------------------------\n', 'REPARTO DE PROPINAS\n');
+      for (const p of resumen.propinas.reparto)
+        lineas.push(`${this.recortarTexto(p.nombre, 20)}${String(Number(p.monto).toFixed(0)).padStart(12, ' ')}\n`);
     }
     lineas.push('--------------------------------\n', '\n\n');
 
