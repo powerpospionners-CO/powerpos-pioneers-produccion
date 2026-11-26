@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import { useNotificar } from "@/components/Notificaciones";
+import { useAuthStore } from "@/store/authStore";
 import EquipoSeguridad from "./EquipoSeguridad";
 
 type Resumen = {
@@ -23,6 +24,7 @@ const primario = "rounded-lg bg-teal-700 px-4 py-2 disabled:opacity-50";
 
 export default function Seguridad() {
   const { confirmar } = useNotificar();
+  const { usuario } = useAuthStore();
   const [resumen, setResumen] = useState<Resumen | null>(null),
     [configurando, setConfigurando] = useState<{ secreto: string; qr: string } | null>(null),
     [contacto, setContacto] = useState({ correo: "", password: "", codigo: "" }),
@@ -201,7 +203,7 @@ export default function Seguridad() {
                       }}>Descargar códigos (.txt)</button>
                       <button type="button" className={boton} onClick={() => setRecuperacion(null)}>Ya los guardé</button>
                       {resumen.dosPasosObligatorio && (
-                        <Link href="/" className="rounded-lg bg-teal-700 px-4 py-2">Continuar al panel</Link>
+                        <Link href={usuario?.rol === "SUPERADMIN" ? "/superadmin" : "/"} className="rounded-lg bg-teal-700 px-4 py-2">Continuar al panel</Link>
                       )}
                     </div>
                   </div>

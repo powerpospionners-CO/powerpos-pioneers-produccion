@@ -105,7 +105,9 @@ export default function Navbar() {
   },[usuario?.rol,usuario?.empresaId]);
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
-  const itemsVisibles = ITEMS.filter((item) => {
+  const itemsVisibles = usuario?.rol === 'SUPERADMIN'
+    ? [{ href: '/superadmin', label: 'Panel superadmin', icon: LayoutDashboard }]
+    : ITEMS.filter((item) => {
     if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
     if (item.href === '/gastos') return usuario?.rol === 'CAJERO' && accesoGastos;
