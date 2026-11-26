@@ -31,11 +31,13 @@ const escapar = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<"
 
 export default function ExperienciaTienda({
   config,
+  canalesAvisos,
   busy,
   nombre,
   onChange,
 }: {
   config: Config;
+  canalesAvisos?: { whatsapp: boolean; correo: boolean };
   busy: boolean;
   nombre: string;
   onChange: (k: string, v: unknown) => void;
@@ -109,7 +111,7 @@ export default function ExperienciaTienda({
         {casilla("avisosClientes", "Avisos al cliente", "Correo o WhatsApp cuando cambia el estado del pedido o la reserva, y recordatorio el día anterior a la reserva. Solo a quien lo autoriza.")}
         {config.avisosClientes && (
           <p className="text-sm text-gray-400">
-            El correo usa el SMTP del sistema. Para WhatsApp se requiere una plantilla de cliente aprobada por Meta, configurada por PowerPOS (variable WHATSAPP_TEMPLATE_CLIENTE). Sin ella se avisa solo por correo.
+            WhatsApp: {canalesAvisos?.whatsapp ? "conectado" : "pendiente de conectar con Meta y aprobar la plantilla de avisos"}. Correo: {canalesAvisos?.correo ? "disponible" : "pendiente de configurar"}. Solo se ofrecen al cliente los canales disponibles. Los avisos requieren su autorización y pueden generar cargos de Meta.
           </p>
         )}
         {casilla("resenasHabilitadas", "Reseñas verificadas", "Solo clientes con cuenta y un pedido entregado opinan; tú apruebas cada reseña antes de publicarla. Requiere cuentas de cliente.")}

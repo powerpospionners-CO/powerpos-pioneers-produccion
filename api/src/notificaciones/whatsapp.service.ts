@@ -10,14 +10,14 @@ export class WhatsappService {
   private ocupado = false;
   constructor(private readonly prisma: PrismaService) {}
 
-  estado() {
+  private configurado(plantilla: string | undefined) {
     const limite = Number(process.env.WHATSAPP_LIMITE_DIARIO || 0);
     const configurado =
       process.env.WHATSAPP_ENABLED === 'true' &&
       !!process.env.WHATSAPP_ACCESS_TOKEN &&
       /^\d+$/.test(process.env.WHATSAPP_PHONE_NUMBER_ID || '') &&
       /^v\d+\.\d+$/.test(process.env.WHATSAPP_GRAPH_VERSION || '') &&
-      /^[a-z0-9_]+$/.test(process.env.WHATSAPP_TEMPLATE_ALERTA || '') &&
+      /^[a-z0-9_]+$/.test(plantilla || '') &&
       !!process.env.WHATSAPP_APP_SECRET &&
       !!process.env.WHATSAPP_VERIFY_TOKEN &&
       Number.isSafeInteger(limite) &&
@@ -28,16 +28,34 @@ export class WhatsappService {
     };
   }
 
+  estado() { return this.configurado(process.env.WHATSAPP_TEMPLATE_ALERTA); }
+
   // Avisos a compradores: plantilla propia aprobada por Meta, distinta de las alertas internas.
   // Parámetros del cuerpo: {{1}} nombre del negocio, {{2}} mensaje.
   clienteConfigurado() {
-    return this.estado().configurado && /^[a-z0-9_]+$/.test(process.env.WHATSAPP_TEMPLATE_CLIENTE || '');
+    return this.configurado(process.env.WHATSAPP_TEMPLATE_CLIENTE).configurado;
   }
-  async enviarCliente(telefono: string, empresa: string, mensaje: string) {
+  async enviarCliente(empresaId: number, telefono: string, empresa: string, mensaje: string) {
     if (!this.clienteConfigurado()) return false;
     const digitos = telefono.replace(/\D/g, '');
     const destino = digitos.length === 10 ? `57${digitos}` : digitos;
     if (!/^\d{11,15}$/.test(destino)) return false;
+    // Reserva el consumo antes de contactar a Meta; comparte límite con las alertas internas.
+    const trabajo = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${empresaId}, 81726)`;
+      const ahora = new Date();
+      const dia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(ahora);
+      const anteriores = await tx.auditoria.findMany({ where: {
+        empresaId, entidad: 'WhatsAppSalida', creadoEn: { gte: new Date(ahora.getTime() - 86400000) },
+      } });
+      const huella = createHash('sha256').update(JSON.stringify([destino, empresa, mensaje])).digest('hex');
+      if (anteriores.filter((a) => (a.detalle as any)?.dia === dia).length >= this.configurado(process.env.WHATSAPP_TEMPLATE_CLIENTE).limiteDiario ||
+          anteriores.some((a) => (a.detalle as any)?.huella === huella)) return null;
+      return tx.auditoria.create({ data: { empresaId, entidad: 'WhatsAppSalida', accion: 'ENVIANDO',
+        detalle: { canal: 'CLIENTE', dia, huella, correlacion: randomUUID() } } });
+    });
+    if (!trabajo) return false;
+    const detalle = trabajo.detalle as any;
     const compactar = (v: string) => v.replace(/\s+/g, ' ').trim().slice(0, 500) || '-';
     try {
       const r = await fetch(
@@ -51,6 +69,7 @@ export class WhatsappService {
             messaging_product: 'whatsapp',
             to: destino,
             type: 'template',
+            biz_opaque_callback_data: detalle.correlacion,
             template: {
               name: process.env.WHATSAPP_TEMPLATE_CLIENTE,
               language: { code: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'es_CO' },
@@ -59,8 +78,13 @@ export class WhatsappService {
           }),
         },
       );
-      return r.ok;
+      const resultado = await r.json() as any;
+      if (!r.ok || typeof resultado.messages?.[0]?.id !== 'string') throw new Error('Envío no confirmado');
+      await this.prisma.auditoria.updateMany({ where: { id: trabajo.id, empresaId, accion: 'ENVIANDO' },
+        data: { accion: 'ACEPTADO', detalle: { ...detalle, messageId: resultado.messages[0].id } } });
+      return true;
     } catch {
+      await this.prisma.auditoria.updateMany({ where: { id: trabajo.id, empresaId, accion: 'ENVIANDO' }, data: { accion: 'REVISAR' } });
       return false;
     }
   }

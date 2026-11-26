@@ -137,3 +137,15 @@ describe('Puntos, favoritos y reseñas en la cuenta del cliente', () => {
     expect(tiendaConfig({})).toMatchObject({ avisosClientes: false, recogerHabilitado: false, programarHabilitado: false, mesasHabilitadas: false, resenasHabilitadas: false });
   });
 });
+
+
+describe('Autorización de avisos al cliente', () => {
+  it('solo envía WhatsApp con autorización y conserva la empresa para el límite', async () => {
+    const whatsapp = { enviarCliente: jest.fn().mockResolvedValue(true) };
+    const e = new TiendaExperienciaService({} as any, {} as any, {} as any, undefined, whatsapp as any);
+    await e.avisar(7, 'Tienda', { telefono: '3101234567' }, 'Pedido', 'Aceptado');
+    expect(whatsapp.enviarCliente).not.toHaveBeenCalled();
+    await e.avisar(7, 'Tienda', { telefono: '3101234567', whatsapp: true }, 'Pedido', 'Aceptado');
+    expect(whatsapp.enviarCliente).toHaveBeenCalledWith(7, '3101234567', 'Tienda', 'Pedido. Aceptado');
+  });
+});

@@ -399,7 +399,7 @@ export default function MiTienda() {
                   </section>
                   <ComercioWeb config={config.tienda} busy={busy} onChange={cambiar} onBusy={setBusy} onMensaje={setMensaje} onError={setError} />
                   <FuncionesTienda config={config.tienda} busy={busy} onChange={cambiar} />
-                  <ExperienciaTienda config={config.tienda} busy={busy} nombre={config.tienda.titulo || "Mi tienda"} onChange={cambiar} />
+                  <ExperienciaTienda canalesAvisos={config.canalesAvisos} config={config.tienda} busy={busy} nombre={config.tienda.titulo || "Mi tienda"} onChange={cambiar} />
                   <ContenidoWeb galeria={config.tienda.galeria || []} preguntas={config.tienda.preguntasFrecuentes || []} busy={busy} onChange={cambiar} onBusy={setBusy} onMensaje={setMensaje} onError={setError} />
                   <section className={card}>
                     <h2 className="text-xl font-bold">Productos y precios</h2>

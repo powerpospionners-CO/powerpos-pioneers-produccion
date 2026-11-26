@@ -87,6 +87,7 @@ export class TiendaService {
       slug: empresa.tiendaSlug,
       tienda: await this.identidad(empresa),
       fidelizacion: puntosConfig(empresa.fidelizacionConfig),
+      canalesAvisos: this.experiencia?.canalesDisponibles() ?? { whatsapp: false, correo: false },
     };
   }
 
@@ -522,7 +523,7 @@ export class TiendaService {
     const avisos = t.avisosClientes && this.experiencia && body.avisos && typeof body.avisos === 'object'
       ? {
           whatsapp: body.avisos.whatsapp === true,
-          correo: this.experiencia.validarCorreoAviso(body.avisos.correo) || cuenta?.c.correo || '',
+          correo: this.experiencia.validarCorreoAviso(body.avisos.correo),
         }
       : null;
     const conAvisos = avisos && (avisos.whatsapp || avisos.correo) ? avisos : null;

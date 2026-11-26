@@ -48,13 +48,15 @@ export class TiendaExperienciaService {
     return { whatsapp: !!this.whatsapp?.clienteConfigurado(), correo: !!process.env.SMTP_USER && !!process.env.SMTP_PASS };
   }
   // Nunca bloquea la operación: un aviso fallido solo se registra en el log.
-  async avisar(empresa: string, destino: Destino, titulo: string, mensaje: string) {
+  async avisar(empresaId: number, empresa: string, destino: Destino, titulo: string, mensaje: string) {
     const envios: Promise<unknown>[] = [];
     if (destino.correo && this.notificaciones)
       envios.push(this.notificaciones.enviarAvisoCliente(destino.correo, empresa, titulo, mensaje));
     if (destino.whatsapp && destino.telefono && this.whatsapp)
-      envios.push(this.whatsapp.enviarCliente(destino.telefono, empresa, `${titulo}. ${mensaje}`));
-    await Promise.allSettled(envios);
+      envios.push(this.whatsapp.enviarCliente(empresaId, destino.telefono, empresa, `${titulo}. ${mensaje}`));
+    const resultados = await Promise.allSettled(envios);
+    if (resultados.some((r) => r.status === 'rejected' || r.value === false))
+      this.logger.warn('Un aviso al cliente no pudo confirmarse; revisar el canal de notificaciones');
   }
   async registrarAvisoPedido(empresaId: number, pedidoWebId: string, destino: Destino, tx: any) {
     await this.registros.crear(empresaId, 'AVISO_PEDIDO', pedidoWebId, destino, { referenciaId: pedidoWebId }, tx);
@@ -87,7 +89,7 @@ export class TiendaExperienciaService {
       if (!r) return;
       const d = this.registros.abrir<Destino>(r);
       const mensaje = `${estado[1]} Pedido #${pedido.id.slice(0, 8)}.${pedido.motivo ? ` Motivo: ${pedido.motivo}` : ''}`;
-      await this.avisar(e.nombre, { ...d, telefono: pedido.telefono }, estado[0], mensaje);
+      await this.avisar(empresaId, e.nombre, { ...d, telefono: pedido.telefono }, estado[0], mensaje);
     } catch (err) {
       this.logger.warn(`No se pudo avisar el estado de un pedido web: ${err}`);
     }
@@ -101,7 +103,7 @@ export class TiendaExperienciaService {
       if (!estado) return;
       const d = this.registros.abrir<any>(r);
       await this.avisar(
-        e.nombre,
+        empresaId, e.nombre,
         { telefono: d.telefono, whatsapp: d.avisos === true, correo: d.correo || undefined },
         estado[0],
         `${estado[1]} ${d.fecha} a las ${d.hora}, ${d.personas} ${d.personas === 1 ? 'persona' : 'personas'}.${d.motivo ? ` Motivo: ${d.motivo}` : ''}`,
@@ -152,7 +154,7 @@ export class TiendaExperienciaService {
       } catch {
         continue;
       }
-      await this.avisar(e.nombre, { telefono: d.telefono, whatsapp: d.avisos === true, correo: d.correo || undefined }, 'Recordatorio de tu reserva', `Te esperamos mañana ${d.fecha} a las ${d.hora}, ${d.personas} ${d.personas === 1 ? 'persona' : 'personas'}. Si no puedes asistir, avísanos.`);
+      await this.avisar(r.empresaId, e.nombre, { telefono: d.telefono, whatsapp: d.avisos === true, correo: d.correo || undefined }, 'Recordatorio de tu reserva', `Te esperamos mañana ${d.fecha} a las ${d.hora}, ${d.personas} ${d.personas === 1 ? 'persona' : 'personas'}. Si no puedes asistir, avísanos.`);
       enviados++;
     }
     return enviados;

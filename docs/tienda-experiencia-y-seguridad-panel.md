@@ -20,6 +20,9 @@ Complementa [cupones, reservas y cuentas](tienda-cupones-reservas-cuentas.md). T
 - Solo se envían a quien los autoriza en el pedido o la reserva. Por correo usan el SMTP del sistema; por WhatsApp, una plantilla aprobada por Meta en `WHATSAPP_TEMPLATE_CLIENTE` con dos parámetros: `{{1}}` el negocio y `{{2}}` el mensaje. Sin esa plantilla solo se avisa por correo.
 - Se avisa cuando el pedido se acepta, sale, se entrega o se cancela, y cuando la reserva se confirma, se rechaza o se cancela. El recordatorio de reservas confirmadas corre cada hora entre 9:00 y 19:00 de Colombia, solo el día anterior y una sola vez. Respeta `BACKGROUND_JOBS_ENABLED`.
 - Un aviso fallido nunca bloquea la operación.
+- Mi tienda muestra si WhatsApp y correo están conectados; no muestra claves. WhatsApp de clientes no depende de tener aprobada la plantilla de alertas internas. Comparte el límite diario por empresa con esas alertas, deduplica mensajes y registra el identificador de Meta para recibir estados de entrega. Un timeout queda para revisión, sin reintentos automáticos ni promesas de entrega.
+- Para conectar: disponer de WhatsApp Business Platform en Meta, número remitente habilitado, token de acceso y secreto de la app en variables privadas del servidor; aprobar la plantilla `WHATSAPP_TEMPLATE_CLIENTE` (dos parámetros de cuerpo: empresa y actualización), configurar idioma y versión Graph vigentes en Meta, habilitar `WHATSAPP_ENABLED` y establecer `WHATSAPP_LIMITE_DIARIO`. Registrar el webhook HTTPS `/webhooks/whatsapp`, su token privado de verificación y la suscripción a estados de mensajes. Nunca introducir secretos en la tienda pública o en el chat. Meta puede cobrar por mensajes.
+- La aprobación de una plantilla y la conexión real se realizan en Meta; activar la casilla de avisos por sí sola no conecta WhatsApp. Enchila Market mantiene reservas desactivadas.
 
 ## Puntos de fidelización en la cuenta web
 
