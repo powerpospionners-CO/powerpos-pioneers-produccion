@@ -30,7 +30,7 @@ type DosPasos = { secreto: any; ultimoPaso: number; recuperacion: string[]; fall
 const OCHO_HORAS = 8 * 3600000;
 // Roles a los que la empresa puede exigir la verificación en dos pasos.
 export const ROLES_DOS_PASOS = ['ADMIN_EMPRESA', 'GERENTE'];
-const POLITICA = { usuarioId: 0, tipo: 'POLITICA', clave: 'exigir2fa' };
+const politicaEmpresa = (empresaId: number) => ({ usuarioId: 0, tipo: 'POLITICA', clave: `exigir2fa:${empresaId}` });
 
 @Injectable()
 export class SeguridadCuentaService {
@@ -83,18 +83,20 @@ export class SeguridadCuentaService {
     return !!(await this.registro(db, usuarioId, '2FA', 'activo'));
   }
 
-  async politicaActiva(db: any) {
+  async politicaActiva(db: any, empresaId?: number | null) {
+    if (!Number.isSafeInteger(empresaId) || !empresaId || empresaId < 1) return false;
+    const POLITICA = politicaEmpresa(empresaId);
     return (await this.registro(db, POLITICA.usuarioId, POLITICA.tipo, POLITICA.clave))?.estado === 'ACTIVA';
   }
 
   // true si la empresa exige 2FA a este rol y el usuario todavía no la activó.
-  async dosPasosPendiente(db: any, usuario: { id: number; rol: string }) {
+  async dosPasosPendiente(db: any, usuario: { id: number; rol: string; empresaId?: number | null }) {
     if (!ROLES_DOS_PASOS.includes(usuario.rol)) return false;
     let porBase = this.pendientes.get(db);
     if (!porBase) this.pendientes.set(db, (porBase = new Map()));
     const guardado = porBase.get(usuario.id);
     if (guardado && guardado.vence > Date.now()) return guardado.valor;
-    const valor = (await this.politicaActiva(db)) && !(await this.dosPasosActivo(db, usuario.id));
+    const valor = (await this.politicaActiva(db, usuario.empresaId)) && !(await this.dosPasosActivo(db, usuario.id));
     porBase.set(usuario.id, { valor, vence: Date.now() + 30000 });
     return valor;
   }
@@ -139,6 +141,7 @@ export class SeguridadCuentaService {
     if (exigir && !(await this.dosPasosActivo(db, u.id)))
       throw new BadRequestException('Activa primero tu propia verificación en dos pasos');
     await this.confirmarAdministrador(db, u, password, codigo);
+    const POLITICA = politicaEmpresa(u.empresaId);
     for (const b of await this.basesEmpresa(u)) {
       await this.preparar(b);
       const datos = { por: u.id, fecha: Date.now() };
@@ -189,6 +192,8 @@ export class SeguridadCuentaService {
       select: { id: true, nombre: true, email: true, rol: true },
     });
     if (!objetivo || objetivo.rol === 'SUPERADMIN') throw new NotFoundException('Usuario no encontrado');
+    if (!(await this.dosPasosActivo(db, u.id)))
+      throw new BadRequestException('Activa primero tu propia verificación en dos pasos');
     await this.confirmarAdministrador(db, u, password, codigo);
     let restablecida = false;
     for (const b of await this.basesEmpresa(u)) {
@@ -254,7 +259,7 @@ export class SeguridadCuentaService {
     } catch (e) {
       if (e?.code !== 'P2021') throw e;
     }
-    const politica = u.rol !== 'SUPERADMIN' && (await this.politicaActiva(db));
+    const politica = u.rol !== 'SUPERADMIN' && (await this.politicaActiva(db, u.empresaId));
     return {
       dosPasos: await this.dosPasosActivo(db, u.id),
       dosPasosRecomendado: ['SUPERADMIN', 'ADMIN_EMPRESA', 'GERENTE'].includes(u.rol),
@@ -341,7 +346,7 @@ export class SeguridadCuentaService {
 
   async desactivar(u: Actor, password: unknown, codigo: unknown) {
     const db = await this.base(u);
-    if (ROLES_DOS_PASOS.includes(u.rol) && (await this.politicaActiva(db)))
+    if (ROLES_DOS_PASOS.includes(u.rol) && (await this.politicaActiva(db, u.empresaId)))
       throw new ForbiddenException('Tu empresa exige la verificación en dos pasos; no se puede desactivar');
     const usuario = await db.usuario.findUnique({ where: { id: u.id }, select: { password: true } });
     if (!usuario || typeof password !== 'string' || !(await bcrypt.compare(password.slice(0, 500), usuario.password)))

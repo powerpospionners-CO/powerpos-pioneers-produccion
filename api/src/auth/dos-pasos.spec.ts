@@ -158,12 +158,15 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
     const { db, s, activar } = await preparar();
     await expect(s.cambiarPolitica(gerente, true, 'Clave segura 1', '')).rejects.toThrow('administrador');
     await expect(s.cambiarPolitica(admin, true, 'Clave segura 1', '')).rejects.toThrow('Activa primero');
+    await expect(s.restablecer(admin, 8, 'Clave segura 1', '')).rejects.toThrow('Activa primero');
     const secreto = await activar(admin);
     await expect(s.cambiarPolitica(admin, true, 'otra', codigoTotp(secreto, paso() + 1))).rejects.toThrow('contraseña');
     await expect(s.cambiarPolitica(admin, true, 'Clave segura 1', '000000')).rejects.toThrow('código');
     expect(await s.dosPasosPendiente(db, gerente)).toBe(false);
     await s.cambiarPolitica(admin, true, 'Clave segura 1', codigoTotp(secreto, paso() + 1));
     expect(await s.dosPasosPendiente(db, gerente)).toBe(true);
+    expect(await s.dosPasosPendiente(db, { id: 20, rol: 'GERENTE', empresaId: 2 })).toBe(false);
+    expect(await s.politicaActiva(db, 2)).toBe(false);
     expect(await s.dosPasosPendiente(db, admin)).toBe(false);
     expect(await s.dosPasosPendiente(db, { id: 9, rol: 'CAJERO' })).toBe(false);
     expect((await s.resumen(gerente)).dosPasosObligatorio).toBe(true);
