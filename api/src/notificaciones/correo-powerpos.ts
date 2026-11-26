@@ -219,6 +219,17 @@ export function correoAvisoCliente(empresa: string, titulo: string, mensaje: str
   });
 }
 
+export function correoDosPasosRestablecida(datos: { nombre: string; administrador: string }): CorreoPowerpos {
+  return plantilla({
+    estilo: 'atencion',
+    titulo: 'Se restableció tu verificación en dos pasos',
+    introduccion: `Hola, ${datos.nombre}. ${datos.administrador} quitó la verificación en dos pasos de tu cuenta de PowerPOS y cerró tus sesiones abiertas.`,
+    mensaje: 'Inicia sesión de nuevo y vuelve a activarla desde el ícono de escudo.\nSi no pediste este cambio, avisa de inmediato al administrador de tu empresa y cambia tu contraseña.',
+    contexto: [['Restablecida por', datos.administrador]],
+    pie: 'Este aviso se envía automáticamente para proteger tu cuenta de PowerPOS.',
+  });
+}
+
 export function correoNuevoAcceso(datos: { nombre: string; dispositivo: string; ip: string; fecha: Date }): CorreoPowerpos {
   return plantilla({
     estilo: 'atencion',

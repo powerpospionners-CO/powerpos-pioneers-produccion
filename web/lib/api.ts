@@ -105,6 +105,15 @@ api.interceptors.response.use(
     ) {
       window.location.href = "/suscripcion";
     }
+    // La empresa exige la verificación en dos pasos: solo se permite activarla.
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.error === "DOS_PASOS_REQUERIDO" &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/seguridad"
+    ) {
+      window.location.href = "/seguridad";
+    }
     // En el inicio de sesión un 401 significa datos incorrectos, no una sesión vencida.
     if (
       error.response?.status === 401 &&

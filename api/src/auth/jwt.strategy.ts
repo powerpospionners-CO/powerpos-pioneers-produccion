@@ -54,6 +54,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Las fichas emitidas antes del registro de sesiones no traen sid y siguen valiendo hasta vencer.
     if (payload.sid !== undefined && (typeof payload.sid !== 'string' || !this.seguridad || !(await this.seguridad.sesionValida(base, usuario.id, payload.sid))))
       throw new UnauthorizedException('La sesión fue cerrada. Inicia sesión de nuevo.');
+    const dosPasosPendiente = this.seguridad ? await this.seguridad.dosPasosPendiente(base, usuario) : false;
     const suscripcion = this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN'
       ? await this.prisma.control.empresa.findUnique({ where: { id: usuario.empresaId }, select: { suscripcionVenceEn: true, pagoExonerado: true } }) : usuario.empresa;
     if (this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN' && !suscripcion) throw new UnauthorizedException('Empresa no encontrada');
@@ -73,6 +74,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       distribuidoresHabilitado: usuario.empresa?.distribuidoresHabilitado,
       recaudoEfectivoHabilitado: usuario.empresa?.recaudoEfectivoHabilitado,
       sesionId: typeof payload.sid === 'string' ? payload.sid : undefined,
+      ...(dosPasosPendiente ? { dosPasosPendiente: true } : {}),
     };
   }
 }

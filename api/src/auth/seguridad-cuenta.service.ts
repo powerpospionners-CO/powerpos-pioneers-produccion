@@ -28,11 +28,17 @@ type Actor = { id: number; rol: string; empresaId: number | null; sucursalId: nu
 type Meta = { ip: string; agente: string };
 type DosPasos = { secreto: any; ultimoPaso: number; recuperacion: string[]; fallos: number; bloqueadoHasta: number };
 const OCHO_HORAS = 8 * 3600000;
+// Roles a los que la empresa puede exigir la verificación en dos pasos.
+export const ROLES_DOS_PASOS = ['ADMIN_EMPRESA', 'GERENTE'];
+const POLITICA = { usuarioId: 0, tipo: 'POLITICA', clave: 'exigir2fa' };
 
 @Injectable()
 export class SeguridadCuentaService {
   private readonly logger = new Logger(SeguridadCuentaService.name);
   private readonly preparadas = new WeakSet<object>();
+  // Caché corta por base: la estrategia JWT consulta la política en cada petición.
+  private pendientes = new WeakMap<object, Map<number, { valor: boolean; vence: number }>>();
+  private readonly fallosClave = new Map<number, { n: number; hasta: number }>();
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly notificaciones?: NotificacionesService,
@@ -77,6 +83,136 @@ export class SeguridadCuentaService {
     return !!(await this.registro(db, usuarioId, '2FA', 'activo'));
   }
 
+  async politicaActiva(db: any) {
+    return (await this.registro(db, POLITICA.usuarioId, POLITICA.tipo, POLITICA.clave))?.estado === 'ACTIVA';
+  }
+
+  // true si la empresa exige 2FA a este rol y el usuario todavía no la activó.
+  async dosPasosPendiente(db: any, usuario: { id: number; rol: string }) {
+    if (!ROLES_DOS_PASOS.includes(usuario.rol)) return false;
+    let porBase = this.pendientes.get(db);
+    if (!porBase) this.pendientes.set(db, (porBase = new Map()));
+    const guardado = porBase.get(usuario.id);
+    if (guardado && guardado.vence > Date.now()) return guardado.valor;
+    const valor = (await this.politicaActiva(db)) && !(await this.dosPasosActivo(db, usuario.id));
+    porBase.set(usuario.id, { valor, vence: Date.now() + 30000 });
+    return valor;
+  }
+
+  private olvidarPendientes() {
+    this.pendientes = new WeakMap();
+  }
+
+  // Todas las bases de la empresa: la política y los restablecimientos aplican en cada sede.
+  private async basesEmpresa(u: Actor): Promise<any[]> {
+    if (this.prisma.aislamientoActivo && u.rol !== 'SUPERADMIN') {
+      const sedes = await this.prisma.control.baseSede.findMany({
+        where: { empresaId: u.empresaId!, estado: 'ACTIVA' },
+        select: { empresaId: true, sucursalId: true },
+      });
+      return Promise.all(sedes.map(async (s: any) => (await this.prisma.contexto(s.empresaId, s.sucursalId)).cliente));
+    }
+    return [await this.base(u)];
+  }
+
+  // Confirma la identidad del administrador: contraseña y, si la tiene activa, su propio código.
+  private async confirmarAdministrador(db: any, u: Actor, password: unknown, codigo: unknown) {
+    const fallo = this.fallosClave.get(u.id);
+    if (fallo && fallo.hasta > Date.now() && fallo.n >= 5)
+      throw new HttpException('Demasiados intentos. Espera 15 minutos.', 429);
+    const usuario = await db.usuario.findUnique({ where: { id: u.id }, select: { password: true } });
+    if (!usuario || typeof password !== 'string' || !(await bcrypt.compare(password.slice(0, 500), usuario.password))) {
+      const previo = fallo && fallo.hasta > Date.now() ? fallo.n : 0;
+      this.fallosClave.set(u.id, { n: previo + 1, hasta: Date.now() + 900000 });
+      throw new ForbiddenException('La contraseña no coincide');
+    }
+    this.fallosClave.delete(u.id);
+    if ((await this.dosPasosActivo(db, u.id)) && !(await this.verificar(db, u.id, codigo)))
+      throw new ForbiddenException('El código de tu app no es válido');
+  }
+
+  // ---------- Política de la empresa y equipo ----------
+  async cambiarPolitica(u: Actor, exigir: unknown, password: unknown, codigo: unknown) {
+    if (u.rol !== 'ADMIN_EMPRESA' || !u.empresaId) throw new ForbiddenException('Solo el administrador de la empresa cambia esta política');
+    if (typeof exigir !== 'boolean') throw new BadRequestException('Indica si se exige la verificación');
+    const db = await this.base(u);
+    if (exigir && !(await this.dosPasosActivo(db, u.id)))
+      throw new BadRequestException('Activa primero tu propia verificación en dos pasos');
+    await this.confirmarAdministrador(db, u, password, codigo);
+    for (const b of await this.basesEmpresa(u)) {
+      await this.preparar(b);
+      const datos = { por: u.id, fecha: Date.now() };
+      if (exigir)
+        await b.seguridadRegistro.upsert({
+          where: { usuarioId_tipo_clave: POLITICA },
+          create: { id: randomUUID(), ...POLITICA, estado: 'ACTIVA', datos },
+          update: { estado: 'ACTIVA', datos },
+        });
+      else await b.seguridadRegistro.deleteMany({ where: POLITICA });
+    }
+    this.olvidarPendientes();
+    this.logger.log(`Empresa ${u.empresaId}: verificación en dos pasos ${exigir ? 'exigida' : 'opcional'} por el usuario ${u.id}`);
+    return { exigir };
+  }
+
+  async equipo(u: Actor) {
+    if (u.rol !== 'ADMIN_EMPRESA' || !u.empresaId) throw new ForbiddenException('No tienes permisos para esta operación');
+    const db = await this.base(u);
+    const usuarios = await db.usuario.findMany({
+      where: { empresaId: u.empresaId, activo: true, NOT: { rol: 'SUPERADMIN' } },
+      select: { id: true, nombre: true, email: true, rol: true },
+      orderBy: { nombre: 'asc' },
+      take: 500,
+    });
+    let activos = new Set<number>();
+    try {
+      const filas = await db.seguridadRegistro.findMany({
+        where: { tipo: '2FA', clave: 'activo', usuarioId: { in: usuarios.map((x: any) => x.id) } },
+        select: { usuarioId: true },
+      });
+      activos = new Set(filas.map((f: any) => f.usuarioId));
+    } catch (e) {
+      if (e?.code !== 'P2021') throw e;
+    }
+    return usuarios.map((x: any) => ({ ...x, dosPasos: activos.has(x.id), propio: x.id === u.id }));
+  }
+
+  // Para quien perdió el teléfono y los códigos: quita su 2FA y cierra sus sesiones en todas las sedes.
+  async restablecer(u: Actor, usuarioId: unknown, password: unknown, codigo: unknown) {
+    if (u.rol !== 'ADMIN_EMPRESA' || !u.empresaId) throw new ForbiddenException('Solo el administrador de la empresa puede restablecerla');
+    const id = Number(usuarioId);
+    if (!Number.isSafeInteger(id) || id < 1) throw new BadRequestException('Usuario no válido');
+    if (id === u.id) throw new BadRequestException('Para tu propia cuenta usa la opción Desactivar');
+    const db = await this.base(u);
+    const objetivo = await db.usuario.findFirst({
+      where: { id, empresaId: u.empresaId },
+      select: { id: true, nombre: true, email: true, rol: true },
+    });
+    if (!objetivo || objetivo.rol === 'SUPERADMIN') throw new NotFoundException('Usuario no encontrado');
+    await this.confirmarAdministrador(db, u, password, codigo);
+    let restablecida = false;
+    for (const b of await this.basesEmpresa(u)) {
+      // El acceso se resuelve por correo en cada sede, así que se busca igual.
+      const copia = b === db ? objetivo : await b.usuario.findFirst({ where: { email: objetivo.email, empresaId: u.empresaId }, select: { id: true, rol: true } });
+      if (!copia || copia.rol === 'SUPERADMIN') continue;
+      try {
+        await b.$transaction(async (tx: any) => {
+          const n = await tx.seguridadRegistro.deleteMany({ where: { usuarioId: copia.id, tipo: '2FA' } });
+          if (n?.count) restablecida = true;
+          await tx.seguridadRegistro.updateMany({ where: { usuarioId: copia.id, tipo: 'SESION', estado: 'ACTIVA' }, data: { estado: 'REVOCADA' } });
+        });
+      } catch (e) {
+        if (e?.code !== 'P2021') throw e;
+      }
+    }
+    if (!restablecida) throw new BadRequestException('Ese usuario no tiene activa la verificación en dos pasos');
+    this.olvidarPendientes();
+    this.logger.log(`Empresa ${u.empresaId}: el usuario ${u.id} restableció la verificación en dos pasos del usuario ${id}`);
+    if (this.notificaciones)
+      void this.notificaciones.enviarAvisoDosPasos(objetivo.email, objetivo.nombre, u.nombre || 'el administrador').catch(() => undefined);
+    return { ok: true };
+  }
+
   // ---------- Sesiones ----------
   async crearSesion(db: any, usuario: { id: number; email: string; nombre: string }, meta: Meta) {
     await this.preparar(db);
@@ -118,9 +254,12 @@ export class SeguridadCuentaService {
     } catch (e) {
       if (e?.code !== 'P2021') throw e;
     }
+    const politica = u.rol !== 'SUPERADMIN' && (await this.politicaActiva(db));
     return {
       dosPasos: await this.dosPasosActivo(db, u.id),
       dosPasosRecomendado: ['SUPERADMIN', 'ADMIN_EMPRESA', 'GERENTE'].includes(u.rol),
+      dosPasosObligatorio: politica && ROLES_DOS_PASOS.includes(u.rol),
+      ...(u.rol === 'ADMIN_EMPRESA' ? { politicaEmpresa: politica } : {}),
       sesiones: sesiones.map((s) => ({
         id: s.clave,
         actual: s.clave === u.sesionId,
@@ -175,6 +314,7 @@ export class SeguridadCuentaService {
       await tx.seguridadRegistro.deleteMany({ where: { usuarioId: u.id, tipo: '2FA' } });
       await tx.seguridadRegistro.create({ data: { id: randomUUID(), usuarioId: u.id, tipo: '2FA', clave: 'activo', estado: 'ACTIVO', datos } });
     });
+    this.olvidarPendientes();
     // Los códigos de recuperación solo se muestran esta vez.
     return { recuperacion };
   }
@@ -201,11 +341,14 @@ export class SeguridadCuentaService {
 
   async desactivar(u: Actor, password: unknown, codigo: unknown) {
     const db = await this.base(u);
+    if (ROLES_DOS_PASOS.includes(u.rol) && (await this.politicaActiva(db)))
+      throw new ForbiddenException('Tu empresa exige la verificación en dos pasos; no se puede desactivar');
     const usuario = await db.usuario.findUnique({ where: { id: u.id }, select: { password: true } });
     if (!usuario || typeof password !== 'string' || !(await bcrypt.compare(password.slice(0, 500), usuario.password)))
       throw new ForbiddenException('La contraseña no coincide');
     if (!(await this.verificar(db, u.id, codigo))) throw new ForbiddenException('El código no es válido');
     await db.seguridadRegistro.deleteMany({ where: { usuarioId: u.id, tipo: '2FA' } });
+    this.olvidarPendientes();
     this.logger.log(`Verificación en dos pasos desactivada para el usuario ${u.id}`);
     return { ok: true };
   }

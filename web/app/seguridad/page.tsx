@@ -1,14 +1,18 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
 import api from "@/lib/api";
 import AuthGuard from "@/components/AuthGuard";
 import Navbar from "@/components/Navbar";
 import { useNotificar } from "@/components/Notificaciones";
+import EquipoSeguridad from "./EquipoSeguridad";
 
 type Resumen = {
   dosPasos: boolean;
   dosPasosRecomendado: boolean;
+  dosPasosObligatorio?: boolean;
+  politicaEmpresa?: boolean;
   sesiones: { id: string; actual: boolean; dispositivo: string; ip: string; creadoEn: string }[];
 };
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
@@ -59,6 +63,11 @@ export default function Seguridad() {
               Protege el acceso con un segundo paso y revisa dónde está abierta tu sesión.
             </p>
           </div>
+          {resumen?.dosPasosObligatorio && !resumen.dosPasos && (
+            <p role="alert" className="rounded-xl border border-amber-600 bg-amber-950/50 p-4">
+              Tu empresa exige la verificación en dos pasos. Actívala aquí para seguir usando el panel.
+            </p>
+          )}
           {mensaje && <p role="status" className="rounded-xl bg-teal-900 p-4">{mensaje}</p>}
           {error && <p role="alert" className="rounded-xl bg-red-950 p-4">{error}</p>}
           {resumen && (
@@ -68,6 +77,9 @@ export default function Seguridad() {
                 {resumen.dosPasos ? (
                   <>
                     <p className="text-teal-300">Activa. Al iniciar sesión se pide un código de tu app de autenticación.</p>
+                    {resumen.dosPasosObligatorio ? (
+                      <p className="text-sm text-gray-400">Tu empresa la exige, así que no se puede desactivar.</p>
+                    ) : (
                     <form
                       className="space-y-3"
                       onSubmit={(e) => {
@@ -85,6 +97,7 @@ export default function Seguridad() {
                       <label className="block">Código<input required autoComplete="one-time-code" maxLength={11} className={input} value={desactivar.codigo} onChange={(e) => setDesactivar({ ...desactivar, codigo: e.target.value })} /></label>
                       <button className={boton} disabled={busy}>Desactivar</button>
                     </form>
+                    )}
                   </>
                 ) : configurando ? (
                   <form
@@ -145,10 +158,18 @@ export default function Seguridad() {
                     <ul className="grid grid-cols-2 gap-2 font-mono">
                       {recuperacion.map((c) => <li key={c}>{c}</li>)}
                     </ul>
-                    <button type="button" className={boton} onClick={() => setRecuperacion(null)}>Ya los guardé</button>
+                    <div className="flex flex-wrap gap-3">
+                      <button type="button" className={boton} onClick={() => setRecuperacion(null)}>Ya los guardé</button>
+                      {resumen.dosPasosObligatorio && (
+                        <Link href="/" className="rounded-lg bg-teal-700 px-4 py-2">Continuar al panel</Link>
+                      )}
+                    </div>
                   </div>
                 )}
               </section>
+              {resumen.politicaEmpresa !== undefined && (
+                <EquipoSeguridad politica={resumen.politicaEmpresa} dosPasosPropia={resumen.dosPasos} onCambio={cargar} />
+              )}
               <section className={card}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-xl font-bold">Sesiones abiertas</h2>
