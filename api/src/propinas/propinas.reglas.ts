@@ -44,11 +44,12 @@ export function leerPropina(valor: unknown, totalVenta: number): { monto: number
   return { monto, metodoPago: v.metodoPago };
 }
 
-// Partes iguales en pesos enteros; los pesos sobrantes van, uno a uno, a los primeros de la lista.
+// Partes iguales; conserva centavos cuando existen, sin perder dinero por redondeo.
 export function repartirIgual(total: number, personas: number) {
   if (personas < 1) return [];
-  const pesos = Math.round(total);
+  const unidad = Number.isInteger(total) ? 1 : 100;
+  const pesos = Math.round(total * unidad);
   const base = Math.floor(pesos / personas);
   const sobrante = pesos - base * personas;
-  return Array.from({ length: personas }, (_, i) => base + (i < sobrante ? 1 : 0));
+  return Array.from({ length: personas }, (_, i) => (base + (i < sobrante ? 1 : 0)) / unidad);
 }

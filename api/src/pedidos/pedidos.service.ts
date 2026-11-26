@@ -40,8 +40,14 @@ export class PedidosService {
       await this.propinas.preparar();
     }
     const pedido: any = await this.prisma.$transaction(async tx => {
+      const clave = datos?.claveIdempotencia ? String(datos.claveIdempotencia).slice(0, 100) : null;
+      const previo = clave ? await tx.pedido.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } }) : null;
       const creado: any = await this.crearEnTransaccion(datos, usuarioId, empresaId, tx);
-      if (propina) {
+      if (previo) {
+        // El reintento devuelve el importe original; nunca agrega o cambia una propina posterior.
+        const original = this.propinas ? await this.propinas.dePedido(empresaId, creado.id) : null;
+        if (original) creado.propina = original;
+      } else if (propina) {
         await this.propinas!.registrar(tx, creado, propina, empresaId, usuarioId);
         creado.propina = propina;
       }

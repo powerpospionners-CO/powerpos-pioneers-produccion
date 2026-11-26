@@ -138,6 +138,9 @@ export class PropinasService {
   async reporte(empresaId: number, desde: unknown, hasta: unknown) {
     const fecha = (v: unknown, fin: boolean) => {
       if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new BadRequestException('Fechas no válidas');
+      const calendario = new Date(`${v}T12:00:00Z`);
+      if (!Number.isFinite(calendario.getTime()) || calendario.toISOString().slice(0, 10) !== v)
+        throw new BadRequestException('Fechas no válidas');
       return new Date(`${v}T${fin ? '23:59:59.999' : '00:00:00.000'}-05:00`);
     };
     const inicio = fecha(desde, false), fin = fecha(hasta, true);

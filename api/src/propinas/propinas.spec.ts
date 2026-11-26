@@ -1,5 +1,6 @@
 import { leerPropina, normalizarConfig, propinaSugerida, repartirIgual, validarConfig } from './propinas.reglas';
 import { PropinasService } from './propinas.service';
+import { PedidosService } from '../pedidos/pedidos.service';
 import { CajaService } from '../caja/caja.service';
 
 // Tabla en memoria con la semántica mínima de propina_registros.
@@ -40,6 +41,7 @@ describe('Reglas de propinas', () => {
     expect(repartirIgual(10000, 3)).toEqual([3334, 3333, 3333]);
     expect(repartirIgual(10000, 3).reduce((a, b) => a + b, 0)).toBe(10000);
     expect(repartirIgual(500, 0)).toEqual([]);
+    expect(repartirIgual(100.01, 3)).toEqual([33.34, 33.34, 33.33]);
   });
 });
 
@@ -107,5 +109,38 @@ describe('Cierre de caja con propinas', () => {
     expect(r).toMatchObject({ montoEsperado: 320, diferencia: 0, propinas: { total: 70, efectivo: 20 } });
     expect(r.propinas.reparto).toEqual([{ usuarioId: 3, nombre: 'Cajero', monto: 70 }]);
     expect(impresion.imprimirCierreCaja.mock.calls[0][0].propinas.total).toBe(70);
+  });
+});
+
+
+describe('Integridad de propinas', () => {
+  it('no cierra caja omitiendo propinas si el registro no puede prepararse', async () => {
+    const db: any = { caja: { findUnique: jest.fn().mockResolvedValue({ sucursalId: 2, sucursal: { empresaId: 4 } }) }, $transaction: jest.fn() };
+    const p: any = { preparar: jest.fn().mockRejectedValue(new Error('base no disponible')) };
+    const s = new CajaService(db, {} as any, {} as any, p);
+    await expect(s.cerrarCaja(1, { montoFinal: 0 }, 3, false, 4)).rejects.toThrow('conservar el efectivo');
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+  it('rechaza fechas inexistentes antes de consultar el reporte', async () => {
+    const s = new PropinasService({} as any);
+    await expect(s.reporte(4, '2026-02-30', '2026-03-01')).rejects.toThrow('Fechas');
+    await expect(s.reporte(4, '2026-99-01', '2026-99-02')).rejects.toThrow('Fechas');
+  });
+});
+
+
+describe('Reintentos de venta con propina', () => {
+  it('conserva la propina original e impide agregar una después de registrar la venta', async () => {
+    const db: any = { pedido: { findUnique: jest.fn().mockResolvedValue({ id: 10 }) } };
+    db.$transaction = async (fn: any) => fn(db);
+    const propinas: any = { preparar: jest.fn(), registrar: jest.fn(), dePedido: jest.fn().mockResolvedValue({ monto: 500, metodoPago: 'EFECTIVO' }) };
+    const s = new PedidosService(db, { emitir: jest.fn() } as any, { enviarAlerta: jest.fn().mockResolvedValue({}) } as any, propinas);
+    jest.spyOn(s, 'crearEnTransaccion').mockImplementation(async () => ({ id: 10, total: 10000, sucursalId: 2, numero: 'V1' }) as any);
+    const datos = { claveIdempotencia: 'venta-original', propina: { monto: 900, metodoPago: 'TARJETA' } };
+    expect((await s.crearPedido(datos, 3, 4)).propina).toEqual({ monto: 500, metodoPago: 'EFECTIVO' });
+    expect(propinas.registrar).not.toHaveBeenCalled();
+    propinas.dePedido.mockResolvedValue(null);
+    expect((await s.crearPedido(datos, 3, 4)).propina).toBeUndefined();
+    expect(propinas.registrar).not.toHaveBeenCalled();
   });
 });

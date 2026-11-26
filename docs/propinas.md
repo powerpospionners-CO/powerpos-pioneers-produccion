@@ -18,7 +18,7 @@ En **Configuración → Propinas**, el administrador o el gerente de un restaura
 
 - Las propinas de ventas anuladas no cuentan.
 - Las propinas en efectivo se suman a lo que debe haber en la gaveta: en el esperado del cierre, en la corrección del conteo y en la corrección del retiro de recaudo. El retiro de recaudo sigue limitado a las ventas en efectivo, porque las propinas son del personal.
-- Al cerrar, el cajero marca entre quiénes se reparte. Por defecto aparecen quienes registraron ventas en el turno y el cajero. El reparto es en partes iguales, en pesos enteros; los pesos sobrantes van uno a uno a los primeros de la lista.
+- Al cerrar, el cajero marca entre quiénes se reparte. Por defecto aparecen quienes registraron ventas en el turno y el cajero. El reparto es en partes iguales, en pesos enteros cuando el total no contiene centavos; si los contiene, se conservan y se distribuyen sin perder dinero. Los sobrantes van uno a uno a los primeros de la lista.
 - En el cierre automático por horario se reparte entre esas mismas personas.
 - El reparto queda fijo con el cierre: anular una venta después no lo recalcula.
 - La colilla de cierre muestra las propinas, cuánto fue en efectivo y el reparto.
@@ -36,3 +36,5 @@ Tabla aditiva `propina_registros`, que se crea en la base de la sede solo desde 
 - `CONFIG`: la configuración.
 
 Los respaldos la tratan como opcional.
+
+Un reintento de venta devuelve la propina original y no permite agregarla o cambiarla después. Si no se puede preparar el registro de propinas, el cierre se detiene para evitar diferencias de efectivo por omisión.

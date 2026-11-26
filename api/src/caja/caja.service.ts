@@ -46,7 +46,7 @@ export class CajaService {
       return true;
     } catch (e) {
       this.logger.warn(`No se pudo preparar el registro de propinas: ${e}`);
-      return false;
+      throw new BadRequestException('No se pudo consultar el registro de propinas. Reintenta el cierre para conservar el efectivo correcto.');
     }
   }
 
