@@ -21,7 +21,9 @@ type Caja = {
   totalEsperado?: number;
   recaudoEfectivoHabilitado?: boolean;
   baseEfectivoCaja?: number | null;
+  propinas?: { total: number; efectivo: number; cantidad: number; porMetodo: { metodo: string; total: number }[]; sugeridos?: number[] };
 };
+type Persona = { id: number; nombre: string; rol: string; activo: boolean };
 
 export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }: {
   caja: Caja | null;
@@ -51,6 +53,17 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
   const [modalCierre, setModalCierre] = useState(false);
   const [montoFinal, setMontoFinal] = useState(0);
   const [confirmoCero, setConfirmoCero] = useState(false);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [reparto, setReparto] = useState<number[]>([]);
+  const propinas = caja?.propinas;
+  const hayPropinas = Number(propinas?.total || 0) > 0;
+  const abrirCierre = () => {
+    if (!caja) return;
+    setMontoFinal(0); setMontoRetirado(String(caja.totalEfectivo || 0)); setConfirmoCero(false); setError(''); setModalCierre(true);
+    setReparto(caja.propinas?.sugeridos?.length ? caja.propinas.sugeridos : [caja.usuarioId]);
+    if (Number(caja.propinas?.total || 0) > 0)
+      api.get('/usuarios').then(({ data }) => setPersonas((data as Persona[]).filter((u) => u.activo && u.rol !== 'DISTRIBUIDOR'))).catch(() => setPersonas([]));
+  };
 
   useEffect(() => {
     api.get('/caja/recaudo/configuracion')
@@ -66,7 +79,7 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
     : !!configRecaudo?.habilitado && configRecaudo.baseEfectivoCaja !== null;
   const baseFija = caja?.baseEfectivoCaja ?? configRecaudo?.baseEfectivoCaja ?? null;
   const montoEsperadoDespuesRetiro = recaudoActivo && caja
-    ? Number(caja.montoInicial) + Number(caja.totalEfectivo || 0) - Number(montoRetirado || 0)
+    ? Number(caja.montoInicial) + Number(caja.totalEfectivo || 0) + Number(caja.propinas?.efectivo || 0) - Number(montoRetirado || 0)
     : Number(caja?.totalEsperado || 0);
 
   const abrir = async () => {
@@ -92,6 +105,7 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
       const cierre = await guardarCierreCaja(caja.id, {
         montoFinal,
         ...(recaudoActivo ? { montoRetirado: Number(montoRetirado) } : {}),
+        ...(hayPropinas ? { propinaParticipantes: reparto } : {}),
       });
       setModalCierre(false);
       onCambio();
@@ -133,7 +147,7 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
     <>
       <div className="pos-caja-abierta border-b border-green-500/20 bg-green-500/5 px-4 py-2 text-center text-sm text-green-300">
         <Unlock size={13} className="mr-1 inline" /> Caja abierta · {caja.usuario?.nombre || 'cajero'} · base {moneda(Number(caja.montoInicial))}
-        <button type="button" onClick={() => { setMontoFinal(0); setMontoRetirado(String(caja.totalEfectivo || 0)); setConfirmoCero(false); setError(''); setModalCierre(true); }} className="pos-caja-cerrar ml-3 rounded-lg border border-green-500/30 px-3 py-1 text-xs font-semibold text-green-200 hover:bg-green-500/10">
+        <button type="button" onClick={abrirCierre} className="pos-caja-cerrar ml-3 rounded-lg border border-green-500/30 px-3 py-1 text-xs font-semibold text-green-200 hover:bg-green-500/10">
           Cerrar caja
         </button>
         <RegistroAperturaLlave cajaId={caja.id} />
@@ -156,7 +170,25 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
                 <p className="mb-3 text-sm text-gray-400">Cobros netos en efectivo: {moneda(caja.totalEfectivo || 0)} · Debe quedar en caja: <strong className="text-white">{moneda(Math.max(0, montoEsperadoDespuesRetiro))}</strong></p>
               </>
             ) : (
-              <p className="mb-3 text-sm text-gray-400">Cuenta el efectivo que hay físicamente en la caja. Se espera <strong className="text-white">{moneda(caja.totalEsperado || 0)}</strong> en efectivo (base + cobros − reembolsos en efectivo del turno).</p>
+              <p className="mb-3 text-sm text-gray-400">Cuenta el efectivo que hay físicamente en la caja. Se espera <strong className="text-white">{moneda(caja.totalEsperado || 0)}</strong> en efectivo (base + cobros{hayPropinas ? ' + propinas en efectivo' : ''} − reembolsos en efectivo del turno).</p>
+            )}
+            {hayPropinas && (
+              <section aria-label="Propinas del turno" className="mb-3 space-y-2 rounded-lg border border-teal-600/40 bg-teal-950/20 p-3 text-sm text-gray-300">
+                <p>
+                  Propinas del turno: <strong className="text-white">{moneda(propinas!.total)}</strong>
+                  {Number(propinas!.efectivo) > 0 && <> · en efectivo {moneda(propinas!.efectivo)} (ya incluidas en lo que debe haber en caja)</>}
+                </p>
+                <p className="text-gray-400">Se reparten en partes iguales entre quienes marques:</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {(personas.length ? personas : [{ id: caja.usuarioId, nombre: caja.usuario?.nombre || 'Cajero', rol: '', activo: true }]).map((p) => (
+                    <label key={p.id} className="flex items-center gap-2">
+                      <input type="checkbox" checked={reparto.includes(p.id)} onChange={(e) => setReparto((r) => (e.target.checked ? [...r, p.id] : r.filter((x) => x !== p.id)))} />
+                      {p.nombre}
+                    </label>
+                  ))}
+                </div>
+                {reparto.length > 0 && <p className="text-teal-200">A cada uno: {moneda(Math.floor(Number(propinas!.total) / reparto.length))}</p>}
+              </section>
             )}
             <CalculadoraBilletes objetivo={Math.max(0, montoEsperadoDespuesRetiro)} onCambiar={(v) => { setMontoFinal(v); if (v !== 0) setConfirmoCero(false); }} />
             {montoFinal === 0 && (
@@ -168,7 +200,7 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
             {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
             <div className="mt-5 flex gap-3">
               <button type="button" onClick={() => setModalCierre(false)} className="flex-1 rounded-lg bg-gray-800 py-3 text-white hover:bg-gray-700">Cancelar</button>
-              <button type="button" onClick={cerrar} disabled={ocupado || (montoFinal === 0 && !confirmoCero) || (recaudoActivo && (montoRetirado === '' || Number(montoRetirado) < 0 || Number(montoRetirado) > Number(caja.totalEfectivo || 0)))} className="flex-1 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">
+              <button type="button" onClick={cerrar} disabled={ocupado || (hayPropinas && !reparto.length) || (montoFinal === 0 && !confirmoCero) || (recaudoActivo && (montoRetirado === '' || Number(montoRetirado) < 0 || Number(montoRetirado) > Number(caja.totalEfectivo || 0)))} className="flex-1 rounded-lg bg-orange-500 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-50">
                 {ocupado ? 'Cerrando…' : 'Confirmar cierre'}
               </button>
             </div>

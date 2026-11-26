@@ -6,7 +6,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
+import { PropinasService } from '../propinas/propinas.service';
+import { leerPropina } from '../propinas/propinas.reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { PedidosEventosService } from './pedidos-eventos.service';
@@ -25,10 +28,25 @@ export class PedidosService {
     private prisma: PrismaService,
     private readonly eventos: PedidosEventosService,
     private readonly notificaciones: NotificacionesService,
+    @Optional() private readonly propinas?: PropinasService,
   ) {}
 
   async crearPedido(datos: any, usuarioId: number, empresaId: number) {
-    const pedido = await this.prisma.$transaction(tx => this.crearEnTransaccion(datos, usuarioId, empresaId, tx), { timeout: 15000 });
+    // La propina viaja con la venta para que un reintento sin conexión no la pierda ni la duplique.
+    const propina = leerPropina(datos?.propina, Number.MAX_SAFE_INTEGER);
+    if (propina) {
+      if (!this.propinas) throw new BadRequestException('Las propinas no están disponibles');
+      if (datos?.condicionPago === 'CREDITO') throw new BadRequestException('Una venta a crédito no admite propina');
+      await this.propinas.preparar();
+    }
+    const pedido: any = await this.prisma.$transaction(async tx => {
+      const creado: any = await this.crearEnTransaccion(datos, usuarioId, empresaId, tx);
+      if (propina) {
+        await this.propinas!.registrar(tx, creado, propina, empresaId, usuarioId);
+        creado.propina = propina;
+      }
+      return creado;
+    }, { timeout: 15000 });
     await this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
     // La venta ya fue confirmada: una falla de un canal externo no debe inducir a repetirla.
     void this.notificaciones.enviarAlerta({ tipo: 'VENTA REGISTRADA', mensaje: `Venta ${pedido.numero}. Total: $${Number(pedido.total).toLocaleString('es-CO')}`, empresa: 'PowerPOS', sucursal: String(pedido.sucursalId), empresaId }).catch(() => undefined);
@@ -602,6 +620,8 @@ export class PedidosService {
       },
     });
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
+    const propina = this.propinas && pedido.cajaId ? await this.propinas.dePedido(empresaId, pedido.id) : null;
+    if (propina) (pedido as any).propina = propina;
     return pedido.metodoPago === 'CREDITO' ? { ...pedido, abonosCredito: pedido.operacionesCaja.filter(o=>o.tipo==='COBRO_CREDITO').map(o=>({metodoPago:o.metodoPago,monto:Number(o.monto)})) } : pedido;
   }
 

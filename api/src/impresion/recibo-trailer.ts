@@ -51,6 +51,8 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
   linea('-'.repeat(ancho));
   if (Number(pedido.descuento) > 0) { monto('Subtotal', pedido.subtotal); monto('Descuento', -Number(pedido.descuento)); }
   alto(true); negrita(true); monto('TOTAL A PAGAR', pedido.total); negrita(false); alto(false);
+  const propina = Number(pedido.propina?.monto || 0);
+  if (propina > 0) { monto('Propina voluntaria', propina); negrita(true); monto('TOTAL CON PROPINA', Number(pedido.total) + propina); negrita(false); }
   linea('-'.repeat(ancho));
   if (pedido.metodoPago === 'CREDITO') {
     linea('A CREDITO - PENDIENTE DE COBRO');
@@ -62,7 +64,8 @@ export function reciboTrailer(pedido: any, empresa: any, logo: Buffer = Buffer.a
     if (pagos.length) for (const p of pagos) monto(texto(p.metodoPago), p.monto);
     else if (pedido.metodoPago) linea('Pago: ' + texto(pedido.metodoPago));
     const efectivo = pagos.length ? pagos.filter((p: any) => p.metodoPago === 'EFECTIVO').reduce((s: number, p: any) => s + Number(p.monto), 0) : pedido.metodoPago === 'EFECTIVO' ? Number(pedido.total) : 0;
-    if (efectivo > 0) { monto('Efectivo recibido', efectivo + Number(pedido.cambio || 0)); monto('Cambio', pedido.cambio || 0); }
+    const propinaEfectivo = pedido.propina?.metodoPago === 'EFECTIVO' ? propina : 0;
+    if (efectivo > 0) { monto('Efectivo recibido', efectivo + propinaEfectivo + Number(pedido.cambio || 0)); monto('Cambio', pedido.cambio || 0); }
   }
   if (pedido.observacion) { linea('-'.repeat(ancho)); envolver('Nota: ' + pedido.observacion).forEach(linea); }
   linea('='.repeat(ancho));

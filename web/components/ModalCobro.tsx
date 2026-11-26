@@ -22,13 +22,19 @@ function MarcaPago({ metodo, grande = false }: { metodo: string; grande?: boolea
   </span>;
 }
 
-export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number; condicionPago?: "CREDITO"; vencimientoCredito?: string; motivo?: string };
+export type PagoConfirmado = { metodoPago: string; pagos: { metodoPago: string; monto: number }[]; cambio: number; condicionPago?: "CREDITO"; vencimientoCredito?: string; motivo?: string; propina?: { monto: number; metodoPago: string } };
+
+// Propina sugerida en pesos enteros (misma regla que el API).
+export const montoPropina = (base: number, porcentaje: number) => Math.max(0, Math.round((base * porcentaje) / 100));
 
 export type BorradorCobro = { credito: boolean; abonoInicial?: boolean; vencimiento: string; mixto: boolean; metodoUnico: string; recibidoUnico: number; bancoTransferencia: string; lineas: { metodoPago: string; monto: string }[]; recibidosMixto: Record<number, number> };
 
 type Linea = { metodoPago: string; monto: string };
 
-export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion, borradorInicial, onBorradorChange, responsable = 'cliente', edicionPago = false, cajaCerrada = false }: {
+export default function ModalCobro({ total, procesando, onConfirmar, onCancelar, titulo = 'Cobrar venta', textoConfirmar = 'Confirmar cobro', textoCancelar = 'Cancelar', metodoInicial = 'EFECTIVO', pagosIniciales, permitirCredito = false, opcionesImpresion, borradorInicial, onBorradorChange, responsable = 'cliente', edicionPago = false, cajaCerrada = false, propina: configPropina = null, basePropina }: {
+  // Porcentaje sugerido de propina voluntaria; null = la empresa no usa propinas.
+  propina?: { porcentaje: number } | null;
+  basePropina?: number;
   edicionPago?: boolean;
   cajaCerrada?: boolean;
   responsable?: 'cliente' | 'distribuidor';
@@ -62,11 +68,22 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
   );
   const [recibidosMixto, setRecibidosMixto] = useState<Record<number, number>>(borradorInicial?.recibidosMixto ?? {});
   const [motivo, setMotivo] = useState('');
+  // La propina es voluntaria: el cajero debe preguntar y marcar la respuesta del cliente.
+  const [eleccionPropina, setEleccionPropina] = useState<'' | 'NO' | 'SUGERIDA' | 'OTRA'>('');
+  const [otraPropina, setOtraPropina] = useState('');
+  const [metodoPropina, setMetodoPropina] = useState('');
 
   useEffect(() => {
     onBorradorChange?.({ credito, abonoInicial, vencimiento, mixto, metodoUnico, recibidoUnico, bancoTransferencia, lineas, recibidosMixto });
   }, [credito, abonoInicial, vencimiento, mixto, metodoUnico, recibidoUnico, bancoTransferencia, lineas, recibidosMixto, onBorradorChange]);
 
+  const usaPropina = !!configPropina && !edicionPago && !credito;
+  const sugerida = configPropina ? montoPropina(basePropina ?? total, configPropina.porcentaje) : 0;
+  const valorPropina = !usaPropina ? 0 : eleccionPropina === 'SUGERIDA' ? sugerida : eleccionPropina === 'OTRA' ? Math.max(0, Math.round(Number(otraPropina) || 0)) : 0;
+  const medioPropina = metodoPropina || (mixto ? 'EFECTIVO' : metodoUnico);
+  const propinaEfectivo = valorPropina > 0 && medioPropina === 'EFECTIVO' ? valorPropina : 0;
+  const propinaValida = !usaPropina || (eleccionPropina !== '' && (eleccionPropina !== 'OTRA' || (valorPropina > 0 && valorPropina <= total)));
+  const datosPropina = valorPropina > 0 ? { propina: { monto: valorPropina, metodoPago: medioPropina } } : {};
   const sumaLineas = lineas.reduce((acc, l) => acc + (Number(l.monto) || 0), 0);
   const resta = Math.round((total - sumaLineas) * 100) / 100;
 
@@ -90,6 +107,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
 
   const puedeConfirmar = useMemo(() => {
     if (procesando) return false;
+    if (!propinaValida) return false;
     if (edicionPago && cajaCerrada && motivo.trim().length < 5) return false;
     if (credito) {
       if (!permitirCredito || total <= 0 || vencimiento < hoy) return false;
@@ -97,27 +115,27 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
       return sumaLineas > 0 && resta > 0 && lineas.every(l=>Number.isFinite(Number(l.monto)) && Number(l.monto)>0) && (indiceEfectivoMixto<0 || recibidoMixtoEfectivo>=montoEfectivoMixto);
     }
     if (!mixto) {
-      if (metodoUnico === 'EFECTIVO') return edicionPago || recibidoUnico >= total;
+      if (metodoUnico === 'EFECTIVO') return edicionPago || recibidoUnico >= total + propinaEfectivo;
       return true;
     }
     if (Math.abs(resta) > 0.01) return false;
     if (lineas.some((l) => !Number(l.monto) || Number(l.monto) <= 0)) return false;
-    if (!edicionPago && indiceEfectivoMixto >= 0 && recibidoMixtoEfectivo < montoEfectivoMixto) return false;
+    if (!edicionPago && indiceEfectivoMixto >= 0 && recibidoMixtoEfectivo < montoEfectivoMixto + propinaEfectivo) return false;
     return true;
-  }, [credito, abonoInicial, sumaLineas, permitirCredito, vencimiento, hoy, procesando, mixto, metodoUnico, recibidoUnico, total, resta, lineas, indiceEfectivoMixto, recibidoMixtoEfectivo, montoEfectivoMixto, edicionPago, cajaCerrada, motivo]);
+  }, [propinaValida, propinaEfectivo, credito, abonoInicial, sumaLineas, permitirCredito, vencimiento, hoy, procesando, mixto, metodoUnico, recibidoUnico, total, resta, lineas, indiceEfectivoMixto, recibidoMixtoEfectivo, montoEfectivoMixto, edicionPago, cajaCerrada, motivo]);
 
   const confirmar = () => {
     if (!puedeConfirmar) return;
     if (credito) { onConfirmar({ metodoPago: 'CREDITO', pagos: abonoInicial ? lineas.map(l=>({metodoPago:l.metodoPago,monto:Math.round(Number(l.monto)*100)/100})) : [], cambio: abonoInicial && indiceEfectivoMixto>=0 ? Math.max(0,recibidoMixtoEfectivo-montoEfectivoMixto) : 0, condicionPago: 'CREDITO', vencimientoCredito: vencimiento }); return; }
     if (!mixto) {
-      const cambio = !edicionPago && metodoUnico === 'EFECTIVO' ? Math.max(0, recibidoUnico - total) : 0;
-      onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }], cambio, ...(edicionPago ? { motivo: motivo.trim() } : {}) });
+      const cambio = !edicionPago && metodoUnico === 'EFECTIVO' ? Math.max(0, recibidoUnico - total - propinaEfectivo) : 0;
+      onConfirmar({ metodoPago: metodoUnico, pagos: [{ metodoPago: metodoUnico, monto: total }], cambio, ...datosPropina, ...(edicionPago ? { motivo: motivo.trim() } : {}) });
       return;
     }
     const pagos = lineas.map((l) => ({ metodoPago: l.metodoPago, monto: Math.round((Number(l.monto) || 0) * 100) / 100 }));
     const metodoPago = pagos.length > 1 ? 'MIXTO' : pagos[0].metodoPago;
-    const cambio = !edicionPago && indiceEfectivoMixto >= 0 ? Math.max(0, recibidoMixtoEfectivo - montoEfectivoMixto) : 0;
-    onConfirmar({ metodoPago, pagos, cambio, ...(edicionPago ? { motivo: motivo.trim() } : {}) });
+    const cambio = !edicionPago && indiceEfectivoMixto >= 0 ? Math.max(0, recibidoMixtoEfectivo - montoEfectivoMixto - propinaEfectivo) : 0;
+    onConfirmar({ metodoPago, pagos, cambio, ...datosPropina, ...(edicionPago ? { motivo: motivo.trim() } : {}) });
   };
 
   return (
@@ -141,6 +159,32 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
           </label>
         </section>}
         {opcionesImpresion && <div className="mb-4">{opcionesImpresion}</div>}
+        {usaPropina && (
+          <section aria-label="Propina voluntaria" className="mb-4 space-y-3 rounded-xl border border-teal-600/40 bg-teal-950/20 p-3">
+            <p className="text-sm font-semibold text-teal-200">Pregúntale al cliente si desea incluir la propina voluntaria</p>
+            <div role="group" aria-label="Respuesta del cliente" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {([['NO', 'Sin propina'], ['SUGERIDA', `Sí, ${configPropina!.porcentaje} % (${moneda(sugerida)})`], ['OTRA', 'Otro valor']] as const).map(([v, t]) => (
+                <button key={v} type="button" disabled={procesando || (v === 'SUGERIDA' && sugerida <= 0)} aria-pressed={eleccionPropina === v} onClick={() => setEleccionPropina(v)}
+                  className={`min-h-12 rounded-lg border px-3 py-2 text-sm font-semibold ${eleccionPropina === v ? 'border-teal-400 bg-teal-500/15 text-teal-200' : 'border-gray-700 bg-gray-800 text-gray-200'} disabled:opacity-40`}>{t}</button>
+              ))}
+            </div>
+            {eleccionPropina === 'OTRA' && (
+              <label className="block text-sm text-gray-300">Valor de la propina
+                <input aria-label="Valor de la propina" type="number" min={0} step={100} disabled={procesando} value={otraPropina} onChange={(e) => setOtraPropina(e.target.value)} className="mt-1 w-40 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-white" />
+              </label>
+            )}
+            {valorPropina > 0 && (
+              <div className="flex flex-wrap items-center gap-3 text-sm text-gray-300">
+                <label>Pagada con
+                  <select aria-label="Medio de pago de la propina" disabled={procesando} value={medioPropina} onChange={(e) => setMetodoPropina(e.target.value)} className="ml-2 rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-white">
+                    {METODOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </label>
+                <span className="font-semibold text-white">Total con propina: {moneda(total + valorPropina)}</span>
+              </div>
+            )}
+          </section>
+        )}
         <div hidden={credito && !abonoInicial}>
         <button
           type="button"
@@ -168,7 +212,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
             </div>
             <div className="min-w-0">
               {edicionPago ? <p className="rounded-xl border border-gray-700 p-5 text-gray-300">Se registrará el medio correcto para esta venta, sin movimiento de dinero en la caja actual.</p> : metodoUnico === 'EFECTIVO' ? (
-                <MontoRecibido key="unico" inicial={recibidoUnico} objetivo={total} onCambiar={setRecibidoUnico} />
+                <MontoRecibido key="unico" inicial={recibidoUnico} objetivo={total + propinaEfectivo} onCambiar={setRecibidoUnico} />
               ) : (
                 <div className="flex min-h-96 flex-col items-center justify-center rounded-2xl border border-gray-700 bg-gray-950 p-5 text-center sm:p-8">
                   <MarcaPago metodo={metodoUnico === 'TRANSFERENCIA' ? bancoTransferencia : metodoUnico} grande />
@@ -230,7 +274,7 @@ export default function ModalCobro({ total, procesando, onConfirmar, onCancelar,
             {!credito && resta>0 && permitirCredito && <button type="button" disabled={procesando} onClick={()=>{setCredito(true);setAbonoInicial(true);}} className="w-full rounded-lg border border-amber-500/50 p-3 font-semibold text-amber-200">Dejar los {moneda(resta)} restantes a crédito</button>}
             {!credito && resta>0 && !permitirCredito && <p className="text-sm text-amber-200">Para dejar un saldo a crédito, vuelve a productos y selecciona el cliente.</p>}
             {!edicionPago && indiceEfectivoMixto >= 0 && (
-              <MontoRecibido key={`mixto-${indiceEfectivoMixto}`} inicial={recibidoMixtoEfectivo} objetivo={montoEfectivoMixto} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
+              <MontoRecibido key={`mixto-${indiceEfectivoMixto}`} inicial={recibidoMixtoEfectivo} objetivo={montoEfectivoMixto + propinaEfectivo} onCambiar={(v) => setRecibidosMixto((prev) => ({ ...prev, [indiceEfectivoMixto]: v }))} />
             )}
           </div>
         )}

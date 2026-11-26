@@ -56,6 +56,26 @@ model TiendaRegistro {
 }
 
 // Segundo paso de acceso y sesiones del panel; tabla aditiva creada en la base del usuario.
+model PropinaRegistro {
+  id String @id @db.VarChar(36)
+  empresaId Int
+  sucursalId Int
+  tipo String @db.VarChar(16)
+  clave String @db.VarChar(64)
+  cajaId Int?
+  pedidoId Int?
+  usuarioId Int
+  metodoPago String? @db.VarChar(16)
+  monto Decimal @default(0) @db.Decimal(12, 2)
+  estado String @db.VarChar(16)
+  datos Json
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  @@unique([empresaId, tipo, clave])
+  @@index([empresaId, cajaId])
+  @@index([empresaId, tipo, creadoEn])
+  @@map("propina_registros")
+}
 model SeguridadRegistro {
   id String @id @db.VarChar(36)
   usuarioId Int

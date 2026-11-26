@@ -8,7 +8,7 @@ function mensajeError(error: unknown) {
   return 'No se pudo comunicar el cierre al servidor. El conteo se conserva en pantalla.';
 }
 
-export async function guardarCierreCaja(id: number, datos: { montoFinal: number; montoRetirado?: number }) {
+export async function guardarCierreCaja(id: number, datos: { montoFinal: number; montoRetirado?: number; propinaParticipantes?: number[] }) {
   const impresionLocal = typeof window !== 'undefined' && !!window.powerposDesktop;
   try {
     // El cierre usa la conexión normal del POS. El puente solo se utiliza
