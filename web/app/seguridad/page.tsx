@@ -159,6 +159,24 @@ export default function Seguridad() {
                       {recuperacion.map((c) => <li key={c}>{c}</li>)}
                     </ul>
                     <div className="flex flex-wrap gap-3">
+                      <button type="button" className={boton} onClick={() => {
+                        const texto = [
+                          "PowerPOS - Códigos de recuperación",
+                          "Cada código sirve una sola vez para acceder si pierdes tu teléfono.",
+                          "Guarda este archivo en un lugar privado. No compartas estos códigos.",
+                          "",
+                          ...recuperacion,
+                          "",
+                        ].join("\r\n");
+                        const url = URL.createObjectURL(new Blob([texto], { type: "text/plain;charset=utf-8" }));
+                        const enlace = document.createElement("a");
+                        enlace.href = url;
+                        enlace.download = "PowerPOS-codigos-recuperacion.txt";
+                        document.body.appendChild(enlace);
+                        enlace.click();
+                        enlace.remove();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                      }}>Descargar códigos (.txt)</button>
                       <button type="button" className={boton} onClick={() => setRecuperacion(null)}>Ya los guardé</button>
                       {resumen.dosPasosObligatorio && (
                         <Link href="/" className="rounded-lg bg-teal-700 px-4 py-2">Continuar al panel</Link>
