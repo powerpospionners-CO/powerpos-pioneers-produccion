@@ -40,24 +40,44 @@ export default function LoginPage() {
   const [sucursalElegida, setSucursalElegida] = useState('');
   const [tecladoVisible, setTecladoVisible] = useState(false);
   const [campoActivo, setCampoActivo] = useState<'email' | 'password'>('email');
+  // Segundo paso: el desafío vence en 5 minutos y no sirve como sesión.
+  const [desafio, setDesafio] = useState('');
+  const [codigo, setCodigo] = useState('');
 
-  useEffect(() => { setSedes([]); setSucursalElegida(''); }, [email, password]);
+  useEffect(() => { setSedes([]); setSucursalElegida(''); setDesafio(''); setCodigo(''); }, [email, password]);
+
+  const entrar = (data: any) => {
+    const usuario = data.usuario;
+    // La sesión funciona en el portal actual. El slug de la tienda no
+    // acredita que exista un dominio, DNS ni certificado para esa empresa.
+    setAuth(data.access_token, usuario);
+    router.push(rutaPorRol(usuario.rol));
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
+      if (desafio) {
+        const { data } = await api.post('/auth/login/2fa', { desafio, codigo: codigo.trim().toUpperCase() });
+        entrar(data);
+        return;
+      }
       const { data } = await api.post('/auth/login', { email, password, ...(sucursalElegida ? { sucursalId:Number(sucursalElegida) } : {}) });
-      const usuario = data.usuario;
-      const destino = rutaPorRol(usuario.rol);
-
-      // La sesión funciona en el portal actual. El slug de la tienda no
-      // acredita que exista un dominio, DNS ni certificado para esa empresa.
-      setAuth(data.access_token, usuario);
-      router.push(destino);
+      if (data.requiere2fa) {
+        setDesafio(data.desafio);
+        setCodigo('');
+        return;
+      }
+      entrar(data);
     } catch (e: any) {
-      if (e?.response?.data?.error==='SEDE_REQUERIDA') { setSedes(e.response.data.sedes); setError('Selecciona la sede con la que vas a trabajar.'); }
+      if (desafio) {
+        if (e?.response?.status === 429) setError('Demasiados códigos incorrectos. Espera 15 minutos.');
+        else if (/venció/.test(e?.response?.data?.message || '')) { setDesafio(''); setError('El código venció. Ingresa tu contraseña de nuevo.'); }
+        else setError('Código incorrecto. Revisa la app de autenticación o usa un código de recuperación.');
+      }
+      else if (e?.response?.data?.error==='SEDE_REQUERIDA') { setSedes(e.response.data.sedes); setError('Selecciona la sede con la que vas a trabajar.'); }
       else if (e?.response?.data?.error==='SUBSCRIPTION_EXPIRED') setError('La suscripción venció y terminaron los cinco días de plazo. Renueva el pago o contacta a PowerPOS para recuperar el acceso.');
       else setError(e?.response?.status===503 ? 'No se pudo consultar la sede. Intenta nuevamente.' : 'Credenciales inválidas. Verifica tu email y contraseña.');
     } finally {
@@ -191,13 +211,31 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {desafio && (
+                <div>
+                  <label htmlFor="codigo-2fa" className={`block text-sm font-medium mb-1.5 ${claro ? 'text-gray-700' : 'text-gray-400'}`}>Código de verificación</label>
+                  <input
+                    id="codigo-2fa"
+                    autoFocus
+                    inputMode="text"
+                    autoComplete="one-time-code"
+                    maxLength={11}
+                    value={codigo}
+                    onChange={(e) => setCodigo(e.target.value)}
+                    className={`w-full rounded-lg px-4 py-3 border tracking-widest focus:outline-none focus:border-orange-500 ${claro ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-800 border-gray-700 text-white'}`}
+                    placeholder="123456"
+                    required
+                  />
+                  <p className={`mt-2 text-xs ${claro ? 'text-gray-500' : 'text-gray-500'}`}>Escribe los 6 dígitos de tu app de autenticación o uno de tus códigos de recuperación.</p>
+                </div>
+              )}
               {sedes.length > 0 && <label className="block text-sm">Sede<select required value={sucursalElegida} onChange={e=>setSucursalElegida(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-500 bg-transparent p-3"><option value="">Selecciona una sede</option>{sedes.map(s=><option key={s.id} value={s.id}>{s.empresa} · {s.nombre}</option>)}</select></label>}
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white font-semibold rounded-lg px-4 py-3.5 transition-all shadow-lg shadow-orange-500/25"
               >
-                {loading ? 'Ingresando...' : (<>Ingresar <ArrowRight size={17} /></>)}
+                {loading ? 'Ingresando...' : (<>{desafio ? 'Verificar código' : 'Ingresar'} <ArrowRight size={17} /></>)}
               </button>
             </form>
           </div>

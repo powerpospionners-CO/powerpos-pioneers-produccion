@@ -127,3 +127,11 @@ test('reservas, cuenta y boletín solo aparecen cuando la empresa los activa', (
  assert(activo.includes('href="/tienda/ferreteria/reservas"')); assert(activo.includes('aria-label="Mi cuenta"')); assert(activo.includes('Recibe nuestras novedades'));
  assert(activo.includes('Reserva tu mesa')); assert(activo.includes('max="6"')); assert(activo.includes('store-trap'));
 });
+
+test('los productos con presentaciones o adicionales piden elegir opciones antes de agregarse', () => {
+ const tienda={...datos,productos:[{...datos.productos[0],disponible:true,stockActual:5,presentaciones:[{id:3,nombre:'Grande',precio:30000}]}]};
+ const html=renderToStaticMarkup(React.createElement(Tienda,{tienda,slug:'ferreteria',seccion:'productos'}));
+ assert(html.includes('Elegir opciones'));
+ const sin=renderToStaticMarkup(React.createElement(Tienda,{tienda:{...datos,productos:[{...datos.productos[0],disponible:true,stockActual:5}]},slug:'ferreteria',seccion:'productos'}));
+ assert(!sin.includes('Elegir opciones'));
+});

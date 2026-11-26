@@ -1,0 +1,45 @@
+# Tienda en línea: entregas, opciones, puntos y reseñas. Seguridad del panel
+
+Complementa [cupones, reservas y cuentas](tienda-cupones-reservas-cuentas.md). Todo se activa por empresa en **Mi tienda → Entregas, mesas y avisos**, salvo la seguridad del panel, que es por usuario.
+
+## Opciones de producto en la web
+
+- La tienda ofrece las presentaciones activas y los adicionales con las mismas reglas que la caja: en el Trailer (empresa 1) los extras son globales y no se ofrecen en bebidas; en los demás restaurantes se usan los marcados en el producto o, si no hay ninguno, el catálogo global cuando el producto acepta adicionales. Los comercios no reciben adicionales.
+- La web no ofrece empaques para llevar porque no envía tipo de consumo; la caja tampoco los agrega a esos pedidos.
+- Cada línea guarda `precio` (precio base o de la presentación), `precioUnitario` (con adicionales), `presentacionId`, `adicionales` y `observacion`. Al aceptar, la caja verifica el precio base y la venta valida los adicionales; si el total cambió, no registra la venta.
+- Un mismo producto con opciones distintas va en líneas separadas. Las existencias se suman entre esas líneas.
+
+## Entregas
+
+- **Recoger en tienda**: no cobra domicilio ni exige pedido mínimo. En Domicilios se marca entregado sin domiciliario.
+- **Pedidos programados**: fecha y hora con al menos 45 minutos de anticipación, hasta 7 días adelante y dentro del horario semanal (incluidos los turnos que cruzan la medianoche). Llegan marcados `[PROGRAMADO fecha hora]`.
+- **Mesa con QR**: Mi tienda imprime un QR firmado (HMAC) por mesa. Sin una firma válida no se aceptan pedidos para esa mesa. Funciona aunque la tienda no reciba domicilios. El pedido llega a Domicilios como `Mesa N` y, al aceptarlo, la venta pasa a cocina; luego se marca como servido.
+
+## Avisos al cliente
+
+- Solo se envían a quien los autoriza en el pedido o la reserva. Por correo usan el SMTP del sistema; por WhatsApp, una plantilla aprobada por Meta en `WHATSAPP_TEMPLATE_CLIENTE` con dos parámetros: `{{1}}` el negocio y `{{2}}` el mensaje. Sin esa plantilla solo se avisa por correo.
+- Se avisa cuando el pedido se acepta, sale, se entrega o se cancela, y cuando la reserva se confirma, se rechaza o se cancela. El recordatorio de reservas confirmadas corre cada hora entre 9:00 y 19:00 de Colombia, solo el día anterior y una sola vez. Respeta `BACKGROUND_JOBS_ENABLED`.
+- Un aviso fallido nunca bloquea la operación.
+
+## Puntos de fidelización en la cuenta web
+
+- En Clientes → puntos, la caja genera un código de 8 caracteres, válido 30 minutos y de un solo uso. El cliente lo escribe en Mi cuenta. Así nadie vincula puntos ajenos con solo conocer un teléfono.
+- El canje en la web se valida contra el saldo y el valor del punto, y nunca supera los productos menos el cupón. Los puntos se descuentan al aceptar la venta en caja, con el cliente vinculado.
+- Los pedidos de una cuenta vinculada suman puntos al cliente del POS al aceptarse.
+
+## Favoritos y reseñas
+
+- Los favoritos se guardan cifrados dentro de la cuenta del cliente.
+- Una reseña requiere una cuenta y un pedido **entregado** que incluya el producto. Queda pendiente hasta que la empresa la publique. Se muestra con el primer nombre y alimenta `aggregateRating` en los datos para Google de la página del producto.
+
+## Estadísticas web
+
+Mi tienda muestra, para 7, 30 o 90 días: ventas aceptadas, ticket promedio, tasa de aceptación, pedidos por tipo de entrega, uso y costo de cupones, productos más pedidos, reservas, cuentas nuevas y suscriptores nuevos.
+
+## Seguridad del panel
+
+- **Verificación en dos pasos** (TOTP, RFC 6238) desde el ícono de escudo de la barra. El secreto se guarda cifrado con AES-256-GCM. Un código no se acepta dos veces. Hay 10 códigos de recuperación de un solo uso, guardados como hash. Tras 5 códigos fallidos el acceso se bloquea 15 minutos.
+- Con 2FA activa, la contraseña solo entrega un desafío de 5 minutos con otra firma y otro formato, que nunca sirve como sesión.
+- **Sesiones**: cada inicio de sesión queda registrado y la ficha JWT lleva su `sid`. Se pueden cerrar sesiones una por una o todas las demás. Las fichas emitidas antes de este cambio no traen `sid` y siguen valiendo hasta vencer (8 horas).
+- **Alerta de acceso nuevo**: llega un correo cuando el inicio de sesión viene de un navegador y una red (/24) que no aparecen en los últimos 90 días.
+- Los datos viven en `seguridad_registros`, una tabla aditiva que se crea en la base de cada usuario y que los respaldos tratan como opcional.

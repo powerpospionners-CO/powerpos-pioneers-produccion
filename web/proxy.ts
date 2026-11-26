@@ -18,7 +18,7 @@ const RUTAS_PANEL = [
   '/login', '/auth', '/dashboard', '/pos', '/cocina', '/domicilios', '/productos',
   '/inventario', '/clientes', '/financiero', '/reportes', '/configuracion',
   '/mi-tienda', '/fidelizacion', '/consumo-empleados', '/cliente', '/llamado',
-  '/registro', '/catalogo', '/reservas', '/caja', '/distribuidores', '/distribuidor', '/suscripcion', '/compras', '/administracion', '/estadisticas',
+  '/registro', '/catalogo', '/reservas', '/seguridad', '/caja', '/distribuidores', '/distribuidor', '/suscripcion', '/compras', '/administracion', '/estadisticas',
 ];
 
 export function proxy(request: NextRequest) {

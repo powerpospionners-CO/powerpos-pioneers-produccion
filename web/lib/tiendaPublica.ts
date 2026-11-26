@@ -12,6 +12,14 @@ export type ProductoPublico = {
   categoriaId?: number;
   origen?: string;
   presentacion?: string;
+  presentaciones?: { id: number; nombre: string; precio: number }[];
+  adicionales?: { id: number; nombre: string; precio: number }[];
+};
+export type ResenaProducto = {
+  productoId: number;
+  promedio: number;
+  total: number;
+  ultimas: { nombre: string; estrellas: number; texto: string; fecha: string }[];
 };
 export type TiendaPublica = {
   bold?: { habilitado: boolean };
@@ -20,6 +28,8 @@ export type TiendaPublica = {
   telefono: string;
   direccion: string;
   legal?: { razonSocial: string; nit: string; correo: string };
+  avisos?: { whatsapp: boolean; correo: boolean };
+  resenas?: ResenaProducto[];
   config: {
     titulo: string;
     descripcion: string;
@@ -51,6 +61,12 @@ export type TiendaPublica = {
     reservaDiasMax?: number;
     boletinHabilitado?: boolean;
     cuentasHabilitadas?: boolean;
+    avisosClientes?: boolean;
+    recogerHabilitado?: boolean;
+    programarHabilitado?: boolean;
+    mesasHabilitadas?: boolean;
+    mesasCantidad?: number;
+    resenasHabilitadas?: boolean;
     fichasProductos?: { productoId: number; imagenes: string[] }[];
     mision?: string;
     vision?: string;

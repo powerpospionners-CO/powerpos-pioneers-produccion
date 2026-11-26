@@ -17,6 +17,8 @@ import {
   correoPrueba,
   correoCumpleanos,
   correoCodigoCuenta,
+  correoNuevoAcceso,
+  correoAvisoCliente,
   correoSuscripcion,
   logoCorreo,
 } from './correo-powerpos';
@@ -110,6 +112,26 @@ export class NotificacionesService {
         this.logger.warn('No se pudo entregar la alerta por correo');
       }
       return { enviado: false, canales: [{ canal: 'email', exitoso: false }] };
+    }
+  }
+
+  async enviarAvisoCliente(correo: string, empresa: string, titulo: string, mensaje: string) {
+    try {
+      await this.enviarEmail(`${titulo} · ${empresa}`, correoAvisoCliente(empresa, titulo, mensaje), [correo]);
+      return true;
+    } catch (e) {
+      this.logger.warn(`No se pudo enviar un aviso a un cliente de tienda: ${e}`);
+      return false;
+    }
+  }
+
+  async enviarAvisoAcceso(correo: string, nombre: string, dispositivo: string, ip: string, fecha: Date) {
+    try {
+      await this.enviarEmail('Nuevo inicio de sesión en PowerPOS', correoNuevoAcceso({ nombre, dispositivo, ip, fecha }), [correo]);
+      return true;
+    } catch (e) {
+      this.logger.warn(`No se pudo enviar un aviso de acceso: ${e}`);
+      return false;
     }
   }
 

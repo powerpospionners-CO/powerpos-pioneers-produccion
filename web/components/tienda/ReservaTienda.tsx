@@ -30,6 +30,7 @@ export default function ReservaTienda({
   maxPersonas = 10,
   diasMax = 30,
   privacidadHref,
+  avisosWhatsapp = false,
 }: {
   slug: string;
   nombreTienda: string;
@@ -37,12 +38,14 @@ export default function ReservaTienda({
   maxPersonas?: number;
   diasMax?: number;
   privacidadHref?: string;
+  avisosWhatsapp?: boolean;
 }) {
   const ruta = `/tiendas/${encodeURIComponent(slug)}/reservas`;
   const recordada = `reserva:${slug}`;
   const [form, setForm] = useState({ nombre: "", telefono: "", correo: "", fecha: "", hora: "", personas: 2, nota: "" });
   const [trampa, setTrampa] = useState(""),
     [acepta, setAcepta] = useState(false),
+    [aviso, setAviso] = useState(false),
     [estado, setEstado] = useState<Estado | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -76,7 +79,7 @@ export default function ReservaTienda({
     if (busy) return;
     setBusy(true);
     setError("");
-    const body = JSON.stringify({ ...form, correo: form.correo || undefined, consentimiento: acepta, sitio: trampa });
+    const body = JSON.stringify({ ...form, correo: form.correo || undefined, consentimiento: acepta, sitio: trampa, ...(aviso ? { avisosWhatsapp: true } : {}) });
     clave.current = claveEnvio(clave.current, body);
     try {
       const r = await solicitarTienda<Estado>(ruta, {
@@ -164,6 +167,12 @@ export default function ReservaTienda({
               <textarea maxLength={300} value={form.nota} onChange={(e) => setForm({ ...form, nota: e.target.value })} />
             </label>
             <CampoTrampa valor={trampa} onChange={setTrampa} />
+            {avisosWhatsapp && (
+              <label className="store-check">
+                <input type="checkbox" checked={aviso} onChange={(e) => setAviso(e.target.checked)} />
+                <span>Quiero recibir por WhatsApp la confirmación y un recordatorio el día anterior</span>
+              </label>
+            )}
             <label className="store-check">
               <input type="checkbox" required checked={acepta} onChange={(e) => setAcepta(e.target.checked)} />
               <span>

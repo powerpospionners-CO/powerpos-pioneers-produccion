@@ -2459,3 +2459,42 @@
 @media (max-width: 640px) {
   .figma-store .store-form-grid { grid-template-columns: 1fr; }
 }
+
+/* Opciones de producto, entregas, avisos, reseñas y favoritos. */
+.figma-store .product-options { display: grid; gap: 14px; margin: 16px 0; }
+.figma-store .product-options fieldset { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.figma-store .product-options legend { margin-bottom: 6px; font-size: 13px; font-weight: 800; }
+.figma-store .product-options fieldset > label { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 14px; }
+.figma-store .product-options input[type="radio"] { accent-color: var(--orange); }
+.figma-store .product-option-extra { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 14px; }
+.figma-store .product-option-extra small { color: var(--muted, #6b625a); }
+.figma-store .product-option-qty { display: inline-flex; align-items: center; gap: 8px; }
+.figma-store .product-option-qty button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; background: white; font-size: 16px; cursor: pointer; }
+.figma-store .product-option-qty button:disabled { opacity: 0.4; cursor: default; }
+.figma-store .product-option-qty output { min-width: 18px; text-align: center; font-weight: 700; }
+.figma-store .product-option-note { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
+.figma-store .product-option-note input { border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font-weight: 400; }
+.figma-store .product-option-price { font-size: 14px; }
+.figma-store .web-delivery-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.figma-store .web-delivery-choice label { display: flex; align-items: center; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: white; font-size: 13px; font-weight: 700; }
+.figma-store .web-delivery-choice label.checked { border-color: var(--orange); background: var(--cream); }
+.figma-store .web-schedule,
+.figma-store .web-notices { display: grid; gap: 8px; font-size: 13px; }
+.figma-store .web-schedule label,
+.figma-store .web-notices label { display: flex; flex-direction: column; gap: 6px; }
+.figma-store .web-schedule label.store-check,
+.figma-store .web-notices label.store-check { flex-direction: row; font-weight: 400; }
+.figma-store .web-order-table { padding: 12px; border-radius: 8px; background: var(--cream); }
+.figma-store .product-rating { color: var(--muted, #6b625a); }
+.figma-store .product-rating span { color: #c98a00; letter-spacing: 2px; }
+.figma-store .product-reviews { margin-top: 40px; }
+.figma-store .product-reviews ul { display: grid; gap: 12px; padding: 0; list-style: none; }
+.figma-store .product-reviews li { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.figma-store .product-reviews li span { color: #c98a00; letter-spacing: 2px; }
+.figma-store .store-review-form { margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.figma-store .store-stars { display: flex; gap: 4px; font-size: 28px; color: #c98a00; }
+.figma-store .store-stars input { position: absolute; opacity: 0; }
+.figma-store .store-stars label { cursor: pointer; }
+.figma-store .store-stars label:focus-within { outline: 2px solid var(--orange); border-radius: 4px; }
+.figma-store .store-account-favorites { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; list-style: none; }
+.figma-store .store-account-favorites li { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: white; }

@@ -6,6 +6,7 @@ import {
   type TiendaPublica,
 } from "../../../lib/tiendaPublica";
 import { encabezadoCuenta, leerToken } from "../../../lib/cuentaTienda";
+import type { OpcionesLinea } from "../../../lib/opcionesTienda";
 type Estado = {
   id: string;
   estado: string;
@@ -33,12 +34,14 @@ export function PedidoTienda({
   tienda,
   slug,
   items,
+  mesa = null,
   politicasHref,
   onRecibido,
 }: {
   tienda: TiendaPublica;
   slug: string;
-  items: { id: number; price: number; quantity: number; disponible: boolean }[];
+  items: { id: number; price: number; quantity: number; disponible: boolean; opciones?: OpcionesLinea }[];
+  mesa?: { numero: number; token: string } | null;
   politicasHref?: string;
   onRecibido: () => void;
 }) {
@@ -60,7 +63,16 @@ export function PedidoTienda({
     [anterior, setAnterior] = useState(""),
     [cuponTexto, setCuponTexto] = useState(""),
     [cupon, setCupon] = useState<{ codigo: string; descuento: number; descripcion: string } | null>(null),
-    [cuponError, setCuponError] = useState("");
+    [cuponError, setCuponError] = useState(""),
+    [entrega, setEntrega] = useState<"DOMICILIO" | "RECOGER">("DOMICILIO"),
+    [programar, setProgramar] = useState(false),
+    [programadoPara, setProgramadoPara] = useState(""),
+    [puntos, setPuntos] = useState(0),
+    [cuentaPuntos, setCuentaPuntos] = useState<{ vinculado: boolean; saldo: number; habilitado: boolean; valorPunto: number } | null>(null),
+    [avisoWhatsapp, setAvisoWhatsapp] = useState(false),
+    [avisoCorreo, setAvisoCorreo] = useState("");
+  const tipoEntrega = mesa ? "MESA" : entrega;
+  const avisosDisponibles = !!tienda.config.avisosClientes && !!(tienda.avisos?.whatsapp || tienda.avisos?.correo);
   const recientes = `pedidos:${slug}`;
   const telefono = (tienda.config.whatsapp || tienda.telefono || "").replace(/\D/g, "");
   const whatsapp = /^\d{10,15}$/.test(telefono.length === 10 ? "57" + telefono : telefono)
@@ -78,12 +90,28 @@ export function PedidoTienda({
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0),
     zona = tienda.config.zonas.find((z) => (z.id || z.nombre) === form.zona),
     descuento = cupon?.descuento || 0,
-    total = Math.round((subtotal - descuento + (zona?.costo || 0)) * 100) / 100;
+    costoEntrega = tipoEntrega === "DOMICILIO" ? zona?.costo || 0 : 0,
+    valorPuntos = cuentaPuntos ? Math.round(puntos * cuentaPuntos.valorPunto * 100) / 100 : 0,
+    total = Math.round((subtotal - descuento - valorPuntos + costoEntrega) * 100) / 100;
   const path = `/tiendas/${encodeURIComponent(slug)}/pedidos`;
-  // Si cambia el carrito, el cupón se vuelve a validar con el nuevo subtotal.
+  // Si cambia el carrito, el cupón y los puntos se vuelven a elegir con el nuevo subtotal.
   useEffect(() => {
     setCupon(null);
+    setPuntos(0);
   }, [subtotal]);
+  // Puntos de fidelización de la cuenta vinculada en caja.
+  useEffect(() => {
+    if (!tienda.config.cuentasHabilitadas || !leerToken(slug)) return;
+    solicitarTienda<{ puntos: { vinculado: boolean; saldo: number; habilitado: boolean; valorPunto: number } }>(
+      `/tiendas/${encodeURIComponent(slug)}/cuenta/extras`,
+      { headers: encabezadoCuenta(slug) },
+    )
+      .then((r) => setCuentaPuntos(r.puntos.vinculado && r.puntos.habilitado && r.puntos.saldo > 0 && r.puntos.valorPunto > 0 ? r.puntos : null))
+      .catch(() => setCuentaPuntos(null));
+  }, [slug, tienda.config.cuentasHabilitadas]);
+  const maxPuntos = cuentaPuntos
+    ? Math.min(cuentaPuntos.saldo, Math.floor(Math.max(0, subtotal - descuento) / cuentaPuntos.valorPunto))
+    : 0;
   // Con sesión iniciada se proponen los datos de la cuenta; el cliente puede cambiarlos.
   useEffect(() => {
     if (!tienda.config.cuentasHabilitadas || !leerToken(slug)) return;
@@ -158,11 +186,24 @@ export function PedidoTienda({
     setError("");
     const body = JSON.stringify({
       ...form,
-      ciudad: zona?.ciudad || undefined,
+      ...(tipoEntrega === "DOMICILIO" ? { ciudad: zona?.ciudad || undefined } : { direccion: undefined, zona: undefined, ciudad: undefined }),
+      entrega: tipoEntrega,
+      ...(mesa ? { mesa } : {}),
+      ...(programar && programadoPara && !mesa ? { programadoPara } : {}),
+      ...(puntos > 0 ? { puntos } : {}),
+      ...(avisosDisponibles && (avisoWhatsapp || avisoCorreo.trim())
+        ? { avisos: { whatsapp: avisoWhatsapp, correo: avisoCorreo.trim() || undefined } }
+        : {}),
       pagoBold: form.metodoPago === "TARJETA",
       totalEsperado: total,
       ...(cupon ? { cupon: cupon.codigo } : {}),
-      items: items.map((i) => ({ productoId: i.id, cantidad: i.quantity })),
+      items: items.map((i) => ({
+        productoId: i.id,
+        cantidad: i.quantity,
+        ...(i.opciones?.presentacionId ? { presentacionId: i.opciones.presentacionId } : {}),
+        ...(i.opciones?.adicionales?.length ? { adicionales: i.opciones.adicionales } : {}),
+        ...(i.opciones?.observacion ? { observacion: i.opciones.observacion } : {}),
+      })),
     });
     if (clave.current.body !== body)
       clave.current = { body, id: crypto.randomUUID() };
@@ -373,7 +414,30 @@ export function PedidoTienda({
         </p>
       )}
       <fieldset disabled={busy}>
-        {(["nombre", "telefono", "direccion"] as const).map((k) => (
+        {mesa ? (
+          <p className="web-order-table" role="status">
+            Pedido para la <strong>mesa {mesa.numero}</strong>. Te lo llevamos a la mesa.
+          </p>
+        ) : (
+          tienda.config.recogerHabilitado && (
+            <div className="web-delivery-choice" role="radiogroup" aria-label="Tipo de entrega">
+              {(
+                [
+                  ["DOMICILIO", "Domicilio"],
+                  ["RECOGER", "Recoger en tienda"],
+                ] as const
+              ).map(([valor, texto]) => (
+                <label key={valor} className={entrega === valor ? "checked" : ""}>
+                  <input type="radio" name="entrega" checked={entrega === valor} onChange={() => setEntrega(valor)} />
+                  {texto}
+                </label>
+              ))}
+            </div>
+          )
+        )}
+        {(["nombre", "telefono", "direccion"] as const)
+          .filter((k) => k !== "direccion" || tipoEntrega === "DOMICILIO")
+          .map((k) => (
           <label key={k}>
             {
               {
@@ -398,7 +462,8 @@ export function PedidoTienda({
             />
           </label>
         ))}
-        {ciudades.length > 0 && <label>Ciudad de entrega<select required value={form.ciudad} onChange={e => setForm({...form, ciudad:e.target.value, zona:''})}><option value="">Selecciona tu ciudad</option>{ciudades.map(c => <option key={c} value={c}>{c}</option>)}{tienda.config.zonas.some(z=>!z.ciudad)&&<option value="__OTRAS__">Otras zonas atendidas</option>}</select></label>}
+        {tipoEntrega === "DOMICILIO" && ciudades.length > 0 && <label>Ciudad de entrega<select required value={form.ciudad} onChange={e => setForm({...form, ciudad:e.target.value, zona:''})}><option value="">Selecciona tu ciudad</option>{ciudades.map(c => <option key={c} value={c}>{c}</option>)}{tienda.config.zonas.some(z=>!z.ciudad)&&<option value="__OTRAS__">Otras zonas atendidas</option>}</select></label>}
+        {tipoEntrega === "DOMICILIO" && (
         <label>
           Zona de entrega
           <select
@@ -413,6 +478,27 @@ export function PedidoTienda({
             ))}
           </select>
         </label>
+        )}
+        {!mesa && tienda.config.programarHabilitado && (
+          <div className="web-schedule">
+            <label className="store-check">
+              <input type="checkbox" checked={programar} onChange={(e) => setProgramar(e.target.checked)} />
+              <span>Programar para más tarde</span>
+            </label>
+            {programar && (
+              <label>
+                Fecha y hora
+                <input
+                  required
+                  type="datetime-local"
+                  value={programadoPara}
+                  onChange={(e) => setProgramadoPara(e.target.value)}
+                />
+                <small>Con al menos 45 minutos de anticipación y dentro del horario de atención.</small>
+              </label>
+            )}
+          </div>
+        )}
         <label>
           Forma de pago al confirmar
           <select
@@ -455,6 +541,35 @@ export function PedidoTienda({
             </small>
           )}
         </div>
+        {cuentaPuntos && maxPuntos > 0 && (
+          <label>
+            Usar puntos (tienes {cuentaPuntos.saldo}; cada punto vale {dinero(cuentaPuntos.valorPunto)})
+            <input
+              type="number"
+              min={0}
+              max={maxPuntos}
+              value={puntos}
+              onChange={(e) => setPuntos(Math.max(0, Math.min(maxPuntos, Math.floor(Number(e.target.value) || 0))))}
+            />
+          </label>
+        )}
+        {avisosDisponibles && (
+          <div className="web-notices">
+            <strong>Avisos de tu pedido</strong>
+            {tienda.avisos?.whatsapp && (
+              <label className="store-check">
+                <input type="checkbox" checked={avisoWhatsapp} onChange={(e) => setAvisoWhatsapp(e.target.checked)} />
+                <span>Quiero recibir por WhatsApp los cambios de estado de este pedido</span>
+              </label>
+            )}
+            {tienda.avisos?.correo && (
+              <label>
+                Correo para avisos (opcional)
+                <input type="email" maxLength={200} autoComplete="email" value={avisoCorreo} onChange={(e) => setAvisoCorreo(e.target.value)} />
+              </label>
+            )}
+          </div>
+        )}
         <label>
           Indicaciones
           <textarea
@@ -470,11 +585,16 @@ export function PedidoTienda({
               Cupón {cupon.codigo}: −{dinero(cupon.descuento)}
             </p>
           )}
-          <p>Domicilio: {zona ? dinero(zona.costo) : "Por seleccionar"}</p>
+          {valorPuntos > 0 && <p>Puntos ({puntos}): −{dinero(valorPuntos)}</p>}
+          {tipoEntrega === "DOMICILIO" ? (
+            <p>Domicilio: {zona ? dinero(zona.costo) : "Por seleccionar"}</p>
+          ) : (
+            <p>{tipoEntrega === "MESA" ? "Servicio en mesa" : "Recoges en la tienda"}: sin costo de envío</p>
+          )}
           <strong>Total: {dinero(total)}</strong>
         </div>
-        {subtotal < tienda.config.minimo && (
-          <p>Pedido mínimo: {dinero(tienda.config.minimo)}</p>
+        {tipoEntrega === "DOMICILIO" && subtotal < tienda.config.minimo && (
+          <p>Pedido mínimo para domicilio: {dinero(tienda.config.minimo)}</p>
         )}
         <label>
           <input type="checkbox" required /> Autorizo a {tienda.nombre} a usar
@@ -506,7 +626,7 @@ export function PedidoTienda({
             busy ||
             !items.length ||
             items.some((p) => !p.disponible) ||
-            subtotal < tienda.config.minimo
+            (tipoEntrega === "DOMICILIO" && subtotal < tienda.config.minimo)
           }
         >
           {busy ? "Enviando…" : "Enviar pedido a la empresa"}

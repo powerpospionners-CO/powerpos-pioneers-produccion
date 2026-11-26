@@ -20,7 +20,7 @@ async function audit() {
     };
     for (const model of models) {
       // Tablas aditivas que cada sede crea al habilitar la función.
-      const opcional={PersonalRegistro:'personal_registros',BoldRegistro:'bold_registros',TiendaRegistro:'tienda_registros'}[model.name];
+      const opcional={PersonalRegistro:'personal_registros',BoldRegistro:'bold_registros',TiendaRegistro:'tienda_registros',SeguridadRegistro:'seguridad_registros'}[model.name];
       if(opcional){
         const existe=await tx.$queryRawUnsafe("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1",opcional);
         if(!existe.length){rows.set(model.name,[]);continue;}

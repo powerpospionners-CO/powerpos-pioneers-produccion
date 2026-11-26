@@ -28,6 +28,43 @@ export class WhatsappService {
     };
   }
 
+  // Avisos a compradores: plantilla propia aprobada por Meta, distinta de las alertas internas.
+  // Parámetros del cuerpo: {{1}} nombre del negocio, {{2}} mensaje.
+  clienteConfigurado() {
+    return this.estado().configurado && /^[a-z0-9_]+$/.test(process.env.WHATSAPP_TEMPLATE_CLIENTE || '');
+  }
+  async enviarCliente(telefono: string, empresa: string, mensaje: string) {
+    if (!this.clienteConfigurado()) return false;
+    const digitos = telefono.replace(/\D/g, '');
+    const destino = digitos.length === 10 ? `57${digitos}` : digitos;
+    if (!/^\d{11,15}$/.test(destino)) return false;
+    const compactar = (v: string) => v.replace(/\s+/g, ' ').trim().slice(0, 500) || '-';
+    try {
+      const r = await fetch(
+        `https://graph.facebook.com/${process.env.WHATSAPP_GRAPH_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        {
+          method: 'POST',
+          redirect: 'error',
+          headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(8000),
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: destino,
+            type: 'template',
+            template: {
+              name: process.env.WHATSAPP_TEMPLATE_CLIENTE,
+              language: { code: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'es_CO' },
+              components: [{ type: 'body', parameters: [empresa, mensaje].map((v) => ({ type: 'text', text: compactar(v) })) }],
+            },
+          }),
+        },
+      );
+      return r.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async encolar(datos: {
     empresaId: number;
     tipo: string;

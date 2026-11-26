@@ -19,6 +19,17 @@ export default function ClientesPage() {
   const [detalle, setDetalle] = useState<any>(null);
   const [modalPuntos, setModalPuntos] = useState<any>(null);
   const [puntosForm, setPuntosForm] = useState({ tipo: 'agregar', cantidad: '' });
+  // Código de un solo uso para que el cliente vea y use sus puntos en la tienda web.
+  const [codigoWeb, setCodigoWeb] = useState<{ codigo: string; error: string }>({ codigo: '', error: '' });
+  const generarCodigoWeb = async (id: number) => {
+    setCodigoWeb({ codigo: '', error: '' });
+    try {
+      const { data } = await api.post(`/tienda-admin/clientes-pos/${id}/codigo-web`);
+      setCodigoWeb({ codigo: data.codigo, error: '' });
+    } catch (e: any) {
+      setCodigoWeb({ codigo: '', error: e?.response?.data?.message || 'No se pudo generar el código' });
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [modalQR, setModalQR] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -418,8 +429,16 @@ export default function ClientesPage() {
                     placeholder="0" />
                 </div>
               </div>
+              <div className="mt-5 rounded-lg border border-gray-800 p-3 text-sm">
+                <p className="text-gray-300">Tienda en línea: entrega este código al cliente para que vincule sus puntos en Mi cuenta. Vence en 30 minutos y sirve una vez.</p>
+                {codigoWeb.codigo && <p className="mt-2 font-mono text-2xl tracking-widest text-white" aria-live="polite">{codigoWeb.codigo}</p>}
+                {codigoWeb.error && <p role="alert" className="mt-2 text-red-300">{codigoWeb.error}</p>}
+                <button type="button" onClick={() => generarCodigoWeb(modalPuntos.id)} className="mt-2 rounded-lg border border-gray-600 px-3 py-2 text-white">
+                  Generar código para la tienda web
+                </button>
+              </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={() => setModalPuntos(null)}
+                <button onClick={() => { setModalPuntos(null); setCodigoWeb({ codigo: '', error: '' }); }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white rounded-lg py-3 transition-colors">
                   Cancelar
                 </button>
