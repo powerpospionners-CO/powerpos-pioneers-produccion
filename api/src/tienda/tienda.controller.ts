@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Headers,
+  Query,
   HttpCode,
   Param,
   Patch,
@@ -18,11 +19,39 @@ import { TiendaService } from './tienda.service';
 import { PedidosPublicosGuard } from './pedidos-publicos.guard';
 import { BoldService } from './bold.service';
 import { TiendaExtrasService } from './tienda-extras.service';
+import { TiendaExperienciaService } from './tienda-experiencia.service';
 import { LimitePublico, LimitePublicoGuard } from './limite-publico.guard';
 
 @Controller('tiendas')
 export class TiendaPublicaController {
-  constructor(private service: TiendaService, private extras: TiendaExtrasService) {}
+  constructor(private service: TiendaService, private extras: TiendaExtrasService, private experiencia: TiendaExperienciaService) {}
+  @Get(':slug/cuenta/extras')
+  @UseGuards(LimitePublicoGuard)
+  @LimitePublico('cuenta-extras', 120)
+  cuentaExtras(@Param('slug') slug: string, @Headers('authorization') auth?: string) {
+    return this.experiencia.resumenCuenta(slug, auth);
+  }
+  @Post(':slug/cuenta/vincular')
+  @HttpCode(200)
+  @UseGuards(LimitePublicoGuard)
+  @LimitePublico('cuenta-vincular', 10)
+  vincular(@Param('slug') slug: string, @Body() body: any, @Headers('authorization') auth?: string) {
+    return this.experiencia.vincular(slug, auth, body);
+  }
+  @Post(':slug/cuenta/favoritos')
+  @HttpCode(200)
+  @UseGuards(LimitePublicoGuard)
+  @LimitePublico('cuenta-favoritos', 60)
+  favorito(@Param('slug') slug: string, @Body() body: any, @Headers('authorization') auth?: string) {
+    return this.experiencia.favorito(slug, auth, body);
+  }
+  @Post(':slug/cuenta/resenas')
+  @HttpCode(200)
+  @UseGuards(LimitePublicoGuard)
+  @LimitePublico('cuenta-resenas', 20)
+  resena(@Param('slug') slug: string, @Body() body: any, @Headers('authorization') auth?: string) {
+    return this.experiencia.crearResena(slug, auth, body);
+  }
   @Get('mapa') mapa() { return this.service.mapaPublico(); }
   @Get(':slug') catalogo(@Param('slug') slug: string) {
     return this.service.catalogo(slug);
@@ -148,7 +177,22 @@ export class TiendaAdminController {
   @Get('resumen')
   @Roles('ADMIN_EMPRESA','GERENTE','CAJERO')
   resumen(@Request() req:any){return this.service.resumen(req.user);}
-  constructor(private service: TiendaService, private bold: BoldService, private extras: TiendaExtrasService) {}
+  constructor(private service: TiendaService, private bold: BoldService, private extras: TiendaExtrasService, private experiencia: TiendaExperienciaService) {}
+  @Get('mesas')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  mesas(@Request() req: any) { return this.experiencia.mesas(req.user); }
+  @Post('clientes-pos/:id/codigo-web')
+  @Roles('ADMIN_EMPRESA', 'GERENTE', 'CAJERO')
+  codigoWeb(@Request() req: any, @Param('id') id: string) { return this.experiencia.codigoVinculo(req.user, Number(id)); }
+  @Get('resenas')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  resenas(@Request() req: any) { return this.experiencia.resenasAdmin(req.user); }
+  @Patch('resenas/:id')
+  @Roles('ADMIN_EMPRESA')
+  moderar(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.experiencia.moderarResena(req.user, id, body); }
+  @Get('estadisticas')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  estadisticas(@Request() req: any, @Query('dias') dias: string) { return this.experiencia.estadisticas(req.user, dias); }
   @Get('cupones')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   cupones(@Request() req: any) { return this.extras.cupones(req.user); }
@@ -166,7 +210,11 @@ export class TiendaAdminController {
   reservas(@Request() req: any) { return this.extras.reservasAdmin(req.user); }
   @Patch('reservas/:id')
   @Roles('ADMIN_EMPRESA', 'GERENTE', 'CAJERO')
-  gestionarReserva(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.extras.gestionarReserva(req.user, id, body); }
+  async gestionarReserva(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    const r = await this.extras.gestionarReserva(req.user, id, body);
+    void this.experiencia.avisarReserva(req.user.empresaId, id);
+    return r;
+  }
   @Get('suscriptores')
   @Roles('ADMIN_EMPRESA')
   suscriptores(@Request() req: any) { return this.extras.suscriptores(req.user); }

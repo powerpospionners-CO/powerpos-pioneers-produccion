@@ -58,6 +58,21 @@ model TiendaRegistro {
   @@map("tienda_registros")
 }
 
+// Segundo paso de acceso y sesiones del panel; tabla aditiva creada en la base del usuario.
+model SeguridadRegistro {
+  id String @id @db.VarChar(36)
+  usuarioId Int
+  tipo String @db.VarChar(16)
+  clave String @db.VarChar(64)
+  estado String @db.VarChar(16)
+  datos Json
+  creadoEn DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  @@unique([usuarioId, tipo, clave])
+  @@index([usuarioId, tipo, creadoEn])
+  @@map("seguridad_registros")
+}
+
 // Canal compartido y trabajos reclamados una sola vez entre procesos.
 model EventoSistema {
   id String @id @default(uuid())

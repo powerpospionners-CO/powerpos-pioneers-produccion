@@ -1,7 +1,9 @@
 import {validarComercial,productosComerciales,validarSitio} from './contenido-comercial';
-import { validarFunciones } from './tienda-extras.reglas';
+import { ahoraColombia, validarFunciones } from './tienda-extras.reglas';
+import { adicionalesDeProducto, validarEntrega, validarFuncionesExperiencia, validarLineas } from './tienda-opciones.reglas';
+import { TiendaExperienciaService } from './tienda-experiencia.service';
 import { TiendaExtrasService } from './tienda-extras.service';
-import { TiendaRegistros } from './tienda-registros';
+import { mesaValida, TiendaRegistros } from './tienda-registros';
 import {
   BadRequestException,
   ConflictException,
@@ -73,6 +75,7 @@ export class TiendaService {
     // Opcionales para conservar las pruebas que construyen el servicio sin la tienda ampliada.
     @Optional() private registros?: TiendaRegistros,
     @Optional() private extras?: TiendaExtrasService,
+    @Optional() private experiencia?: TiendaExperienciaService,
   ) {}
 
   async configuracion(empresaId: number) {
@@ -84,6 +87,7 @@ export class TiendaService {
       slug: empresa.tiendaSlug,
       tienda: await this.identidad(empresa),
       fidelizacion: puntosConfig(empresa.fidelizacionConfig),
+      canalesAvisos: this.experiencia?.canalesDisponibles() ?? { whatsapp: false, correo: false },
     };
   }
 
@@ -99,9 +103,9 @@ export class TiendaService {
     const p = { ...actual.fidelizacion, ...body.fidelizacion };
     const comercial = validarComercial(t);
     const sitio = validarSitio(t);
-    const funciones = validarFunciones(t);
+    const funciones = { ...validarFunciones(t), ...validarFuncionesExperiencia(t) };
     // La tabla de registros se crea aquí, con sesión de administrador; nunca desde una petición pública.
-    if ((funciones.reservasHabilitadas || funciones.boletinHabilitado || funciones.cuentasHabilitadas) && this.registros)
+    if ((funciones.reservasHabilitadas || funciones.boletinHabilitado || funciones.cuentasHabilitadas || funciones.avisosClientes || funciones.resenasHabilitadas) && this.registros)
       await this.registros.preparar();
     const productosWeb = productosComerciales(comercial);
     if (productosWeb.length && await this.prisma.producto.count({where:{empresaId,id:{in:productosWeb}}}) !== productosWeb.length) throw new BadRequestException('Los productos de la web deben pertenecer a su empresa');
@@ -316,10 +320,18 @@ export class TiendaService {
         ventaGranel: true,
         unidadGranel: true,
         categoriaId: true,
-        categoria: { select: { nombre: true } },
+        aceptaAdicionales: true,
+        categoria: { select: { nombre: true, categoriaPadre: { select: { nombre: true } } } },
+        presentaciones: { where: { activo: true }, select: { id: true, nombre: true, precio: true }, orderBy: { orden: 'asc' } },
+        adicionales: { select: { adicional: { select: { id: true, nombre: true, precio: true, activo: true, disponible: true, empaqueParaLlevar: true } } } },
       },
       orderBy: { nombre: 'asc' },
     });
+    const restaurante = e.tipoNegocio === 'RESTAURANTE';
+    const globales = restaurante
+      ? await this.prisma.adicional.findMany({ where: { empresaId: e.id, activo: true, disponible: true, empaqueParaLlevar: false }, include: { ingrediente: true } })
+      : [];
+    const resenas = config.resenasHabilitadas && this.experiencia ? await this.experiencia.resenasPublicas(e.id) : [];
     return {
       nombre: e.nombre,
       logo: e.logo,
@@ -339,7 +351,18 @@ export class TiendaService {
         promociones: config.promociones.filter(v=>!v.productoId||productos.some(p=>p.id===v.productoId)),
       },
       bold: { habilitado: await this.bold.disponible({ empresaId: e.id, sucursalId: config.sucursalId }) },
-      productos: productos.map(p => agregarOrigen(p, leerOrigenes(e.tiendaConfig))),
+      avisos: config.avisosClientes && this.experiencia ? this.experiencia.canalesDisponibles() : { whatsapp: false, correo: false },
+      resenas: resenas.filter((x) => productos.some((p) => p.id === x.productoId)),
+      productos: productos.map(({ adicionales, aceptaAdicionales, categoria, presentaciones, ...p }) => {
+        const opciones = adicionalesDeProducto({ ...p, adicionales: adicionales || [], aceptaAdicionales, categoria }, globales, e.id, restaurante);
+        // Solo se publican opciones existentes; un producto sin opciones conserva su forma anterior.
+        return agregarOrigen({
+          ...p,
+          categoria: { nombre: categoria.nombre },
+          ...(presentaciones?.length ? { presentaciones: presentaciones.map((x) => ({ id: x.id, nombre: x.nombre, precio: Number(x.precio) })) } : {}),
+          ...(opciones.length ? { adicionales: opciones } : {}),
+        }, leerOrigenes(e.tiendaConfig));
+      }),
     };
   }
 
@@ -348,7 +371,10 @@ export class TiendaService {
       throw new BadRequestException('Pedido inválido');
     const e = await this.empresaPublica(slug);
     const t = tiendaConfig(e.tiendaConfig);
-    if (!t.pedidosHabilitados)
+    const ahora = ahoraColombia();
+    // Una mesa con QR puede pedir aunque la tienda no reciba domicilios.
+    const entrega = validarEntrega(body, t, ahora, (n, token) => mesaValida(e.id, n, token));
+    if (entrega.tipo !== 'MESA' && !t.pedidosHabilitados)
       throw new BadRequestException('La tienda no recibe pedidos por ahora');
     const clave = texto(body.clave, 'Identificador', 80, true);
     if (!/^[a-zA-Z0-9-]{20,80}$/.test(clave))
@@ -359,38 +385,42 @@ export class TiendaService {
     if (existente)
       return { id: existente.id, estado: existente.estado, total: existente.total, subtotal: existente.subtotal, costoDomicilio: existente.costoDomicilio, items: existente.items, descuento: descuentoPedido(existente) };
     const nombre = texto(body.nombre, 'Nombre', 100, true),
-      telefono = texto(body.telefono, 'Teléfono', 20, true),
-      direccion = texto(body.direccion, 'Dirección', 300, true);
+      telefono = texto(body.telefono, 'Teléfono', 20, true);
     if (!/^[+\d\s()-]{7,20}$/.test(telefono))
       throw new BadRequestException('Teléfono inválido');
-    const observacion = texto(body.observacion ?? '', 'Observaciones', 500);
-    const candidatas = t.zonas.filter(z => z.id === body.zona || z.nombre === body.zona || (z.nombre === 'Todas las zonas' && z.ciudad?.toUpperCase() === String(body.zona).toUpperCase()));
-    const zona = t.zonas.find(z => z.id === body.zona) || (candidatas.length === 1 ? candidatas[0] : candidatas.find(z => z.ciudad === body.ciudad));
-    if (!zona)
-      throw new BadRequestException(
-        'Seleccione una zona atendida por la empresa',
-      );
-    if (body.ciudad !== undefined && zona.ciudad !== body.ciudad) throw new BadRequestException('La zona no pertenece a la ciudad seleccionada');
+    let direccion: string, zonaTexto: string, costoDomicilio: number;
+    if (entrega.tipo === 'DOMICILIO') {
+      direccion = texto(body.direccion, 'Dirección', 300, true);
+      const candidatas = t.zonas.filter(z => z.id === body.zona || z.nombre === body.zona || (z.nombre === 'Todas las zonas' && z.ciudad?.toUpperCase() === String(body.zona).toUpperCase()));
+      const zona = t.zonas.find(z => z.id === body.zona) || (candidatas.length === 1 ? candidatas[0] : candidatas.find(z => z.ciudad === body.ciudad));
+      if (!zona)
+        throw new BadRequestException(
+          'Seleccione una zona atendida por la empresa',
+        );
+      if (body.ciudad !== undefined && zona.ciudad !== body.ciudad) throw new BadRequestException('La zona no pertenece a la ciudad seleccionada');
+      zonaTexto = zona.ciudad ? `${zona.ciudad} · ${zona.nombre}` : zona.nombre;
+      costoDomicilio = zona.costo;
+    } else if (entrega.tipo === 'RECOGER') {
+      direccion = 'Recoge en la tienda';
+      zonaTexto = 'Recoger en tienda';
+      costoDomicilio = 0;
+    } else {
+      direccion = `Mesa ${entrega.mesa}`;
+      zonaTexto = `Mesa ${entrega.mesa}`;
+      costoDomicilio = 0;
+    }
+    const etiquetas = [
+      entrega.tipo === 'RECOGER' ? '[RECOGER EN TIENDA]' : entrega.tipo === 'MESA' ? `[MESA ${entrega.mesa}]` : '',
+      entrega.programado ? `[PROGRAMADO ${entrega.programado.fecha} ${entrega.programado.hora}]` : '',
+    ].filter(Boolean).join(' ');
+    const observacion = [etiquetas, texto(body.observacion ?? '', 'Observaciones', 500)].filter(Boolean).join(' ').slice(0, 600);
     if (
       !(await this.prisma.sucursal.findFirst({
         where: { id: t.sucursalId, empresaId: e.id, activo: true },
       }))
     )
       throw new BadRequestException('Sucursal no disponible');
-    if (
-      !Array.isArray(body.items) ||
-      !body.items.length ||
-      body.items.length > 100 ||
-      body.items.some(
-        (i) =>
-          !Number.isInteger(i.productoId) ||
-          !Number.isInteger(i.cantidad) ||
-          i.cantidad < 1 ||
-          i.cantidad > 99,
-      ) ||
-      new Set(body.items.map((i) => i.productoId)).size !== body.items.length
-    )
-      throw new BadRequestException('Carrito inválido');
+    const lineas = validarLineas(body.items);
     if (
       !['EFECTIVO', 'TRANSFERENCIA', 'NEQUI', 'DAVIPLATA', 'TARJETA'].includes(
         body.metodoPago,
@@ -399,39 +429,71 @@ export class TiendaService {
       throw new BadRequestException('Medio de pago inválido');
     if (body.metodoPago === 'TARJETA' && (body.pagoBold !== true || !(await this.bold.disponible({ empresaId: e.id, sucursalId: t.sucursalId }))))
       throw new BadRequestException('Los pagos Bold no están habilitados para esta tienda');
+    const ids = [...new Set(lineas.map((l) => l.productoId))];
     const productos = await this.prisma.producto.findMany({
       where: {
         empresaId: e.id,
-        id: { in: body.items.map((i) => i.productoId) },
+        id: { in: ids },
         activo: true,
         disponible: true,
         categoria: { activo: true },
       },
+      include: {
+        categoria: { select: { nombre: true, categoriaPadre: { select: { nombre: true } } } },
+        presentaciones: { where: { activo: true } },
+        adicionales: { include: { adicional: { include: { ingrediente: true } } } },
+      },
     });
-    if (productos.length !== body.items.length)
+    if (productos.length !== ids.length)
       throw new BadRequestException(
         'Un producto ya no está disponible. Actualice el catálogo.',
       );
-    const items = body.items.map((i) => {
-      const p = productos.find((p) => p.id === i.productoId)!;
-      if (!Number.isFinite(Number(p.stockActual)) || Number(p.stockActual) < i.cantidad)
+    const restaurante = e.tipoNegocio === 'RESTAURANTE';
+    const globales = restaurante && lineas.some((l) => l.adicionales.length)
+      ? await this.prisma.adicional.findMany({ where: { empresaId: e.id, activo: true, disponible: true, empaqueParaLlevar: false }, include: { ingrediente: true } })
+      : [];
+    const unidades = new Map<number, number>();
+    const items = lineas.map((l) => {
+      const p = productos.find((p) => p.id === l.productoId)!;
+      const presentacion = l.presentacionId ? p.presentaciones.find((x) => x.id === l.presentacionId) : null;
+      if (l.presentacionId && !presentacion)
+        throw new BadRequestException(`La presentación elegida de ${p.nombre} ya no está disponible. Actualice el catálogo.`);
+      const permitidos = adicionalesDeProducto(p, globales, e.id, restaurante);
+      const adicionales = l.adicionales.map((a) => {
+        const ad = permitidos.find((x) => x.id === a.adicionalId);
+        if (!ad) throw new BadRequestException(`Un adicional de ${p.nombre} ya no está disponible. Actualice el catálogo.`);
+        return { adicionalId: ad.id, nombre: ad.nombre, precio: ad.precio, cantidad: a.cantidad };
+      });
+      unidades.set(p.id, (unidades.get(p.id) || 0) + l.cantidad * (presentacion?.factorUnidades || 1));
+      if (!Number.isFinite(Number(p.stockActual)) || Number(p.stockActual) < unidades.get(p.id)!)
         throw new BadRequestException(`Existencias insuficientes de ${p.nombre}. Actualice el catálogo.`);
+      const precio = presentacion ? Number(presentacion.precio) : Number(p.precio);
+      const precioUnitario = Math.round((precio + adicionales.reduce((s, a) => s + a.precio * a.cantidad, 0)) * 100) / 100;
       return {
         productoId: p.id,
-        nombre: p.nombre,
-        cantidad: i.cantidad,
-        precio: Number(p.precio),
+        nombre: presentacion ? `${p.nombre} · ${presentacion.nombre}` : p.nombre,
+        cantidad: l.cantidad,
+        precio,
+        precioUnitario,
+        ...(presentacion ? { presentacionId: presentacion.id } : {}),
+        ...(adicionales.length ? { adicionales } : {}),
+        ...(l.observacion ? { observacion: l.observacion } : {}),
       };
     });
-    const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
-    if (subtotal < t.minimo)
+    const subtotal = Math.round(items.reduce((s, i) => s + i.precioUnitario * i.cantidad, 0) * 100) / 100;
+    // El pedido mínimo aplica a domicilios; recoger y mesa no pagan envío.
+    if (entrega.tipo === 'DOMICILIO' && subtotal < t.minimo)
       throw new BadRequestException(`La compra mínima es $${t.minimo}`);
     // El cupón solo descuenta productos; se valida de nuevo dentro de la transacción.
     if (body.cupon !== undefined && body.cupon !== '' && !this.extras)
       throw new BadRequestException('Cupón no válido');
     const cupon = body.cupon ? await this.extras!.calcularCupon(e.id, body.cupon, subtotal) : null;
     const descuento = cupon?.descuento || 0;
-    const total = Math.round((subtotal - descuento + zona.costo) * 100) / 100;
+    const canje = body.puntos !== undefined && body.puntos !== 0 && t.cuentasHabilitadas && this.experiencia
+      ? await this.experiencia.calcularCanje(slug, e, autorizacion, body.puntos, subtotal - descuento)
+      : null;
+    if (body.puntos && !canje) throw new BadRequestException('El canje de puntos no está disponible');
+    const total = Math.round((subtotal - descuento - (canje?.valor || 0) + costoDomicilio) * 100) / 100;
     monto(total, 'Total del pedido', 0, 99999999.99);
     if (body.metodoPago === 'TARJETA') montoBold(total);
     if (
@@ -457,6 +519,14 @@ export class TiendaService {
     const cuenta = t.cuentasHabilitadas && this.extras
       ? await this.extras.clienteOpcional(slug, e.id, autorizacion)
       : null;
+    // Avisos solo con autorización expresa del comprador y si la tienda los activó.
+    const avisos = t.avisosClientes && this.experiencia && body.avisos && typeof body.avisos === 'object'
+      ? {
+          whatsapp: body.avisos.whatsapp === true,
+          correo: this.experiencia.validarCorreoAviso(body.avisos.correo),
+        }
+      : null;
+    const conAvisos = avisos && (avisos.whatsapp || avisos.correo) ? avisos : null;
     const crear = (db: any) => db.pedidoWeb.create({
         data: {
           empresaId: e.id,
@@ -465,17 +535,17 @@ export class TiendaService {
           nombre,
           telefono,
           direccion,
-          zona: zona.ciudad ? `${zona.ciudad} · ${zona.nombre}` : zona.nombre,
+          zona: zonaTexto,
           observacion,
           items,
           subtotal,
-          costoDomicilio: zona.costo,
+          costoDomicilio,
           total,
           metodoPago: body.metodoPago,
         },
       });
     try {
-      const pedido = cupon || cuenta
+      const pedido = cupon || cuenta || canje || conAvisos
         ? await this.prisma.$transaction(async (tx) => {
             const p = await crear(tx);
             if (cupon) {
@@ -485,10 +555,12 @@ export class TiendaService {
               await this.extras!.aplicarCupon(vigente.r, p.id, descuento, tx);
             }
             if (cuenta) await this.extras!.vincularPedido(e.id, cuenta.r.id, p.id, tx);
+            if (canje) await this.experiencia!.registrarCanje(e.id, p.id, canje, tx);
+            if (conAvisos) await this.experiencia!.registrarAvisoPedido(e.id, p.id, conAvisos, tx);
             return p;
           }, { timeout: 15000 })
         : await crear(this.prisma);
-      return { id: pedido.id, estado: pedido.estado, total: pedido.total, subtotal: pedido.subtotal, costoDomicilio: pedido.costoDomicilio, items: pedido.items, descuento };
+      return { id: pedido.id, estado: pedido.estado, total: pedido.total, subtotal: pedido.subtotal, costoDomicilio: pedido.costoDomicilio, items: pedido.items, descuento: descuento + (canje?.valor || 0) };
     } catch (err) {
       if (err.code === 'P2002') {
         const p = await this.prisma.pedidoWeb.findUniqueOrThrow({
@@ -551,7 +623,9 @@ export class TiendaService {
     });
   }
   async gestionar(id: string, body: any, user: any) {
-    return this.prisma.$transaction(
+    // Fuera de la transacción: una sede sin la tabla de registros no invalida la venta.
+    const previo = this.experiencia ? await this.experiencia.datosPedido(user.empresaId, id) : null;
+    const resultado = await this.prisma.$transaction(
       async (tx) => {
         // Bloqueo persistente: dos cajeros no pueden convertir la misma solicitud en dos ventas.
         await tx.$queryRaw`SELECT id FROM pedidos_web WHERE id = ${id} AND "empresaId" = ${user.empresaId} FOR UPDATE`;
@@ -578,14 +652,16 @@ export class TiendaService {
               activo: true,
               disponible: true,
             },
+            include: { presentaciones: { where: { activo: true } } },
           });
+          // El precio base (producto o presentación) debe seguir igual; los adicionales los valida la venta.
           if (
             items.some(
               (i) =>
                 !prods.some(
                   (prod) =>
                     prod.id === i.productoId &&
-                    Number(prod.precio) === i.precio,
+                    Number(i.presentacionId ? prod.presentaciones?.find((x) => x.id === i.presentacionId)?.precio : prod.precio) === i.precio,
                 ),
             )
           )
@@ -595,17 +671,20 @@ export class TiendaService {
           // Solo se consulta el cupón si el pedido tiene descuento: así una sede sin la tabla
           // de registros no invalida la transacción de la venta.
           const descuento = descuentoPedido(p);
-          const uso = descuento > 0 ? await this.extras?.usoCupon(user.empresaId, p.id, tx) : null;
-          if (descuento > 0 && (!uso || Math.abs(uso.descuento - descuento) > 0.009))
-            throw new ConflictException('No se pudo verificar el cupón de este pedido. Contacta a soporte antes de aceptarlo.');
+          const uso = previo ? previo.cupon : descuento > 0 ? await this.extras?.usoCupon(user.empresaId, p.id, tx) : null;
+          const canje = previo?.canje || null;
+          if (Math.abs((uso?.descuento || 0) + (canje?.valor || 0) - descuento) > 0.009)
+            throw new ConflictException('No se pudo verificar el descuento de este pedido. Contacta a soporte antes de aceptarlo.');
           // No vincular por teléfono a un cliente existente: el comprador público no autenticó su identidad.
           const venta = await this.pedidos.crearEnTransaccion(
             {
               items,
               metodoPago: pago?.metodo || p.metodoPago,
               sucursalId: p.sucursalId,
-              clienteId: body.clienteId || null,
-              ...(descuento > 0 ? { descuento } : {}),
+              // El canje usa el cliente vinculado; si no, el elegido por caja o el de la cuenta web.
+              clienteId: canje?.clientePosId || body.clienteId || previo?.clientePosId || null,
+              ...(uso ? { descuento: uso.descuento } : {}),
+              ...(canje ? { puntosCanjeados: canje.puntos } : {}),
               observacion: `DOMICILIO: ${p.nombre} · ${p.telefono} · ${p.direccion}.${uso ? ` CUPÓN ${uso.codigo}.` : ''} ${p.observacion || ''}`,
             },
             user.id,
@@ -659,7 +738,9 @@ export class TiendaService {
           });
         }
         if (body.accion === 'ENTREGADO') {
-          if (p.estado !== 'EN_CAMINO')
+          // Recoger en tienda y mesa no pasan por domiciliario.
+          const local = p.zona === 'Recoger en tienda' || p.zona.startsWith('Mesa ');
+          if (p.estado !== 'EN_CAMINO' && !(local && p.estado === 'ACEPTADO' && user.rol !== 'DOMICILIARIO'))
             throw new ConflictException('El pedido no está en camino');
           await tx.pedido.update({
             where: { id: p.pedidoId! },
@@ -674,5 +755,7 @@ export class TiendaService {
       },
       { timeout: 15000 },
     );
+    if (this.experiencia) void this.experiencia.avisarPedido(user.empresaId, resultado);
+    return resultado;
   }
 }

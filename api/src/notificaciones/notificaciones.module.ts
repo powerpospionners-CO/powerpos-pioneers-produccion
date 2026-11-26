@@ -10,6 +10,6 @@ import { WhatsappController } from './whatsapp.controller';
   imports: [PrismaModule],
   providers: [NotificacionesService, WhatsappService],
   controllers: [NotificacionesController, WhatsappController],
-  exports: [NotificacionesService],
+  exports: [NotificacionesService, WhatsappService],
 })
 export class NotificacionesModule {}

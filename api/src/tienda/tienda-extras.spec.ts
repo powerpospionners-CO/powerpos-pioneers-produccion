@@ -250,7 +250,7 @@ describe('Pedido web con cupón al aceptarse en caja', () => {
     const p = { id: 'w1', empresaId: 7, sucursalId: 2, estado: 'RECIBIDO', metodoPago: 'EFECTIVO', items: [], subtotal: 20000, costoDomicilio: 0, total: 15000 };
     const tx: any = { $queryRaw: jest.fn(), pedidoWeb: { findFirst: jest.fn().mockResolvedValue(p) }, producto: { findMany: jest.fn().mockResolvedValue([]) } };
     const s = new TiendaService({ $transaction: (fn: any) => fn(tx) } as any, {} as any, {} as any, undefined, { usoCupon: jest.fn().mockResolvedValue(null) } as any);
-    await expect(s.gestionar('w1', { accion: 'ACEPTAR' }, { id: 1, empresaId: 7, rol: 'ADMIN_EMPRESA' })).rejects.toThrow('cupón');
+    await expect(s.gestionar('w1', { accion: 'ACEPTAR' }, { id: 1, empresaId: 7, rol: 'ADMIN_EMPRESA' })).rejects.toThrow('descuento');
   });
 });
 

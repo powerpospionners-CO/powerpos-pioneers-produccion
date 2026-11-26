@@ -15,6 +15,7 @@ import CoberturaEntrega from "./CoberturaEntrega";
 import ContenidoWeb from "./ContenidoWeb";
 import ComercioWeb from "./ComercioWeb";
 import FuncionesTienda from "./FuncionesTienda";
+import ExperienciaTienda from "./ExperienciaTienda";
 const input =
   "w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white";
 const card = "rounded-xl border border-gray-800 bg-gray-900/60 p-6 space-y-4";
@@ -398,6 +399,7 @@ export default function MiTienda() {
                   </section>
                   <ComercioWeb config={config.tienda} busy={busy} onChange={cambiar} onBusy={setBusy} onMensaje={setMensaje} onError={setError} />
                   <FuncionesTienda config={config.tienda} busy={busy} onChange={cambiar} />
+                  <ExperienciaTienda canalesAvisos={config.canalesAvisos} config={config.tienda} busy={busy} nombre={config.tienda.titulo || "Mi tienda"} onChange={cambiar} />
                   <ContenidoWeb galeria={config.tienda.galeria || []} preguntas={config.tienda.preguntasFrecuentes || []} busy={busy} onChange={cambiar} onBusy={setBusy} onMensaje={setMensaje} onError={setError} />
                   <section className={card}>
                     <h2 className="text-xl font-bold">Productos y precios</h2>

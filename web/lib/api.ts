@@ -105,7 +105,12 @@ api.interceptors.response.use(
     ) {
       window.location.href = "/suscripcion";
     }
-    if (error.response?.status === 401 && typeof window !== "undefined") {
+    // En el inicio de sesión un 401 significa datos incorrectos, no una sesión vencida.
+    if (
+      error.response?.status === 401 &&
+      typeof window !== "undefined" &&
+      !String(error.config?.url || "").startsWith("/auth/login")
+    ) {
       useAuthStore.getState().logout();
       window.location.href = "/login";
     }

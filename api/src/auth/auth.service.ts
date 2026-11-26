@@ -11,6 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { sumarMeses, suscripcionSuspendida } from '../suscripciones/fechas';
 import { SedesProvisionService } from '../prisma/sedes-provision.service';
+import { SeguridadCuentaService } from './seguridad-cuenta.service';
+import { firmarDesafio, leerDesafio } from './dos-pasos';
+
+export type MetaAcceso = { ip: string; agente: string };
 
 @Injectable()
 export class AuthService {
@@ -18,9 +22,10 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     @Optional() private readonly sedes?: SedesProvisionService,
+    @Optional() private readonly seguridad?: SeguridadCuentaService,
   ) {}
 
-  async login(email: string, password: string, sucursalId?: number) {
+  async login(email: string, password: string, sucursalId?: number, meta: MetaAcceso = { ip: '', agente: '' }) {
     if (typeof email !== 'string' || typeof password !== 'string' || email.length > 250 || password.length > 500) throw new UnauthorizedException('Credenciales inválidas');
     if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId < 1)) throw new UnauthorizedException('Sede inválida');
     if (this.prisma.control) await this.prisma.estadoAislamiento();
@@ -76,12 +81,55 @@ export class AuthService {
       });
     }
 
+    const sucursal = sedeElegida ?? usuario.sucursalId;
+    const db = this.seguridad
+      ? await this.seguridad.base({ rol: usuario.rol, empresaId: usuario.empresaId, sucursalId: sucursal })
+      : null;
+    // Con verificación en dos pasos, la contraseña solo entrega un desafío de 5 minutos.
+    if (db && (await this.seguridad!.dosPasosActivo(db, usuario.id)))
+      return {
+        requiere2fa: true,
+        desafio: firmarDesafio({ sub: usuario.id, rol: usuario.rol, empresaId: usuario.empresaId, sucursalId: sucursal }),
+      };
+    return this.emitir(usuario, sucursal, db, meta);
+  }
+
+  async loginDosPasos(desafio: unknown, codigo: unknown, meta: MetaAcceso = { ip: '', agente: '' }) {
+    const d = leerDesafio(desafio);
+    if (!d || !this.seguridad) throw new UnauthorizedException('El código venció. Inicia sesión de nuevo.');
+    const db = await this.seguridad.base(d);
+    const usuario = await db.usuario.findUnique({
+      where: { id: d.sub },
+      include: { empresa: true, sucursal: true, distribuidor: true },
+    });
+    if (
+      !usuario ||
+      !usuario.activo ||
+      usuario.rol !== d.rol ||
+      usuario.empresaId !== d.empresaId ||
+      (usuario.empresa && !usuario.empresa.activo && usuario.rol !== 'SUPERADMIN')
+    )
+      throw new UnauthorizedException('Credenciales inválidas');
+    if (!(await this.seguridad.verificar(db, usuario.id, codigo)))
+      throw new UnauthorizedException('Código incorrecto');
+    return this.emitir(usuario, d.sucursalId, db, meta);
+  }
+
+  private async emitir(usuario: any, sucursal: number | null, db: any, meta: MetaAcceso) {
+    let sid: string | undefined;
+    try {
+      if (db && this.seguridad) sid = await this.seguridad.crearSesion(db, usuario, meta);
+    } catch {
+      // Sin registro de sesiones el acceso sigue funcionando como antes.
+      sid = undefined;
+    }
     const payload = {
       sub: usuario.id,
       email: usuario.email,
       rol: usuario.rol,
       empresaId: usuario.empresaId,
-      sucursalId: sedeElegida ?? usuario.sucursalId,
+      sucursalId: sucursal,
+      ...(sid ? { sid } : {}),
     };
 
     return {
@@ -94,7 +142,7 @@ export class AuthService {
         empresa: usuario.empresa?.nombre,
         sucursal: usuario.sucursal?.nombre,
         empresaId: usuario.empresaId,
-        sucursalId: sedeElegida ?? usuario.sucursalId,
+        sucursalId: sucursal,
         plan: usuario.empresa?.plan,
         tipoNegocio: usuario.empresa?.tipoNegocio,
         permisos: usuario.empresa?.permisos,

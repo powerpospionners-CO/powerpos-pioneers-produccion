@@ -44,7 +44,10 @@ type Cliente = {
   bloqueadoHasta: number;
   consentimientoEn: string;
   codigo?: { hash: string; vence: number; intentos: number; creado: number } | null;
+  favoritos?: number[];
+  clientePosId?: number | null;
 };
+export type ClienteWeb = Cliente;
 type Reserva = {
   nombre: string;
   telefono: string;
@@ -53,6 +56,7 @@ type Reserva = {
   hora: string;
   personas: number;
   nota: string;
+  avisos?: boolean;
   motivo?: string;
   gestionadoPor?: number;
 };
@@ -196,7 +200,7 @@ export class TiendaExtrasService {
     if (!CLAVE_IDEMPOTENCIA.test(clave)) throw new BadRequestException('Identificador inválido');
     const previa = await this.registros.buscar(e.id, 'RESERVA', clave);
     if (previa) return this.vistaReserva(previa, this.registros.abrir<Reserva>(previa));
-    const d = validarReserva(body, t, ahoraColombia());
+    const d: Reserva = { ...validarReserva(body, t, ahoraColombia()), avisos: body?.avisosWhatsapp === true };
     const indice = indiceCiego(e.id, 'TELEFONO', d.telefono);
     const pendientes = await this.registros.listar(
       e.id,
@@ -361,7 +365,7 @@ export class TiendaExtrasService {
     const c = this.registros.abrir<Cliente>(r);
     return c.sesion === d.v ? { r, c } : null;
   }
-  private async cliente(slug: string, autorizacion: unknown) {
+  async cliente(slug: string, autorizacion: unknown) {
     const { e, t } = await this.habilitadas(slug);
     const x = await this.clienteOpcional(slug, e.id, autorizacion);
     if (!x) throw new UnauthorizedException('Tu sesión venció. Vuelve a ingresar.');

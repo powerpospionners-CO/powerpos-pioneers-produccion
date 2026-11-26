@@ -75,6 +75,16 @@ export function indiceCiego(empresaId: number, tipo: string, valor: string) {
 
 const b64 = (b: Buffer) => b.toString('base64url');
 
+// Firma del QR de cada mesa: sin ella no se pueden enviar pedidos a mesas inventadas.
+export function firmaMesa(empresaId: number, mesa: number) {
+  return createHmac('sha256', derivar('mesas')).update(`${empresaId}:${mesa}`).digest('base64url').slice(0, 16);
+}
+export function mesaValida(empresaId: number, mesa: number, token: unknown) {
+  if (typeof token !== 'string' || token.length !== 16) return false;
+  const a = Buffer.from(firmaMesa(empresaId, mesa)), b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 // Fichas propias de clientes: otra clave y otro formato, nunca aceptadas como sesión del personal.
 export function firmarCliente(datos: {
   e: number;

@@ -207,3 +207,29 @@ export function correoCodigoCuenta(empresa: string, codigo: string): CorreoPower
     pie: `Nunca compartas este código. ${empresa} no te lo pedirá por teléfono ni por chat.`,
   });
 }
+
+export function correoAvisoCliente(empresa: string, titulo: string, mensaje: string): CorreoPowerpos {
+  return plantilla({
+    estilo: 'positivo',
+    titulo,
+    introduccion: `Te escribimos de ${empresa}.`,
+    mensaje,
+    contexto: [['Tienda', empresa]],
+    pie: `Recibes este aviso porque lo pediste al hacer tu pedido o reserva en ${empresa}.`,
+  });
+}
+
+export function correoNuevoAcceso(datos: { nombre: string; dispositivo: string; ip: string; fecha: Date }): CorreoPowerpos {
+  return plantilla({
+    estilo: 'atencion',
+    titulo: 'Nuevo inicio de sesión en tu cuenta',
+    introduccion: `Hola, ${datos.nombre}. Detectamos un acceso a PowerPOS desde un dispositivo o red que no habías usado recientemente.`,
+    mensaje: 'Si fuiste tú, no necesitas hacer nada.\nSi no reconoces este acceso, cambia tu contraseña, entra a Seguridad para cerrar las demás sesiones y activa la verificación en dos pasos.',
+    contexto: [
+      ['Dispositivo', datos.dispositivo],
+      ['Dirección IP', datos.ip || 'No disponible'],
+      ['Fecha', datos.fecha.toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'long', timeStyle: 'short' })],
+    ],
+    pie: 'Este aviso se envía automáticamente para proteger tu cuenta de PowerPOS.',
+  });
+}

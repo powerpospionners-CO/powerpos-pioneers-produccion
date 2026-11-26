@@ -169,6 +169,34 @@ describe('WhatsApp oficial: aislamiento, consentimiento y consumo', () => {
       }),
     );
   });
+  it('avisa a clientes sin depender de la plantilla interna, limita consumo y registra entrega', async () => {
+    process.env.WHATSAPP_TEMPLATE_CLIENTE = 'aviso_cliente';
+    delete process.env.WHATSAPP_TEMPLATE_ALERTA;
+    const { servicio, salida, db } = crear();
+    expect(servicio.estado().configurado).toBe(false);
+    expect(servicio.clienteConfigurado()).toBe(true);
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: 'wamid.cliente' }] }) });
+    expect(await servicio.enviarCliente(7, '3101234567', 'Tienda', 'Pedido aceptado')).toBe(true);
+    expect(await servicio.enviarCliente(7, '3101234567', 'Tienda', 'Pedido aceptado')).toBe(false);
+    expect(await servicio.enviarCliente(7, '3101234567', 'Tienda', 'Pedido entregado')).toBe(true);
+    expect(await servicio.enviarCliente(7, '3101234567', 'Tienda', 'Otro aviso')).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const payload = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(payload.to).toBe('573101234567');
+    expect(payload.template.components[0].parameters).toHaveLength(2);
+    expect(salida[0].empresaId).toBe(7);
+    expect(salida[0].detalle).not.toHaveProperty('telefono');
+    expect(db.auditoria.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ accion: 'ACEPTADO', detalle: expect.objectContaining({ messageId: 'wamid.cliente' }) }) }));
+  });
+  it('no reintenta un aviso de cliente tras timeout ni reporta entrega exitosa', async () => {
+    process.env.WHATSAPP_TEMPLATE_CLIENTE = 'aviso_cliente';
+    const { servicio, db } = crear();
+    global.fetch = jest.fn().mockRejectedValue(new Error('timeout'));
+    expect(await servicio.enviarCliente(7, '3101234567', 'Tienda', 'Pedido aceptado')).toBe(false);
+    expect(await servicio.enviarCliente(7, '3101234567', 'Tienda', 'Pedido aceptado')).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(db.auditoria.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { accion: 'REVISAR' } }));
+  });
   it('valida HMAC del cuerpo original y rechaza cuerpos alterados', () => {
     const raw = Buffer.from('{"object":"whatsapp_business_account"}');
     const firma =

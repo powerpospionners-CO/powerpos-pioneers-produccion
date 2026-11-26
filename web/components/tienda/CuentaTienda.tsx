@@ -4,7 +4,20 @@ import { solicitarTienda } from "../../lib/tiendaPublica";
 import { encabezadoCuenta, guardarToken, leerToken } from "../../lib/cuentaTienda";
 import CampoTrampa from "./CampoTrampa";
 
-type Item = { productoId: number; nombre: string; cantidad: number; precio: number };
+export type ItemCuenta = {
+  productoId: number;
+  nombre: string;
+  cantidad: number;
+  precio: number;
+  presentacionId?: number;
+  adicionales?: { adicionalId: number; cantidad: number }[];
+  observacion?: string;
+};
+type Item = ItemCuenta;
+type Extras = {
+  favoritos: number[];
+  puntos: { vinculado: boolean; saldo: number; habilitado: boolean; valorPunto: number };
+};
 type Pedido = { id: string; estado: string; total: number; items: Item[]; creadoEn: string };
 type Perfil = { cliente: { nombre: string; correo: string; telefono: string }; pedidos: Pedido[] };
 type Modo = "ingresar" | "registro" | "olvido" | "restablecer";
@@ -25,6 +38,9 @@ export default function CuentaTienda({
   inicioHref,
   privacidadHref,
   onRepetir,
+  productos = [],
+  productoHref,
+  resenasHabilitadas = false,
 }: {
   slug: string;
   nombreTienda: string;
@@ -32,6 +48,9 @@ export default function CuentaTienda({
   inicioHref: string;
   privacidadHref?: string;
   onRepetir: (items: Item[]) => void;
+  productos?: { id: number; nombre: string }[];
+  productoHref?: (id: number) => string;
+  resenasHabilitadas?: boolean;
 }) {
   const base = `/tiendas/${encodeURIComponent(slug)}/cuenta`;
   const [modo, setModo] = useState<Modo>("ingresar"),
@@ -45,7 +64,11 @@ export default function CuentaTienda({
     [mensaje, setMensaje] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [listo, setListo] = useState(false);
+    [listo, setListo] = useState(false),
+    [extras, setExtras] = useState<Extras | null>(null),
+    [codigoPuntos, setCodigoPuntos] = useState(""),
+    [calificando, setCalificando] = useState<{ productoId: number; nombre: string } | null>(null),
+    [resena, setResena] = useState({ estrellas: 5, texto: "" });
   const cargar = useCallback(async () => {
     if (!leerToken(slug)) {
       setPerfil(null);
@@ -56,6 +79,7 @@ export default function CuentaTienda({
       const p = await solicitarTienda<Perfil>(base, { headers: encabezadoCuenta(slug) });
       setPerfil(p);
       setEdicion({ nombre: p.cliente.nombre, telefono: p.cliente.telefono });
+      setExtras(await solicitarTienda<Extras>(`${base}/extras`, { headers: encabezadoCuenta(slug) }).catch(() => null));
     } catch {
       // Ficha vencida o revocada: se descarta en este navegador.
       guardarToken(slug, "");
@@ -129,6 +153,12 @@ export default function CuentaTienda({
                 <small>{p.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(", ")}</small>
               </div>
               <div className="store-form-actions">
+                {resenasHabilitadas && p.estado === "ENTREGADO" &&
+                  [...new Map(p.items.map((i) => [i.productoId, i])).values()].map((i) => (
+                    <button key={i.productoId} type="button" className="button text" onClick={() => { setCalificando({ productoId: i.productoId, nombre: i.nombre }); setResena({ estrellas: 5, texto: "" }); }}>
+                      Calificar {i.nombre}
+                    </button>
+                  ))}
                 <a className="button text" href={`${inicioHref}?pedido=${encodeURIComponent(p.id)}`}>Ver seguimiento</a>
                 <button type="button" className="button primary" onClick={() => { onRepetir(p.items); setMensaje("Agregamos al carrito los productos que siguen disponibles."); }}>
                   Repetir pedido
@@ -137,6 +167,72 @@ export default function CuentaTienda({
             </li>
           ))}
         </ul>
+        {calificando && (
+          <form
+            className="store-form store-review-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void ejecutar(async () => {
+                await post("/resenas", { productoId: calificando.productoId, ...resena }, true);
+                setCalificando(null);
+                setMensaje("Gracias por tu opinión. La tienda la revisará antes de publicarla.");
+              });
+            }}
+          >
+            <fieldset disabled={busy}>
+              <legend>Califica {calificando.nombre}</legend>
+              <div className="store-stars" role="radiogroup" aria-label="Calificación">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <label key={n}>
+                    <input type="radio" name="estrellas" checked={resena.estrellas === n} onChange={() => setResena({ ...resena, estrellas: n })} />
+                    <span aria-hidden="true">{n <= resena.estrellas ? "★" : "☆"}</span>
+                    <span className="sr-only">{n} de 5</span>
+                  </label>
+                ))}
+              </div>
+              <label>Comentario (opcional)<textarea maxLength={600} value={resena.texto} onChange={(e) => setResena({ ...resena, texto: e.target.value })} /></label>
+              <p className="store-form-help">Se publica con tu primer nombre después de que la tienda la apruebe.</p>
+              <div className="store-form-actions">
+                <button className="button primary">Enviar opinión</button>
+                <button type="button" className="button text" onClick={() => setCalificando(null)}>Cancelar</button>
+              </div>
+            </fieldset>
+          </form>
+        )}
+        {extras?.puntos.habilitado && (
+          <>
+            <h2>Mis puntos</h2>
+            {extras.puntos.vinculado ? (
+              <p>
+                Tienes <strong>{extras.puntos.saldo}</strong> puntos. Cada punto vale {dinero(extras.puntos.valorPunto)} y puedes usarlos al pagar tu pedido.
+              </p>
+            ) : (
+              <form className="store-form" onSubmit={(e) => { e.preventDefault(); void ejecutar(async () => { setExtras(await post<Extras>("/vincular", { codigo: codigoPuntos }, true)); setCodigoPuntos(""); setMensaje("Tus puntos quedaron vinculados a esta cuenta."); }); }}>
+                <fieldset disabled={busy}>
+                  <p className="store-form-help">Pide en caja tu código para ver y usar aquí los puntos que acumulas en la tienda.</p>
+                  <label>Código de 8 caracteres<input required maxLength={12} autoComplete="off" value={codigoPuntos} onChange={(e) => setCodigoPuntos(e.target.value.toUpperCase())} /></label>
+                  <button className="button primary">Vincular mis puntos</button>
+                </fieldset>
+              </form>
+            )}
+          </>
+        )}
+        {!!extras?.favoritos.length && (
+          <>
+            <h2>Mis favoritos</h2>
+            <ul className="store-account-favorites">
+              {extras.favoritos.map((id) => {
+                const prod = productos.find((x) => x.id === id);
+                if (!prod) return null;
+                return (
+                  <li key={id}>
+                    {productoHref ? <a href={productoHref(id)}>{prod.nombre}</a> : prod.nombre}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
         <h2>Mis datos</h2>
         <form className="store-form" onSubmit={(e) => { e.preventDefault(); void ejecutar(async () => { await solicitarTienda(base, { method: "PATCH", body: JSON.stringify(edicion), headers: encabezadoCuenta(slug) }); await cargar(); setMensaje("Datos actualizados."); }); }}>
           <fieldset disabled={busy}>

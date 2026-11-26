@@ -47,4 +47,4 @@ Cada empresa activa estas funciones en **Mi tienda → Funciones de la tienda en
 
 ## Respaldos
 
-Los scripts de respaldo, de copia entre sedes y de auditoría tratan `personal_registros`, `bold_registros` y `tienda_registros` como tablas opcionales. Una sede que nunca activó alguna de estas funciones se respalda completa.
+Los scripts de respaldo, de copia entre sedes y de auditoría tratan `personal_registros`, `bold_registros`, `tienda_registros` y `seguridad_registros` como tablas opcionales. Una sede que nunca activó alguna de estas funciones se respalda completa.

@@ -105,6 +105,22 @@ export default async function ProductoPage(p: Props) {
           url,
           seller: { "@type": "Organization", name: tienda.nombre },
         },
+        // Solo reseñas de compradores con pedido entregado y aprobadas por la empresa.
+        ...(() => {
+          const r = tienda.resenas?.find((x) => x.productoId === producto!.id);
+          return r
+            ? {
+                aggregateRating: { "@type": "AggregateRating", ratingValue: r.promedio, reviewCount: r.total, bestRating: 5, worstRating: 1 },
+                review: r.ultimas.map((x) => ({
+                  "@type": "Review",
+                  author: { "@type": "Person", name: x.nombre },
+                  reviewRating: { "@type": "Rating", ratingValue: x.estrellas, bestRating: 5 },
+                  ...(x.texto ? { reviewBody: x.texto } : {}),
+                  datePublished: x.fecha.slice(0, 10),
+                })),
+              }
+            : {};
+        })(),
       };
   return (
     <script

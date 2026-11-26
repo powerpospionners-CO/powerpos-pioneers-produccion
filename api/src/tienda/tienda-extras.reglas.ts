@@ -153,20 +153,7 @@ export function validarReserva(
     fallo('Elige una fecha y hora con al menos 30 minutos de anticipación');
   if (fecha > limite.toISOString().slice(0, 10))
     fallo(`Solo se reciben reservas hasta ${config.reservaDiasMax} días adelante`);
-  if (config.horarios) {
-    // Los horarios empiezan en lunes (0); getUTCDay empieza en domingo.
-    const dia = (new Date(`${fecha}T12:00:00Z`).getUTCDay() + 6) % 7;
-    const h = config.horarios.find((x) => x.dia === dia);
-    const previo = config.horarios.find((x) => x.dia === (dia + 6) % 7);
-    const m = minutos(hora);
-    const dentroHoy = !!h?.abierto && m >= minutos(h.apertura) &&
-      (h.cierre < h.apertura || m < minutos(h.cierre));
-    const dentroAnterior = !!previo?.abierto && previo.cierre < previo.apertura && m < minutos(previo.cierre);
-    if (!dentroHoy && !dentroAnterior) {
-      if (!h?.abierto) fallo('La tienda no atiende ese día');
-      fallo('La hora está fuera del horario de atención de ese día');
-    }
-  }
+  if (config.horarios) revisarHorario(config.horarios, fecha, hora);
   return {
     nombre,
     telefono,
@@ -176,6 +163,23 @@ export function validarReserva(
     personas,
     nota: texto(body.nota ?? '', 'Indicaciones', 300),
   };
+}
+
+
+// Valida una fecha y hora contra el horario semanal, incluidos los turnos que cruzan la medianoche.
+export function revisarHorario(horarios: HorarioDia[], fecha: string, hora: string) {
+  // Los horarios empiezan en lunes (0); getUTCDay empieza en domingo.
+  const dia = (new Date(`${fecha}T12:00:00Z`).getUTCDay() + 6) % 7;
+  const h = horarios.find((x) => x.dia === dia);
+  const previo = horarios.find((x) => x.dia === (dia + 6) % 7);
+  const m = minutos(hora);
+  const dentroHoy = !!h?.abierto && m >= minutos(h.apertura) &&
+    (h.cierre < h.apertura || m < minutos(h.cierre));
+  const dentroAnterior = !!previo?.abierto && previo.cierre < previo.apertura && m < minutos(previo.cierre);
+  if (!dentroHoy && !dentroAnterior) {
+    if (!h?.abierto) fallo('La tienda no atiende ese día');
+    fallo('La hora está fuera del horario de atención de ese día');
+  }
 }
 
 export function ahoraColombia(d = new Date()) {

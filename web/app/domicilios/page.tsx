@@ -10,6 +10,8 @@ const money = (n: number | string) =>
     currency: "COP",
     maximumFractionDigits: 0,
   });
+// Pedidos que no salen con domiciliario: se recogen en el local o se sirven en la mesa.
+const esLocal = (p: { zona: string }) => p.zona === "Recoger en tienda" || p.zona.startsWith("Mesa ");
 export default function Domicilios() {
   const { usuario } = useAuthStore();
   const [pedidos, setPedidos] = useState<any[]>([]),
@@ -163,19 +165,26 @@ export default function Domicilios() {
                         <p className="mt-2 text-amber-200">{p.observacion}</p>
                       )}
                       <ul className="my-4 space-y-2">
-                        {p.items.map((i: any) => (
+                        {p.items.map((i: any, n: number) => (
                           <li
-                            className="flex justify-between"
-                            key={i.productoId}
+                            className="flex justify-between gap-3"
+                            key={`${i.productoId}-${n}`}
                           >
                             <span>
                               {i.cantidad} × {i.nombre}
+                              {!!i.adicionales?.length && (
+                                <span className="block text-sm text-gray-400">
+                                  {i.adicionales.map((a: any) => `+ ${a.nombre}${a.cantidad > 1 ? ` ×${a.cantidad}` : ""}`).join(" · ")}
+                                </span>
+                              )}
+                              {i.observacion && <span className="block text-sm text-amber-200">Nota: {i.observacion}</span>}
                             </span>
-                            <span>{money(i.precio * i.cantidad)}</span>
+                            <span>{money(Number(i.precioUnitario ?? i.precio) * i.cantidad)}</span>
                           </li>
                         ))}
                       </ul>
-                      <p>Domicilio: {money(p.costoDomicilio)}</p>
+                      {Number(p.descuento) > 0 && <p>Descuento (cupón o puntos): −{money(p.descuento)}</p>}
+                      <p>{esLocal(p) ? (p.zona.startsWith("Mesa ") ? "Servicio en mesa" : "Recoge en tienda") : `Domicilio: ${money(p.costoDomicilio)}`}</p>
                       <p className="my-3 text-xl font-bold">
                         Total: {money(p.total)} · {p.metodoPago}
                       </p>
@@ -257,7 +266,16 @@ export default function Domicilios() {
                               {p.pagoBold && ["PENDIENTE", "RECHAZADO"].includes(p.pagoBold.estado) && <p className="text-sm text-gray-400">Puedes cancelar si todavía no hay pago confirmado. Si Bold confirma un cobro después, aparecerá en revisión en Mi tienda → Últimos pagos web.</p>}
                             </>
                           )}
-                        {p.estado === "ACEPTADO" &&
+                        {p.estado === "ACEPTADO" && esLocal(p) && usuario?.rol !== "DOMICILIARIO" && (
+                          <button
+                            disabled={!!busy}
+                            className="rounded-lg bg-teal-700 px-4 py-3 disabled:opacity-40"
+                            onClick={() => actuar(p.id, "ENTREGADO")}
+                          >
+                            {p.zona.startsWith("Mesa ") ? "Servido en la mesa" : "Entregado al cliente"}
+                          </button>
+                        )}
+                        {p.estado === "ACEPTADO" && !esLocal(p) &&
                           usuario?.rol !== "DOMICILIARIO" && (
                             <>
                               <label className="block">

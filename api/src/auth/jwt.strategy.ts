@@ -1,12 +1,13 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { jwtSecret } from './jwt-secret';
+import { SeguridadCuentaService } from './seguridad-cuenta.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly seguridad?: SeguridadCuentaService) {
     super({
       jwtFromRequest: (request) =>
         ExtractJwt.fromAuthHeaderAsBearerToken()(request) ||
@@ -50,6 +51,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     ) {
       throw new UnauthorizedException('Cuenta inactiva');
     }
+    // Las fichas emitidas antes del registro de sesiones no traen sid y siguen valiendo hasta vencer.
+    if (payload.sid !== undefined && (typeof payload.sid !== 'string' || !this.seguridad || !(await this.seguridad.sesionValida(base, usuario.id, payload.sid))))
+      throw new UnauthorizedException('La sesión fue cerrada. Inicia sesión de nuevo.');
     const suscripcion = this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN'
       ? await this.prisma.control.empresa.findUnique({ where: { id: usuario.empresaId }, select: { suscripcionVenceEn: true, pagoExonerado: true } }) : usuario.empresa;
     if (this.prisma.aislamientoActivo && usuario.rol !== 'SUPERADMIN' && !suscripcion) throw new UnauthorizedException('Empresa no encontrada');
@@ -68,6 +72,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       pagoExonerado: suscripcion?.pagoExonerado,
       distribuidoresHabilitado: usuario.empresa?.distribuidoresHabilitado,
       recaudoEfectivoHabilitado: usuario.empresa?.recaudoEfectivoHabilitado,
+      sesionId: typeof payload.sid === 'string' ? payload.sid : undefined,
     };
   }
 }

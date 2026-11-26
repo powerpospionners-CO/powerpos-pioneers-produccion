@@ -18,6 +18,18 @@ import AnaliticaTienda from "../../../components/AnaliticaTienda";
 import ReservaTienda from "../../../components/tienda/ReservaTienda";
 import CuentaTienda from "../../../components/tienda/CuentaTienda";
 import BoletinTienda from "../../../components/tienda/BoletinTienda";
+import OpcionesProducto from "../../../components/tienda/OpcionesProducto";
+import {
+  claveLinea,
+  etiquetaOpciones,
+  normalizarOpciones,
+  precioLinea,
+  sinOpciones,
+  tieneOpciones,
+  type OpcionesLinea,
+} from "../../../lib/opcionesTienda";
+import { EVENTO_CUENTA, encabezadoCuenta, leerToken } from "../../../lib/cuentaTienda";
+import { solicitarTienda } from "../../../lib/tiendaPublica";
 import { redesTienda } from "../../../lib/comercioTienda";
 import {
   rutaCategoria,
@@ -51,7 +63,7 @@ type Product = {
   imagePosition: string;
 };
 
-type CartItem = Product & { quantity: number };
+type CartItem = Product & { quantity: number; linea: string; opciones: OpcionesLinea };
 
 const money = (value: number) => `$${value.toLocaleString("es-CO")}`;
 const nombresPoliticas: Record<string, [string, string]> = {
@@ -357,7 +369,51 @@ function App({
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selected = products.find((p) => p.id === selectedId) || null;
-  const setSelected = (p: Product | null) => setSelectedId(p?.id ?? null);
+  const [opcionesSel, setOpcionesSel] = useState<OpcionesLinea>(sinOpciones());
+  const setSelected = (p: Product | null) => {
+    setSelectedId(p?.id ?? null);
+    setOpcionesSel(sinOpciones());
+  };
+  const publico = (id: number) => tienda.productos.find((p) => p.id === id);
+  // Mesa del QR: se conserva en la pestaña mientras el cliente sigue pidiendo.
+  const [mesa, setMesa] = useState<{ numero: number; token: string } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const numero = Number(q.get("mesa"));
+    const token = q.get("t") || "";
+    try {
+      if (numero > 0 && /^[\w-]{16}$/.test(token)) {
+        sessionStorage.setItem(`mesa:${slug}`, JSON.stringify({ numero, token }));
+        setMesa({ numero, token });
+      } else {
+        const guardada = JSON.parse(sessionStorage.getItem(`mesa:${slug}`) || "null");
+        if (guardada?.numero > 0) setMesa(guardada);
+      }
+    } catch {
+      if (numero > 0) setMesa({ numero, token });
+    }
+  }, [slug]);
+  const [favoritos, setFavoritos] = useState<number[] | null>(null);
+  useEffect(() => {
+    if (!t.cuentasHabilitadas) return;
+    const cargar = () => {
+      if (!leerToken(slug)) return setFavoritos(null);
+      solicitarTienda<{ favoritos: number[] }>(`/tiendas/${encodeURIComponent(slug)}/cuenta/extras`, { headers: encabezadoCuenta(slug) })
+        .then((r) => setFavoritos(r.favoritos))
+        .catch(() => setFavoritos(null));
+    };
+    cargar();
+    window.addEventListener(EVENTO_CUENTA, cargar);
+    return () => window.removeEventListener(EVENTO_CUENTA, cargar);
+  }, [slug, t.cuentasHabilitadas]);
+  const marcarFavorito = (productoId: number, favorito: boolean) =>
+    solicitarTienda<{ favoritos: number[] }>(`/tiendas/${encodeURIComponent(slug)}/cuenta/favoritos`, {
+      method: "POST",
+      headers: encabezadoCuenta(slug),
+      body: JSON.stringify({ productoId, favorito }),
+    })
+      .then((r) => setFavoritos(r.favoritos))
+      .catch(() => undefined);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkout, setCheckout] = useState(false);
@@ -447,15 +503,27 @@ function App({
     );
   }, [search, category, country, sort, products]);
 
-  const currentCart = cart.map((item) => ({
-    ...item,
-    ...products.find((p) => p.id === item.id),
-    disponible: products.some(
-      (p) =>
-        p.id === item.id &&
-        puedePedirProducto(p.stock, item.quantity, p.disponible),
-    ),
-  }));
+  // Precio y disponibilidad con el catálogo vigente; las existencias se suman entre líneas del mismo producto.
+  const currentCart = cart.map((item) => {
+    const base = products.find((p) => p.id === item.id);
+    const precio = precioLinea(publico(item.id), item.opciones);
+    const unidades = cart
+      .filter((x) => x.id === item.id)
+      .reduce((s, x) => s + x.quantity, 0);
+    return {
+      ...item,
+      ...base,
+      quantity: item.quantity,
+      linea: item.linea,
+      opciones: item.opciones,
+      price: precio ?? 0,
+      etiqueta: etiquetaOpciones(publico(item.id), item.opciones),
+      disponible:
+        !!base &&
+        precio !== null &&
+        puedePedirProducto(base.stock, unidades, base.disponible),
+    };
+  });
   const totalCount = currentCart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = currentCart.reduce(
     (sum, item) => sum + item.price * item.quantity,
@@ -465,47 +533,49 @@ function App({
   const addToCart = (
     product: Product,
     quantity = quantities[product.id] || 1,
+    opciones: OpcionesLinea = sinOpciones(),
   ) => {
     if (!product.disponible) return;
+    const o = normalizarOpciones(opciones);
+    const linea = claveLinea(product.id, o);
     setCart((current) => {
-      const found = current.find((item) => item.id === product.id);
+      const found = current.find((item) => item.linea === linea);
+      const otras = current
+        .filter((item) => item.id === product.id && item.linea !== linea)
+        .reduce((s, item) => s + item.quantity, 0);
+      const max = Math.max(0, product.stock - otras);
+      if (!found && max <= 0) return current;
       return found
         ? current.map((item) =>
-            item.id === product.id
-              ? {
-                  ...item,
-                  quantity: Math.min(product.stock, item.quantity + quantity),
-                }
+            item.linea === linea
+              ? { ...item, quantity: Math.min(max, item.quantity + quantity) }
               : item,
           )
         : [
             ...current,
-            { ...product, quantity: Math.min(product.stock, quantity) },
+            { ...product, quantity: Math.min(max, quantity), linea, opciones: o },
           ];
     });
     setToast(`${product.name} se agregó al carrito`);
     window.setTimeout(() => setToast(""), 2600);
   };
 
-  const updateCart = (id: number, quantity: number) =>
-    setCart((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity: Math.max(
-                1,
-                Math.min(
-                  products.find((p) => p.id === id)?.stock || 0,
-                  quantity,
-                ),
-              ),
-            }
-          : item,
-      ),
-    );
-  const removeCart = (id: number) =>
-    setCart((current) => current.filter((item) => item.id !== id));
+  const updateCart = (linea: string, quantity: number) =>
+    setCart((current) => {
+      const item = current.find((x) => x.linea === linea);
+      if (!item) return current;
+      const otras = current
+        .filter((x) => x.id === item.id && x.linea !== linea)
+        .reduce((s, x) => s + x.quantity, 0);
+      const max = (products.find((p) => p.id === item.id)?.stock || 0) - otras;
+      return current.map((x) =>
+        x.linea === linea
+          ? { ...x, quantity: Math.max(1, Math.min(max, quantity)) }
+          : x,
+      );
+    });
+  const removeCart = (linea: string) =>
+    setCart((current) => current.filter((item) => item.linea !== linea));
 
   const applyCategory = (name: string) => {
     setCategory(name);
@@ -568,8 +638,8 @@ function App({
   };
 
   const whatsappOrder = () => {
-    const lines = cart
-      .map((i) => `• ${i.name} x${i.quantity} — ${money(i.price * i.quantity)}`)
+    const lines = currentCart
+      .map((i) => `• ${i.name}${i.etiqueta ? ` (${i.etiqueta})` : ""} x${i.quantity} — ${money(i.price * i.quantity)}`)
       .join("\n");
     const deliveryText =
       delivery === "domicilio"
@@ -804,10 +874,15 @@ function App({
                     ?.imagenes || []
                 }
                 volver={rutas.productos}
-                onAgregar={() => {
+                onAgregar={(opciones) => {
                   const p = products.find((p) => p.id === productoId);
-                  if (p) addToCart(p, 1);
+                  if (p) addToCart(p, 1, opciones);
                 }}
+                resenas={tienda.resenas?.find((r) => r.productoId === productoId)}
+                favorito={favoritos?.includes(productoId)}
+                onFavorito={
+                  favoritos ? (v) => void marcarFavorito(productoId, v) : undefined
+                }
               />
             ) : (
               <section className="section">
@@ -1036,9 +1111,16 @@ function App({
                             <button
                               className="add-button"
                               disabled={!product.disponible}
-                              onClick={() => addToCart(product)}
+                              onClick={() =>
+                                tieneOpciones(publico(product.id))
+                                  ? setSelected(product)
+                                  : addToCart(product)
+                              }
                             >
-                              <Icon name="cart" size={18} /> Agregar al carrito
+                              <Icon name="cart" size={18} />{" "}
+                              {tieneOpciones(publico(product.id))
+                                ? "Elegir opciones"
+                                : "Agregar al carrito"}
                             </button>
                           </div>
                         </article>
@@ -1285,6 +1367,7 @@ function App({
               habilitadas={!!t.reservasHabilitadas}
               maxPersonas={t.reservaMaxPersonas}
               diasMax={t.reservaDiasMax}
+              avisosWhatsapp={!!t.avisosClientes && !!tienda.avisos?.whatsapp}
               privacidadHref={
                 t.politicas?.privacidad?.trim()
                   ? `${rutas.politicas}#politica-privacidad`
@@ -1298,6 +1381,9 @@ function App({
               nombreTienda={tienda.nombre}
               habilitadas={!!t.cuentasHabilitadas}
               inicioHref={rutas.inicio}
+              productos={tienda.productos.map((x) => ({ id: x.id, nombre: x.nombre }))}
+              productoHref={(id) => `${rutas.productos}/${id}`}
+              resenasHabilitadas={!!t.resenasHabilitadas}
               privacidadHref={
                 t.politicas?.privacidad?.trim()
                   ? `${rutas.politicas}#politica-privacidad`
@@ -1306,7 +1392,12 @@ function App({
               onRepetir={(items) => {
                 for (const item of items) {
                   const p = products.find((x) => x.id === item.productoId);
-                  if (p) addToCart(p, item.cantidad);
+                  if (p)
+                    addToCart(p, item.cantidad, {
+                      presentacionId: item.presentacionId,
+                      adicionales: (item.adicionales || []).map((a) => ({ adicionalId: a.adicionalId, cantidad: a.cantidad })),
+                      observacion: item.observacion,
+                    });
                 }
                 setCartOpen(true);
                 setCheckout(false);
@@ -1466,7 +1557,7 @@ function App({
                 </div>
                 <h2 id="product-modal-title">{selected.name}</h2>
                 <strong className="detail-price">
-                  {money(selected.price)}
+                  {money(precioLinea(publico(selected.id), opcionesSel) ?? selected.price)}
                 </strong>
                 <p>
                   {selected.description} La información de disponibilidad y
@@ -1482,6 +1573,13 @@ function App({
                     <strong>{selected.heat}</strong>
                   </div>
                 </div>
+                {tieneOpciones(publico(selected.id)) && selected.disponible && (
+                  <OpcionesProducto
+                    producto={publico(selected.id)!}
+                    valor={opcionesSel}
+                    onChange={setOpcionesSel}
+                  />
+                )}
                 <div className="detail-add">
                   <p>
                     Existencias:{" "}
@@ -1499,8 +1597,11 @@ function App({
                   />
                   <button
                     className="button primary"
-                    disabled={!selected.disponible}
-                    onClick={() => addToCart(selected)}
+                    disabled={!selected.disponible || precioLinea(publico(selected.id), opcionesSel) === null}
+                    onClick={() => {
+                      addToCart(selected, quantities[selected.id] || 1, opcionesSel);
+                      setOpcionesSel(sinOpciones());
+                    }}
                   >
                     Agregar al carrito
                   </button>
@@ -1562,10 +1663,11 @@ function App({
               <div className="cart-content">
                 {cart.length ? (
                   currentCart.map((item) => (
-                    <div className="cart-item" key={item.id}>
+                    <div className="cart-item" key={item.linea}>
                       <ProductImage product={item} />
                       <div>
                         <strong>{item.name}</strong>
+                        {item.etiqueta && <small>{item.etiqueta}</small>}
                         <small>{money(item.price)} c/u</small>
                         <div className="cart-controls">
                           <Quantity
@@ -1573,10 +1675,10 @@ function App({
                             disabled={item.stock <= 0}
                             compact
                             value={item.quantity}
-                            onChange={(n) => updateCart(item.id, n)}
+                            onChange={(n) => updateCart(item.linea, n)}
                           />
                           <button
-                            onClick={() => removeCart(item.id)}
+                            onClick={() => removeCart(item.linea)}
                             aria-label={`Eliminar ${item.name}`}
                           >
                             <Icon name="trash" size={17} />
@@ -1660,6 +1762,7 @@ function App({
                   tienda={tienda}
                   slug={slug}
                   items={currentCart}
+                  mesa={mesa}
                   politicasHref={
                     politicasPublicadas(t.politicas).length
                       ? rutas.politicas
