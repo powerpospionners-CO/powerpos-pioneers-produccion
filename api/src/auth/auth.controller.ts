@@ -39,6 +39,9 @@ export class SeguridadCuentaController {
   @Get()
   resumen(@Request() req: any) { return this.seguridad.resumen(req.user); }
 
+  @Post('correo-personal')
+  correoPersonal(@Request() req: any, @Body() body: any) { return this.seguridad.guardarCorreoPersonal(req.user, body?.correo, body?.password, body?.codigo); }
+
   @Post('2fa/iniciar')
   iniciar(@Request() req: any) { return this.seguridad.iniciar(req.user); }
 

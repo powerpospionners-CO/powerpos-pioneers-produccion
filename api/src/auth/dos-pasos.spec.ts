@@ -91,6 +91,7 @@ describe('Servicio de seguridad de cuentas', () => {
     const db = baseFalsa();
     const aviso = { enviarAvisoAcceso: jest.fn().mockResolvedValue(true) };
     const s = new SeguridadCuentaService({ control: db, aislamientoActivo: false } as any, aviso as any);
+    await db.seguridadRegistro.create({ data: { id: 'contacto-admin', usuarioId: usuario.id, tipo: 'CONTACTO', clave: 'correoPersonal', estado: 'ACTIVO', datos: require('./dos-pasos').cifrarSecreto('admin.personal@correo.co', `${usuario.id}:correoPersonal`) } });
     const a = await s.crearSesion(db, usuario, { ip: '10.0.0.5', agente: 'Mozilla Chrome/120 Windows' });
     expect(aviso.enviarAvisoAcceso).not.toHaveBeenCalled();
     await s.crearSesion(db, usuario, { ip: '10.0.0.9', agente: 'Mozilla Chrome/120 Windows' });
@@ -181,6 +182,7 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
     const secreto = await activar(admin);
     const deAdmin = recuperacion();
     await activar(gerente);
+    await db.seguridadRegistro.create({ data: { id: 'contacto-gerente', usuarioId: 8, tipo: 'CONTACTO', clave: 'correoPersonal', estado: 'ACTIVO', datos: require('./dos-pasos').cifrarSecreto('personal@correo.co', '8:correoPersonal') } });
     const sid = await s.crearSesion(db, gerente, { ip: '10.0.0.1', agente: 'Chrome' });
     await expect(s.restablecer(gerente, 7, 'Clave segura 1', '')).rejects.toThrow('administrador');
     await expect(s.restablecer(admin, 7, 'Clave segura 1', '')).rejects.toThrow('propia');
@@ -192,7 +194,7 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
     await s.restablecer(admin, 8, 'Clave segura 1', deAdmin[0]);
     expect(await s.dosPasosActivo(db, 8)).toBe(false);
     expect(await s.sesionValida(db, 8, sid)).toBe(false);
-    expect(aviso.enviarAvisoDosPasos).toHaveBeenCalledWith('gerente@empresa.co', 'Gerente', 'Admin');
+    expect(aviso.enviarAvisoDosPasos).toHaveBeenCalledWith('personal@correo.co', 'Gerente', 'Admin');
   });
 
   it('bloquea la confirmación tras cinco contraseñas incorrectas', async () => {
@@ -231,5 +233,34 @@ describe('Protección obligatoria del superadmin', () => {
     await expect(s.desactivar(u, 'clave', recuperacion[0])).rejects.toThrow('obligatoria para el superadmin');
     expect(await s.verificar(db, u.id, recuperacion[0])).toBe(true);
     expect(await s.verificar(db, u.id, recuperacion[0])).toBe(false);
+  });
+});
+
+
+describe('Correos personales de seguridad', () => {
+  const u = { id: 7, nombre: 'Ana', email: 'ana@acceso.interno', rol: 'CAJERO', empresaId: 2, sucursalId: 2 };
+  it('no envía al correo de acceso y usa únicamente el correo personal guardado', async () => {
+    const db = baseFalsa();
+    db.usuario.findUnique.mockResolvedValue({ password: await (await import('bcrypt')).hash('Clave segura 1', 4) });
+    const avisos = { enviarAvisoAcceso: jest.fn().mockResolvedValue(true) };
+    const s = new SeguridadCuentaService({ control: db, aislamientoActivo: false } as any, avisos as any);
+    await s.crearSesion(db, u, { ip: '10.0.0.1', agente: 'Chrome' });
+    await s.crearSesion(db, u, { ip: '20.0.0.1', agente: 'Firefox' });
+    expect(avisos.enviarAvisoAcceso).not.toHaveBeenCalled();
+    await expect(s.guardarCorreoPersonal(u, 'personal@correo.co', 'incorrecta', '')).rejects.toThrow('contraseña');
+    await expect(s.guardarCorreoPersonal(u, 'invalido', 'Clave segura 1', '')).rejects.toThrow('correo');
+    await s.guardarCorreoPersonal(u, 'Personal@correo.co', 'Clave segura 1', '');
+    expect(JSON.stringify(db.filas)).not.toContain('personal@correo.co');
+    expect((await s.resumen(u)).correoPersonal).toBe('personal@correo.co');
+    await s.crearSesion(db, u, { ip: '30.0.0.1', agente: 'Safari' });
+    expect(avisos.enviarAvisoAcceso).toHaveBeenCalledWith('personal@correo.co', 'Ana', expect.any(String), '30.0.0.1', expect.any(Date));
+    expect(await s.correoPersonal(db, { ...u, id: 99 })).toBe('');
+  });
+  it('reutiliza el correo personal de alertas respetando empresa y usuario', async () => {
+    const db = baseFalsa();
+    db.auditoria = { findFirst: jest.fn().mockResolvedValue({ detalle: { email: 'alertas@personal.co', stock: true, caja: true } }) };
+    const s = new SeguridadCuentaService({ control: db } as any);
+    expect(await s.correoPersonal(db, u)).toBe('alertas@personal.co');
+    expect(db.auditoria.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { empresaId: 2, entidadId: 7, entidad: 'UsuarioAlertas', accion: 'CONFIGURAR' } }));
   });
 });
