@@ -53,4 +53,13 @@ export class SeguridadCuentaController {
 
   @Post('sesiones/cerrar-otras')
   cerrarOtras(@Request() req: any) { return this.seguridad.cerrarOtras(req.user); }
+
+  @Post('politica')
+  politica(@Request() req: any, @Body() body: any) { return this.seguridad.cambiarPolitica(req.user, body?.exigir, body?.password, body?.codigo); }
+
+  @Get('equipo')
+  equipo(@Request() req: any) { return this.seguridad.equipo(req.user); }
+
+  @Post('equipo/:id/restablecer-2fa')
+  restablecer(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.seguridad.restablecer(req.user, id, body?.password, body?.codigo); }
 }

@@ -117,6 +117,7 @@ export class AuthService {
 
   private async emitir(usuario: any, sucursal: number | null, db: any, meta: MetaAcceso) {
     let sid: string | undefined;
+    const dosPasosPendiente = db && this.seguridad ? await this.seguridad.dosPasosPendiente(db, usuario) : false;
     try {
       if (db && this.seguridad) sid = await this.seguridad.crearSesion(db, usuario, meta);
     } catch {
@@ -158,6 +159,7 @@ export class AuthService {
         distribuidorComision: usuario.distribuidor
           ? Number(usuario.distribuidor.porcentajeComision)
           : undefined,
+        ...(dosPasosPendiente ? { dosPasosPendiente: true } : {}),
       },
     };
   }

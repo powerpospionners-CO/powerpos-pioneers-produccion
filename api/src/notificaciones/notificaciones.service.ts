@@ -18,6 +18,7 @@ import {
   correoCumpleanos,
   correoCodigoCuenta,
   correoNuevoAcceso,
+  correoDosPasosRestablecida,
   correoAvisoCliente,
   correoSuscripcion,
   logoCorreo,
@@ -131,6 +132,16 @@ export class NotificacionesService {
       return true;
     } catch (e) {
       this.logger.warn(`No se pudo enviar un aviso de acceso: ${e}`);
+      return false;
+    }
+  }
+
+  async enviarAvisoDosPasos(correo: string, nombre: string, administrador: string) {
+    try {
+      await this.enviarEmail('Se restableció tu verificación en dos pasos', correoDosPasosRestablecida({ nombre, administrador }), [correo]);
+      return true;
+    } catch (e) {
+      this.logger.warn(`No se pudo enviar un aviso de verificación: ${e}`);
       return false;
     }
   }

@@ -51,7 +51,8 @@ export default function LoginPage() {
     // La sesión funciona en el portal actual. El slug de la tienda no
     // acredita que exista un dominio, DNS ni certificado para esa empresa.
     setAuth(data.access_token, usuario);
-    router.push(rutaPorRol(usuario.rol));
+    // Si la empresa exige la verificación en dos pasos y falta activarla, primero va a Seguridad.
+    router.push(usuario.dosPasosPendiente ? '/seguridad' : rutaPorRol(usuario.rol));
   };
 
   const handleLogin = async (e: React.FormEvent) => {
