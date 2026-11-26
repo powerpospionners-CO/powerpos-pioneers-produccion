@@ -40,12 +40,14 @@ import { AccesoGastosModule } from './acceso-gastos/acceso-gastos.module';
 import { PersonalModule } from './personal/personal.module';
 import { PropinasModule } from './propinas/propinas.module';
 import { MesasModule } from './mesas/mesas.module';
+import { CostosModule } from './costos/costos.module';
 
 @Module({
   imports: [
     PersonalModule,
     PropinasModule,
     MesasModule,
+    CostosModule,
     AccesoBarrasModule,
     AccesoGastosModule,
     EventosModule,

@@ -10,6 +10,7 @@ export const RUTAS_MODULO: Array<[string, string]> = [
   ['/impresion', 'pos'],
   ['/productos', 'productos'],
   ['/inventario', 'inventario'],
+  ['/costos', 'inventario'],
   ['/clientes', 'clientes'],
   ['/financiero', 'financiero'],
   ['/compras', 'financiero'],

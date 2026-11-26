@@ -24,6 +24,7 @@ const ITEMS = [
   { href: '/gastos', label: 'Registrar gasto', icon: DollarSign },
   { href: '/auditoria', label: 'Auditoría', icon: BookOpen },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
+  { href: '/costos', label: 'Costos', icon: BarChart3 },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/personal', label: 'Personal y pagos', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
@@ -52,6 +53,7 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/dashboard': 'dashboard',
   '/productos': 'productos',
   '/inventario': 'inventario',
+  '/costos': 'inventario',
   '/clientes': 'clientes',
   '/personal': 'financiero',
   '/financiero': 'financiero',
@@ -115,6 +117,7 @@ export default function Navbar() {
     if (esMesero) return item.href === '/mesas';
     if (item.href === '/mesas') return esRestaurante && ['ADMIN_EMPRESA','GERENTE','CAJERO'].includes(usuario?.rol || '');
     if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
+    if (item.href === '/costos' && !esAdminOGerente) return false;
     if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
     if (item.href === '/gastos') return usuario?.rol === 'CAJERO' && accesoGastos;
     const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];
