@@ -21,6 +21,7 @@ import { BoldService } from './bold.service';
 import { TiendaExtrasService } from './tienda-extras.service';
 import { TiendaExperienciaService } from './tienda-experiencia.service';
 import { LimitePublico, LimitePublicoGuard } from './limite-publico.guard';
+import { CampanasService } from './campanas.service';
 
 @Controller('tiendas')
 export class TiendaPublicaController {
@@ -177,7 +178,7 @@ export class TiendaAdminController {
   @Get('resumen')
   @Roles('ADMIN_EMPRESA','GERENTE','CAJERO')
   resumen(@Request() req:any){return this.service.resumen(req.user);}
-  constructor(private service: TiendaService, private bold: BoldService, private extras: TiendaExtrasService, private experiencia: TiendaExperienciaService) {}
+  constructor(private service: TiendaService, private bold: BoldService, private extras: TiendaExtrasService, private experiencia: TiendaExperienciaService, private campanas: CampanasService) {}
   @Get('mesas')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   mesas(@Request() req: any) { return this.experiencia.mesas(req.user); }
@@ -215,6 +216,15 @@ export class TiendaAdminController {
     void this.experiencia.avisarReserva(req.user.empresaId, id);
     return r;
   }
+  @Get('campanas')
+  @Roles('ADMIN_EMPRESA')
+  campanasResumen(@Request() req: any) { return this.campanas.resumen(req.user); }
+  @Post('campanas/vista-previa')
+  @Roles('ADMIN_EMPRESA')
+  campanasVista(@Request() req: any, @Body() body: any) { return this.campanas.vistaPrevia(req.user, body); }
+  @Post('campanas')
+  @Roles('ADMIN_EMPRESA')
+  campanasEnviar(@Request() req: any, @Body() body: any) { return this.campanas.enviar(req.user, body); }
   @Get('suscriptores')
   @Roles('ADMIN_EMPRESA')
   suscriptores(@Request() req: any) { return this.extras.suscriptores(req.user); }
