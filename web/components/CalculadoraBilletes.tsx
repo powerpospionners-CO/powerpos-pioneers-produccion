@@ -17,7 +17,7 @@ const DENOMINACIONES = [
   { valor: 100, tipo: 'moneda' },
 ] as const;
 
-export default function CalculadoraBilletes({ objetivo, onCambiar }: { objetivo: number; onCambiar?: (recibido: number) => void }) {
+export default function CalculadoraBilletes({ objetivo, onCambiar, sinObjetivo = false }: { objetivo: number; onCambiar?: (recibido: number) => void; sinObjetivo?: boolean }) {
   const [conteo, setConteo] = useState<Record<number, number>>({});
   const recibido = DENOMINACIONES.reduce((acc, d) => acc + (conteo[d.valor] || 0) * d.valor, 0);
 
@@ -77,11 +77,13 @@ export default function CalculadoraBilletes({ objetivo, onCambiar }: { objetivo:
         ))}
       </div>
       <div className="mt-3 space-y-1 border-t border-gray-800 pt-3 text-sm">
-        <div className="flex justify-between text-gray-300"><span>Recibido</span><strong className="text-white">{moneda(recibido)}</strong></div>
+        <div className="flex justify-between text-gray-300"><span>{sinObjetivo ? 'Total contado' : 'Recibido'}</span><strong className="text-white">{moneda(recibido)}</strong></div>
+        {!sinObjetivo && <>
         <div className="flex justify-between text-gray-300"><span>A cobrar</span><strong className="text-white">{moneda(objetivo)}</strong></div>
         <div className={`flex justify-between rounded-lg px-2 py-1 font-bold ${cambio < 0 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
           <span>{cambio < 0 ? 'Falta' : 'Cambio a devolver'}</span><strong>{moneda(Math.abs(cambio))}</strong>
         </div>
+        </>}
       </div>
     </div>
   );

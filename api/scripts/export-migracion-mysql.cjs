@@ -40,7 +40,7 @@ async function extraer(db, seleccion = modelos, motor = 'postgresql') {
       const fields = modelo.fields.filter(f => f.kind !== 'object');
       // Las tablas privadas son aditivas y se habilitan por sede. Una sede que aún no
       // ha usado Personal, Bold o la tienda ampliada sigue teniendo un respaldo completo.
-      const opcional = { PersonalRegistro: 'personal_registros', BoldRegistro: 'bold_registros', TiendaRegistro: 'tienda_registros', SeguridadRegistro: 'seguridad_registros', PropinaRegistro: 'propina_registros', MesaRegistro: 'mesa_registros' }[modelo.name];
+      const opcional = { PersonalRegistro: 'personal_registros', BoldRegistro: 'bold_registros', TiendaRegistro: 'tienda_registros', SeguridadRegistro: 'seguridad_registros', PropinaRegistro: 'propina_registros', MesaRegistro: 'mesa_registros', AjusteRegistro: 'ajustes_registros' }[modelo.name];
       if (opcional) {
         const existe = await tx.$queryRawUnsafe(mysql
           ? 'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?'

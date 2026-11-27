@@ -93,6 +93,17 @@ model MesaRegistro {
   @@index([empresaId, sucursalId, tipo, estado])
   @@map("mesa_registros")
 }
+model AjusteRegistro {
+  id String @id @db.VarChar(36)
+  empresaId Int
+  sucursalId Int
+  clave String @db.VarChar(64)
+  datos Json
+  usuarioId Int
+  actualizadoEn DateTime @updatedAt
+  @@unique([empresaId, sucursalId, clave])
+  @@map("ajustes_registros")
+}
 model SeguridadRegistro {
   id String @id @db.VarChar(36)
   usuarioId Int

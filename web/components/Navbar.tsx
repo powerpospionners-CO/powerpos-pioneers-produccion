@@ -16,6 +16,7 @@ const ITEMS = [
   { href: '/mi-tienda', label: 'Mi tienda', icon: Settings },
   { href: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { href: '/fidelizacion', label: 'Puntos', icon: Users },
+  { href: '/dueno', label: 'Mi negocio', icon: BarChart3 },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/caja', label: 'Cajas', icon: Wallet },
   { href: '/caja/recaudo', label: 'Recaudo semanal', icon: Wallet },
@@ -51,6 +52,7 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/caja': 'pos',
   '/caja/recaudo': 'pos',
   '/dashboard': 'dashboard',
+  '/dueno': 'dashboard',
   '/productos': 'productos',
   '/inventario': 'inventario',
   '/costos': 'inventario',
@@ -118,6 +120,7 @@ export default function Navbar() {
     if (item.href === '/mesas') return esRestaurante && ['ADMIN_EMPRESA','GERENTE','CAJERO'].includes(usuario?.rol || '');
     if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/costos' && !esAdminOGerente) return false;
+    if (item.href === '/dueno' && !esAdminOGerente) return false;
     if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
     if (item.href === '/gastos') return usuario?.rol === 'CAJERO' && accesoGastos;
     const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];

@@ -21,7 +21,9 @@ type Caja = {
   totalEsperado?: number;
   recaudoEfectivoHabilitado?: boolean;
   baseEfectivoCaja?: number | null;
-  propinas?: { total: number; efectivo: number; cantidad: number; porMetodo: { metodo: string; total: number }[]; sugeridos?: number[] };
+  propinas?: { total?: number; efectivo?: number; cantidad?: number; porMetodo?: { metodo: string; total: number }[]; sugeridos?: number[]; oculto?: boolean; hayPropinas?: boolean };
+  // Arqueo ciego: el API no envía lo esperado al cajero.
+  arqueoCiego?: boolean;
 };
 type Persona = { id: number; nombre: string; rol: string; activo: boolean };
 
@@ -56,12 +58,13 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [reparto, setReparto] = useState<number[]>([]);
   const propinas = caja?.propinas;
-  const hayPropinas = Number(propinas?.total || 0) > 0;
+  const hayPropinas = Number(propinas?.total || 0) > 0 || !!propinas?.hayPropinas;
+  const ciego = !!caja?.arqueoCiego;
   const abrirCierre = () => {
     if (!caja) return;
     setMontoFinal(0); setMontoRetirado(String(caja.totalEfectivo || 0)); setConfirmoCero(false); setError(''); setModalCierre(true);
     setReparto(caja.propinas?.sugeridos?.length ? caja.propinas.sugeridos : [caja.usuarioId]);
-    if (Number(caja.propinas?.total || 0) > 0)
+    if (Number(caja.propinas?.total || 0) > 0 || caja.propinas?.hayPropinas)
       api.get('/usuarios').then(({ data }) => setPersonas((data as Persona[]).filter((u) => u.activo && u.rol !== 'DISTRIBUIDOR'))).catch(() => setPersonas([]));
   };
 
@@ -169,15 +172,19 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
                 </label>
                 <p className="mb-3 text-sm text-gray-400">Cobros netos en efectivo: {moneda(caja.totalEfectivo || 0)} · Debe quedar en caja: <strong className="text-white">{moneda(Math.max(0, montoEsperadoDespuesRetiro))}</strong></p>
               </>
+            ) : ciego ? (
+              <p className="mb-3 text-sm text-gray-400">Arqueo ciego: cuenta todo el efectivo que hay físicamente en la caja, incluida la base. La diferencia la revisa el administrador.</p>
             ) : (
               <p className="mb-3 text-sm text-gray-400">Cuenta el efectivo que hay físicamente en la caja. Se espera <strong className="text-white">{moneda(caja.totalEsperado || 0)}</strong> en efectivo (base + cobros{hayPropinas ? ' + propinas en efectivo' : ''} − reembolsos en efectivo del turno).</p>
             )}
             {hayPropinas && (
               <section aria-label="Propinas del turno" className="mb-3 space-y-2 rounded-lg border border-teal-600/40 bg-teal-950/20 p-3 text-sm text-gray-300">
+                {ciego ? <p>Hubo propinas en el turno.</p> : (
                 <p>
-                  Propinas del turno: <strong className="text-white">{moneda(propinas!.total)}</strong>
-                  {Number(propinas!.efectivo) > 0 && <> · en efectivo {moneda(propinas!.efectivo)} (ya incluidas en lo que debe haber en caja)</>}
+                  Propinas del turno: <strong className="text-white">{moneda(propinas!.total || 0)}</strong>
+                  {Number(propinas!.efectivo) > 0 && <> · en efectivo {moneda(propinas!.efectivo || 0)} (ya incluidas en lo que debe haber en caja)</>}
                 </p>
+                )}
                 <p className="text-gray-400">Se reparten en partes iguales entre quienes marques:</p>
                 <div className="grid grid-cols-2 gap-1">
                   {(personas.length ? personas : [{ id: caja.usuarioId, nombre: caja.usuario?.nombre || 'Cajero', rol: '', activo: true }]).map((p) => (
@@ -187,10 +194,10 @@ export default function CajaControl({ caja, cajaBloqueadaPorUsuario, onCambio }:
                     </label>
                   ))}
                 </div>
-                {reparto.length > 0 && <p className="text-teal-200">A cada uno: {moneda(Math.floor(Number(propinas!.total) / reparto.length))}</p>}
+                {reparto.length > 0 && !ciego && <p className="text-teal-200">A cada uno: {moneda(Math.floor(Number(propinas!.total) / reparto.length))}</p>}
               </section>
             )}
-            <CalculadoraBilletes objetivo={Math.max(0, montoEsperadoDespuesRetiro)} onCambiar={(v) => { setMontoFinal(v); if (v !== 0) setConfirmoCero(false); }} />
+            <CalculadoraBilletes objetivo={Math.max(0, montoEsperadoDespuesRetiro)} sinObjetivo={ciego} onCambiar={(v) => { setMontoFinal(v); if (v !== 0) setConfirmoCero(false); }} />
             {montoFinal === 0 && (
               <label className="mt-3 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
                 <input type="checkbox" checked={confirmoCero} onChange={(e) => setConfirmoCero(e.target.checked)} />

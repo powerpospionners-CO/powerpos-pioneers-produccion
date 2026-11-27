@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import AlertasAdministradores from '@/components/AlertasAdministradores';
 import AccesoBarrasUsuario from '@/components/AccesoBarrasUsuario';
 import PropinasConfig from '@/components/PropinasConfig';
+import ArqueoCiegoConfig from '@/components/ArqueoCiegoConfig';
 
 const MODULOS = [
   { key: 'pos', label: 'POS' },
@@ -457,6 +458,7 @@ export default function ConfiguracionPage() {
               </div>
 
               {(usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE') && (empresa?.tipoNegocio || 'RESTAURANTE') === 'RESTAURANTE' && <PropinasConfig />}
+              {(usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE') && <ArqueoCiegoConfig />}
 
               {usuario?.rol === 'ADMIN_EMPRESA' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mt-4">

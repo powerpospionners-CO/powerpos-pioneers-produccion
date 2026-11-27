@@ -23,7 +23,18 @@ export class CajaController {
 
   @Get('abierta')
   obtenerAbierta(@Request() req: any) {
-    return this.cajaService.obtenerCajaAbierta(req.user.sucursalId, req.user.empresaId);
+    return this.cajaService.obtenerCajaAbierta(req.user.sucursalId, req.user.empresaId, req.user.rol);
+  }
+
+  @Get('arqueo-ciego')
+  arqueoCiego(@Request() req: any) {
+    return this.cajaService.arqueoCiego(req.user.empresaId, req.user.sucursalId);
+  }
+
+  @Patch('arqueo-ciego')
+  @Roles('ADMIN_EMPRESA', 'GERENTE')
+  configurarArqueoCiego(@Request() req: any, @Body() body: any) {
+    return this.cajaService.configurarArqueoCiego(req.user.empresaId, req.user.sucursalId, body?.activo, req.user.id);
   }
 
   @Get('eventos')
