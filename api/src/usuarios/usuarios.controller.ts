@@ -12,12 +12,12 @@ export class UsuariosController {
   @Post()
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   crear(@Body() body: any, @Request() req: any) {
-    return this.usuariosService.crear(body, req.user.empresaId);
+    return this.usuariosService.crear(body, req.user.empresaId, req.user);
   }
 
   @Get()
   listar(@Request() req: any) {
-    return this.usuariosService.listar(req.user.empresaId);
+    return this.usuariosService.listar(req.user.empresaId, req.user.rol);
   }
 
   @Get('mi-perfil')
@@ -44,12 +44,12 @@ export class UsuariosController {
   @Patch(':id/permisos')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   actualizarPermisos(@Param('id') id: string, @Body('permisos') permisos: any, @Request() req: any) {
-    return this.usuariosService.actualizarPermisos(+id, permisos, req.user.empresaId);
+    return this.usuariosService.actualizarPermisos(+id, permisos, req.user.empresaId, req.user);
   }
 
   @Patch(':id/toggle-activo')
   @Roles('ADMIN_EMPRESA', 'GERENTE')
   toggleActivo(@Param('id') id: string, @Request() req: any) {
-    return this.usuariosService.toggleActivo(+id, req.user.empresaId);
+    return this.usuariosService.toggleActivo(+id, req.user.empresaId, req.user);
   }
 }

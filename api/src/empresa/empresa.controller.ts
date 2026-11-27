@@ -1,7 +1,6 @@
 import { BadRequestException, Controller, Get, Patch, Post, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
 import { promises as fs } from 'fs';
 import * as sharpModule from 'sharp';
 const sharp = sharpModule as unknown as typeof sharpModule.default;
@@ -9,7 +8,7 @@ import { EmpresaService } from './empresa.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { directorioUploads } from '../storage/uploads';
+import { directorioUploads, extensionImagen } from '../storage/uploads';
 import { analizarLogo } from './paleta-logo';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,7 +34,7 @@ export class EmpresaController {
       destination: directorioUploads('logos'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `logo-${uniqueSuffix}${extname(file.originalname)}`);
+        cb(null, `logo-${uniqueSuffix}${extensionImagen(file.mimetype)}`);
       },
     }),
     fileFilter: (req, file, cb) => {
@@ -84,7 +83,7 @@ export class EmpresaController {
       destination: directorioUploads('anuncios'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `anuncio-${uniqueSuffix}${extname(file.originalname)}`);
+        cb(null, `anuncio-${uniqueSuffix}${extensionImagen(file.mimetype)}`);
       },
     }),
     fileFilter: (req, file, cb) => {

@@ -230,6 +230,21 @@ export function correoDosPasosRestablecida(datos: { nombre: string; administrado
   });
 }
 
+export function correoSoporte(datos: { empresa: string; sede: string; motivo: string; vence: Date }): CorreoPowerpos {
+  return plantilla({
+    estilo: 'atencion',
+    titulo: 'Soporte de PowerPOS revisa tu panel',
+    introduccion: `El equipo de soporte de PowerPOS abrió el panel de ${datos.empresa} en modo de solo lectura: puede ver la información, pero no cambiar nada.`,
+    mensaje: 'El acceso vence solo y cada consulta queda en la Auditoría de tu empresa como "Soporte PowerPOS".\nSi no solicitaste soporte, comunícate con PowerPOS.',
+    contexto: [
+      ['Sede', datos.sede],
+      ['Motivo', datos.motivo],
+      ['Vence', datos.vence.toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'long', timeStyle: 'short' })],
+    ],
+    pie: 'Este aviso se envía automáticamente para proteger tu cuenta de PowerPOS.',
+  });
+}
+
 export function correoNuevoAcceso(datos: { nombre: string; dispositivo: string; ip: string; fecha: Date }): CorreoPowerpos {
   return plantilla({
     estilo: 'atencion',

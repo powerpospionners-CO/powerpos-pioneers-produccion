@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import * as fs from 'fs';
-import { directorioUploads } from './storage/uploads';
+import { cabecerasUploads, directorioUploads } from './storage/uploads';
 import { verificarUploads } from './storage/verificar-uploads';
 import { archivosRespaldo } from './storage/hostinger-uploads-manifest';
 import { origenPermitido } from './seguridad/origenes';
@@ -48,6 +48,8 @@ async function bootstrap() {
 
   app.useStaticAssets(uploadsPath, {
     prefix: '/uploads/',
+    dotfiles: 'deny',
+    setHeaders: cabecerasUploads,
   });
 
   await app.listen(process.env.PORT || 3000);

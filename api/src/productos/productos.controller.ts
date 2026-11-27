@@ -2,12 +2,11 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, UseInterc
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, diskStorage } from 'multer';
-import { extname } from 'path';
 import { ProductosService } from './productos.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { directorioUploads } from '../storage/uploads';
+import { directorioUploads, extensionImagen } from '../storage/uploads';
 import { OrigenesService, agregarOrigen } from './origenes.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -65,7 +64,7 @@ export class ProductosController {
       destination: directorioUploads('productos'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `producto-${uniqueSuffix}${extname(file.originalname)}`);
+        cb(null, `producto-${uniqueSuffix}${extensionImagen(file.mimetype)}`);
       },
     }),
     fileFilter: (req, file, cb) => {

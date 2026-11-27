@@ -1,6 +1,7 @@
 import { Controller, Post, Body, UseGuards, Req, Get, Delete, Param, Request } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { SeguridadCuentaService } from './seguridad-cuenta.service';
+import { SoporteService } from './soporte.service';
 import { LoginInputPipe, RegistroInputPipe } from './auth-input.pipe';
 import { AuthRateGuard } from './auth-rate.guard';
 import { AuthService } from './auth.service';
@@ -65,4 +66,13 @@ export class SeguridadCuentaController {
 
   @Post('equipo/:id/restablecer-2fa')
   restablecer(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.seguridad.restablecer(req.user, id, body?.password, body?.codigo); }
+}
+
+// Modo soporte del superadministrador (solo lectura). Fuera del límite de intentos de inicio de sesión.
+@Controller('auth/soporte')
+@UseGuards(JwtAuthGuard)
+export class SoporteController {
+  constructor(private soporte: SoporteService) {}
+  @Post()
+  iniciar(@Request() req: any, @Body() body: any) { return this.soporte.iniciar(req.user, body?.empresaId, body?.sucursalId, body?.motivo); }
 }

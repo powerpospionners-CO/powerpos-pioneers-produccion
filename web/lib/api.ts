@@ -3,6 +3,7 @@ import { contieneArchivo, iniciarCarga, terminarCarga } from "./cargas";
 import { useAuthStore } from "@/store/authStore";
 import { sesionInactiva } from "./sesion-inactiva";
 import { rutaImpresionEscritorio } from "./escritorio";
+import { salirDeSoporte } from "./soporte";
 
 const cargasPeticiones = new WeakMap<object, number>();
 
@@ -113,6 +114,11 @@ api.interceptors.response.use(
       window.location.pathname !== "/seguridad"
     ) {
       window.location.href = "/seguridad";
+    }
+    // Una sesión de soporte vencida vuelve a la sesión del superadministrador.
+    if (error.response?.status === 401 && typeof window !== "undefined" && (useAuthStore.getState().usuario as any)?.soporte) {
+      salirDeSoporte();
+      return Promise.reject(error);
     }
     // En el inicio de sesión un 401 significa datos incorrectos, no una sesión vencida.
     if (

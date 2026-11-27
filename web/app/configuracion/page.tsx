@@ -48,7 +48,8 @@ export default function ConfiguracionPage() {
 
   // ---- Mi perfil ----
   const [perfil, setPerfil] = useState<any>(null);
-  const [formPerfil, setFormPerfil] = useState({ nombre: '', email: '', password: '' });
+  const [formPerfil, setFormPerfil] = useState({ nombre: '', email: '', password: '', passwordActual: '' });
+  const [emailOriginal, setEmailOriginal] = useState('');
   const [loadingPerfil, setLoadingPerfil] = useState(false);
   const [mensajePerfil, setMensajePerfil] = useState('');
 
@@ -88,7 +89,8 @@ export default function ConfiguracionPage() {
   const cargarPerfil = async () => {
     const { data } = await api.get('/usuarios/mi-perfil');
     setPerfil(data);
-    setFormPerfil({ nombre: data.nombre, email: data.email, password: '' });
+    setFormPerfil({ nombre: data.nombre, email: data.email, password: '', passwordActual: '' });
+    setEmailOriginal(data.email || '');
   };
 
   const cargarUsuarios = async () => {
@@ -185,13 +187,15 @@ export default function ConfiguracionPage() {
     try {
       const payload: any = { nombre: formPerfil.nombre, email: formPerfil.email };
       if (formPerfil.password) payload.password = formPerfil.password;
+      // Cambiar la contraseña o el correo exige confirmar la contraseña actual.
+      if (formPerfil.password || formPerfil.email.trim().toLowerCase() !== emailOriginal.toLowerCase()) payload.passwordActual = formPerfil.passwordActual;
       await api.patch('/usuarios/mi-perfil', payload);
-      setFormPerfil({ ...formPerfil, password: '' });
+      setFormPerfil({ ...formPerfil, password: '', passwordActual: '' });
       setMensajePerfil('✅ Perfil actualizado correctamente');
       setTimeout(() => setMensajePerfil(''), 3000);
       cargarPerfil();
-    } catch (e) {
-      setMensajePerfil('❌ Error al actualizar el perfil');
+    } catch (e: any) {
+      setMensajePerfil(`❌ ${e?.response?.data?.message || 'Error al actualizar el perfil'}`);
     } finally {
       setLoadingPerfil(false);
     }
@@ -575,15 +579,29 @@ export default function ConfiguracionPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Nueva contraseña (opcional)</label>
+                  <label className="block text-sm text-gray-400 mb-1">Nueva contraseña (opcional, mínimo 10 caracteres con letras y números)</label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={formPerfil.password}
                     onChange={(e) => setFormPerfil({ ...formPerfil, password: e.target.value })}
                     placeholder="Dejar en blanco para no cambiarla"
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
+                {(formPerfil.password || formPerfil.email.trim().toLowerCase() !== emailOriginal.toLowerCase()) && (
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Contraseña actual (para confirmar el cambio)</label>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={formPerfil.passwordActual}
+                      onChange={(e) => setFormPerfil({ ...formPerfil, passwordActual: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
+                    />
+                    {formPerfil.password && <p className="mt-1 text-xs text-gray-500">Al cambiar la contraseña se cierran tus otras sesiones.</p>}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-gray-500 text-xs pt-2">
                   <Shield size={14} />
                   <span>Rol: {perfil?.rol}</span>
@@ -768,7 +786,7 @@ export default function ConfiguracionPage() {
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">{usuarioEditando ? 'Nueva contraseña (opcional, mínimo 10 caracteres)' : 'Contraseña'}</label>
+                  <label className="block text-sm text-gray-400 mb-1">{usuarioEditando ? 'Nueva contraseña (opcional)' : 'Contraseña'} · mínimo 10 caracteres con letras y números</label>
                   <input type="password" value={formNuevoUsuario.password}
                     onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, password: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500" />
@@ -779,7 +797,7 @@ export default function ConfiguracionPage() {
                     <select value={formNuevoUsuario.rol} disabled={usuarioEditando === usuario?.id}
                       onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, rol: e.target.value })}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500">
-                      {[...ROLES, ...(formNuevoUsuario.rol === 'DISTRIBUIDOR' ? ['DISTRIBUIDOR'] : [])].map((r) => (
+                      {[...ROLES.filter((r) => usuario?.rol === 'ADMIN_EMPRESA' || ['CAJERO', 'COCINERO', 'DOMICILIARIO'].includes(r) || r === formNuevoUsuario.rol), ...(formNuevoUsuario.rol === 'DISTRIBUIDOR' ? ['DISTRIBUIDOR'] : [])].map((r) => (
                         <option key={r} value={r}>{r.replace('_', ' ')}</option>
                       ))}
                     </select>

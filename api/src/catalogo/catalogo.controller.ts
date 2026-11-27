@@ -5,12 +5,11 @@ import {
 import type { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage, memoryStorage } from 'multer';
-import { extname } from 'path';
 import { CatalogoService } from './catalogo.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { directorioUploads } from '../storage/uploads';
+import { directorioUploads, extensionImagen } from '../storage/uploads';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('catalogo')
@@ -65,7 +64,7 @@ export class CatalogoController {
       destination: directorioUploads('catalogo'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `catalogo-${uniqueSuffix}${extname(file.originalname)}`);
+        cb(null, `catalogo-${uniqueSuffix}${extensionImagen(file.mimetype)}`);
       },
     }),
     fileFilter: (req, file, cb) => {
@@ -127,7 +126,7 @@ export class CatalogoController {
       destination: directorioUploads('catalogo'),
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `catalogo-${uniqueSuffix}${extname(file.originalname)}`);
+        cb(null, `catalogo-${uniqueSuffix}${extensionImagen(file.mimetype)}`);
       },
     }),
     fileFilter: (req, file, cb) => {

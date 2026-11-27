@@ -18,6 +18,7 @@ import {
   correoCumpleanos,
   correoCodigoCuenta,
   correoNuevoAcceso,
+  correoSoporte,
   correoDosPasosRestablecida,
   correoAvisoCliente,
   correoSuscripcion,
@@ -142,6 +143,16 @@ export class NotificacionesService {
       return true;
     } catch (e) {
       this.logger.warn(`No se pudo enviar un aviso de verificación: ${e}`);
+      return false;
+    }
+  }
+
+  async enviarAvisoSoporte(correo: string, empresa: string, sede: string, motivo: string, vence: Date) {
+    try {
+      await this.enviarEmail(`Soporte de PowerPOS revisa tu panel · ${empresa}`, correoSoporte({ empresa, sede, motivo, vence }), [correo]);
+      return true;
+    } catch (e) {
+      this.logger.warn(`No se pudo enviar el aviso de soporte: ${e}`);
       return false;
     }
   }
