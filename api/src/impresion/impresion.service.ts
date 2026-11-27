@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import { IvaService } from '../iva/iva.service';
+import { desglosarVenta, NOMBRE_TARIFA, TARIFAS } from '../iva/iva.reglas';
 import { Socket } from 'node:net';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImpresionEventosService } from './impresion-eventos.service';
@@ -47,7 +49,28 @@ export class ImpresionService {
   constructor(
     private readonly prisma?: PrismaService,
     private readonly eventos?: ImpresionEventosService,
+    @Optional() private readonly iva?: IvaService,
   ) {}
+
+  // Discriminación del IVA incluido en el total, por tarifa (solo empresas responsables).
+  private async lineasIva(pedido: any, empresaId: number, ancho: number) {
+    if (!this.iva || !Array.isArray(pedido?.detalles) || !pedido.detalles.length) return [];
+    try {
+      const config = await this.iva.config(empresaId);
+      if (!config.responsable) return [];
+      const d = desglosarVenta(pedido.detalles.map((x: any) => ({ productoId: Number(x.productoId ?? x.producto?.id), subtotal: Number(x.subtotal) })), Number(pedido.total), config);
+      const lineas: string[] = [];
+      for (const t of TARIFAS) {
+        if (d[t].base <= 0) continue;
+        lineas.push(`${this.lineaMonto(`Base ${NOMBRE_TARIFA[t]}`, d[t].base, ancho)}\n`);
+        if (d[t].iva > 0) lineas.push(`${this.lineaMonto(NOMBRE_TARIFA[t], d[t].iva, ancho)}\n`);
+      }
+      return lineas;
+    } catch {
+      // Sin la configuración de IVA el recibo se imprime igual.
+      return [];
+    }
+  }
 
   private modoAgente() {
     return (process.env.IMPRESION_MODO || 'tcp').toLowerCase() === 'agente';
@@ -572,6 +595,8 @@ export class ImpresionService {
       lineas.push(`${this.lineaMonto(`Propina (${pedido.propina.metodoPago})`, propina, ancho)}\n`);
       lineas.push(...this.negrita(`${this.lineaMonto('TOTAL CON PROPINA', total + propina, ancho)}\n`));
     }
+    const iva = await this.lineasIva(pedido, empresaId, ancho);
+    if (iva.length) lineas.push(separador('-'), ...iva);
     lineas.push(separador('-'));
     if (Array.isArray(pedido.pagos) && pedido.pagos.length > 1) {
       for (const pago of pedido.pagos) {

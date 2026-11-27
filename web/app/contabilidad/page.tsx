@@ -6,12 +6,15 @@ import Navbar from '@/components/Navbar';
 import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
 import { exportarCsv } from '@/lib/csv';
+import TarifasIva from '@/components/contabilidad/TarifasIva';
+import ReporteIva from '@/components/contabilidad/ReporteIva';
 
 const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 const inicioMes = () => `${hoy().slice(0, 8)}01`;
 const input = 'mt-1 block rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-white';
 
 export default function ContabilidadPage() {
+  const [pestana, setPestana] = useState<'libro' | 'iva' | 'tarifas'>('libro');
   const [rango, setRango] = useState({ desde: inicioMes(), hasta: hoy() });
   const [datos, setDatos] = useState<any>(null);
   const [falla, setFalla] = useState('');
@@ -35,9 +38,17 @@ export default function ContabilidadPage() {
         <Navbar />
         <main className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
           <div>
-            <h1 className="text-2xl font-bold">Contabilidad · libro diario</h1>
+            <h1 className="text-2xl font-bold">Contabilidad</h1>
             <p className="text-sm text-gray-400">Asientos de partida doble por día con las cuentas del PUC, a partir de lo registrado en esta sede. Tu contador los importa en Siigo, World Office u otro programa, o los ajusta a su plantilla.</p>
           </div>
+          <div role="tablist" className="flex flex-wrap gap-2">
+            {([['libro', 'Libro diario'], ['iva', 'Reporte de IVA'], ['tarifas', 'Tarifas de IVA']] as const).map(([k, t]) => (
+              <button key={k} role="tab" aria-selected={pestana === k} type="button" onClick={() => setPestana(k)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${pestana === k ? 'bg-orange-500' : 'bg-gray-800 text-gray-300'}`}>{t}</button>
+            ))}
+          </div>
+          {pestana === 'iva' && <ReporteIva />}
+          {pestana === 'tarifas' && <TarifasIva />}
+          {pestana === 'libro' && <>
           <div className="flex flex-wrap items-end gap-3 text-sm">
             <label>Desde<input type="date" className={input} value={rango.desde} max={rango.hasta} onChange={(e) => setRango({ ...rango, desde: e.target.value })} /></label>
             <label>Hasta<input type="date" className={input} value={rango.hasta} min={rango.desde} onChange={(e) => setRango({ ...rango, hasta: e.target.value })} /></label>
@@ -57,7 +68,7 @@ export default function ContabilidadPage() {
                 ? <p role="alert" className="text-red-400">No cuadran: {datos.descuadrados.join(', ')}. Avísale a soporte.</p>
                 : datos.comprobantes.length > 0 && <p className="text-sm text-green-400">✓ Todos los comprobantes cuadran (débitos = créditos).</p>}
               <p className="text-xs text-gray-400">
-                Es una base para tu contador, no reemplaza su revisión. Las ventas no discriminan IVA porque el POS no lo registra hoy. Los gastos sin cuenta PUC asignada usan una cuenta por categoría; puedes asignarla en Financiero → Plan de cuentas. Las propinas van a una cuenta por pagar al personal, no a ingresos.
+                Es una base para tu contador, no reemplaza su revisión. Si la empresa es responsable de IVA, las ventas separan la base y el IVA generado (240805) y las compras de mercancía el IVA descontable (240810), según las tarifas de cada producto. Los gastos sin cuenta PUC asignada usan una cuenta por categoría; puedes asignarla en Financiero → Plan de cuentas. Las propinas van a una cuenta por pagar al personal, no a ingresos.
               </p>
               <div className="space-y-3">
                 {datos.comprobantes.map((c: any) => (
@@ -85,6 +96,7 @@ export default function ContabilidadPage() {
               </div>
             </>
           )}
+          </>}
         </main>
       </div>
     </AuthGuard>

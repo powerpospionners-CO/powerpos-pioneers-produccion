@@ -7,7 +7,7 @@ test('la ayuda muestra a cada rol solo sus guías y busca sin tildes',()=>{
  assert.ok(cajero.includes('abrir-caja')&&cajero.includes('seguridad'));
  assert.ok(!cajero.includes('contabilidad')&&!cajero.includes('mesero'));
  assert.ok(guiasPara('ADMIN_EMPRESA').length===GUIAS.length);
- assert.deepEqual(guiasPara('GERENTE','contabilidad').map(g=>g.id),['contabilidad']);
+ assert.deepEqual(guiasPara('GERENTE','contador').map(g=>g.id).sort(),['contabilidad','iva']);
  assert.ok(guiasPara('ADMIN_EMPRESA','camara').length===0);
  assert.ok(guiasPara('ADMIN_EMPRESA','PROPINA').some(g=>g.id==='propinas'));
 });

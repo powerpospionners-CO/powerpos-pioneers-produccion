@@ -75,6 +75,12 @@ export const GUIAS: Guia[] = [
     'Revisa que diga "Todos los comprobantes cuadran" y mira los que dicen "Verificar".',
     'Pulsa "Exportar para el contador" y envíale el archivo.',
   ], notas: ['Para que los gastos queden en la cuenta correcta, asígnales la cuenta en Financiero → Plan de cuentas.'] },
+  { id: 'iva', titulo: 'Configurar el IVA de los productos', tema: 'Contabilidad', roles: ADMIN, ruta: '/contabilidad', pasos: [
+    'Abre Contabilidad → "Tarifas de IVA" y confirma que la empresa está marcada como responsable de IVA.',
+    'Marca "Solo sin confirmar", filtra por categoría y elige la tarifa (19 %, 5 %, exento o excluido). Puedes aplicarla a todos los productos visibles.',
+    'Pulsa "Guardar cambios". El precio de venta no cambia: el sistema separa la base y el IVA.',
+    'En "Reporte de IVA" ves por bimestre el IVA generado, el descontable y el saldo estimado.',
+  ], notas: ['Confirma las tarifas con tu contador: muchos alimentos van al 5 % o están excluidos.'] },
   { id: 'seguridad', titulo: 'Proteger mi cuenta', tema: 'Seguridad', roles: [], ruta: '/seguridad', pasos: [
     'Toca el ícono del escudo en la barra superior.',
     'Activa la verificación en dos pasos con Google o Microsoft Authenticator y guarda los códigos de recuperación.',

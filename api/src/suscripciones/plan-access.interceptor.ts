@@ -30,6 +30,7 @@ const RUTAS_POR_MODULO: Array<[string, string]> = [
   ['/costos', 'inventario'],
   ['/dueno', 'dashboard'],
   ['/contabilidad', 'financiero'],
+  ['/iva', 'financiero'],
   ['/clientes', 'clientes'],
   ['/financiero', 'financiero'],
   ['/compras', 'financiero'],

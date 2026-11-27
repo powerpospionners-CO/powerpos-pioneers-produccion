@@ -480,7 +480,9 @@ export default function RetailPOS() {
       ...(pedido.cliente?.nombre ? [`CLIENTE: ${pedido.cliente.nombre}`] : []),
       '--------------------------------',
       ...(pedido.detalles || []).map((d: any) => `${d.cantidad} × ${d.producto?.nombre || 'Producto'}${d.varianteSabor ? ` — ${d.varianteSabor}` : ''}${d.presentacionNombre ? ` (${d.presentacionNombre})` : ''}   ${moneda(Number(d.subtotal))}`),
-      '--------------------------------', `TOTAL  ${moneda(Number(pedido.total))}`, ...pagos, 'Gracias por su compra'];
+      '--------------------------------', `TOTAL  ${moneda(Number(pedido.total))}`,
+      ...(Array.isArray(pedido.desgloseIva) ? pedido.desgloseIva.flatMap((t: any) => [`BASE ${t.nombre.toUpperCase()}  ${moneda(Number(t.base))}`, ...(Number(t.iva) > 0 ? [`${t.nombre.toUpperCase()}  ${moneda(Number(t.iva))}`] : [])]) : []),
+      ...pagos, 'Gracias por su compra'];
     const pre = ventana.document.createElement('pre');
     pre.style.cssText = 'font:14px/1.5 monospace;white-space:pre-wrap;padding:20px;';
     pre.textContent = lineas.join('\n');
