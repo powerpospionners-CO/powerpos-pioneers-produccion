@@ -9,6 +9,7 @@ import { Plus, Edit, Trash2, X, Tag, FileSpreadsheet, Upload, Download, ImageOff
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import { useAuthStore } from '@/store/authStore';
+import { guardarTarifaProducto, SelectorIvaProducto, useIvaProductos, type TarifaIva } from '@/components/contabilidad/IvaProducto';
 import ConfiguracionComandas from '@/components/ConfiguracionComandas';
 import OrigenesProductos from '@/components/OrigenesProductos';
 
@@ -433,6 +434,10 @@ export default function ProductosPage() {
   const tipoNegocio = useAuthStore((state) => state.usuario?.tipoNegocio);
   const esRestaurante = !tipoNegocio || tipoNegocio === 'RESTAURANTE';
   const esEnchilaMarket = useAuthStore((state) => state.usuario?.empresaId) === 2;
+  const rolUsuario = useAuthStore((state) => state.usuario?.rol);
+  // IVA del producto: lo ve el administrador o el gerente; solo el administrador lo cambia.
+  const { config: ivaConfig, recargar: recargarIva } = useIvaProductos(rolUsuario === 'ADMIN_EMPRESA' || rolUsuario === 'GERENTE');
+  const [tarifaIva, setTarifaIva] = useState<TarifaIva | ''>('');
   const usuario = useAuthStore(state => state.usuario);
   const esTrailer = usuario?.empresaId === 1;
   const puedeGestionarAdicionales = !esTrailer || usuario?.rol === 'ADMIN_EMPRESA';
@@ -556,6 +561,7 @@ export default function ProductosPage() {
       // precio/stock vienen del servidor en la unidad base (g o ml); se
       // convierten a la unidad elegida (ej. kg) solo para mostrarlos en el
       // formulario — se vuelve a convertir a la base al guardar.
+      setTarifaIva(ivaConfig?.tarifas[producto.id]?.confirmada ? ivaConfig.tarifas[producto.id].tarifa : '');
       setForm({
         nombre: producto.nombre,
         descripcion: producto.descripcion || '',
@@ -585,6 +591,7 @@ export default function ProductosPage() {
       setPreviewImagenProducto(producto.imagen || '');
     } else {
       setEditando(null);
+      setTarifaIva('');
       setForm({ nombre: '', descripcion: '', precio: '', costo: '', margenDeseado: '', categoriaId: '', disponible: true, aceptaAdicionales: true, codigoBarras: '', controlaStock: !esRestaurante, stockActual: '0', stockMinimo: '0', ventaGranel: false, unidadGranel: 'g', esCombo: false });
       setRecetaTemp([]);
       setAdicionalIdsTemp([]);
@@ -777,17 +784,26 @@ export default function ProductosPage() {
         payload.ingredientes = ingredientesPayload;
       }
 
+      let guardadoId: number | null = null;
       await guardarConImagen({
         guardar: async () => (editando
           ? await api.patch(`/productos/${editando.id}`, payload)
           : await api.post('/productos', payload)).data,
-        recordar: registro => { setEditando(registro); registroGuardado = true; },
+        recordar: registro => { setEditando(registro); registroGuardado = true; guardadoId = registro.id; },
         subirImagen: archivoImagenProducto ? async registro => {
           const archivo = new FormData(); archivo.append('imagen', archivoImagenProducto);
           await api.post(`/productos/${registro.id}/imagen`, archivo, { headers: { 'Content-Type': 'multipart/form-data' } });
         } : undefined,
       });
 
+      if (guardadoId && rolUsuario === 'ADMIN_EMPRESA') {
+        try {
+          await guardarTarifaProducto(ivaConfig, guardadoId, tarifaIva);
+          recargarIva();
+        } catch {
+          aviso('El producto se guardó, pero no su tarifa de IVA. Puedes ajustarla en Contabilidad → Tarifas de IVA.', 'error');
+        }
+      }
       setModal(false);
       cargarDatos();
     } catch (e: any) {
@@ -1204,6 +1220,9 @@ export default function ProductosPage() {
                     placeholder="0"
                   />
                 </div>
+                {ivaConfig?.responsable && (
+                  <SelectorIvaProducto config={ivaConfig} valor={tarifaIva} onCambio={setTarifaIva} precio={Number(form.precio) || 0} editable={rolUsuario === 'ADMIN_EMPRESA'} />
+                )}
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Categoría</label>
                   <select
