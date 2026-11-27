@@ -41,7 +41,7 @@ export default function EquipoSeguridad({ politica, dosPasosPropia, onCambio }: 
     try {
       if (pendiente.tipo === "politica") {
         await api.post("/auth/seguridad/politica", { exigir: pendiente.exigir, ...confirmacion });
-        setMensaje(pendiente.exigir ? "Ahora administradores y gerentes deben usar la verificación en dos pasos." : "La verificación en dos pasos vuelve a ser opcional.");
+        setMensaje(pendiente.exigir ? "Ahora los gerentes también deben usar la verificación en dos pasos." : "La verificación en dos pasos vuelve a ser opcional para los gerentes.");
         await onCambio();
       } else {
         await api.post(`/auth/seguridad/equipo/${pendiente.id}/restablecer-2fa`, confirmacion);
@@ -69,7 +69,7 @@ export default function EquipoSeguridad({ politica, dosPasosPropia, onCambio }: 
           onChange={(e) => pedir({ tipo: "politica", exigir: e.target.checked })}
         />
         <span>
-          Exigir la verificación en dos pasos a administradores y gerentes
+          Exigir la verificación en dos pasos también a los gerentes
           <span className="block text-sm text-gray-400">
             {!politica && !dosPasosPropia
               ? "Primero activa tu propia verificación en dos pasos."
