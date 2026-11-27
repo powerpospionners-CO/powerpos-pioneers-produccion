@@ -46,3 +46,5 @@ Tabla aditiva `mesa_registros`, que se crea en la base de la sede desde la prime
 - `CUENTA`: una por cuenta. Mientras está abierta su clave es `mesa:N`; al cerrarse pasa a `cerrada:id`.
 
 Los respaldos la tratan como opcional.
+
+La venta y la confirmación de productos cobrados en la mesa se guardan en una sola transacción. Las uniones y movimientos entre cuentas también son atómicos: un conflicto en el destino revierte los cambios del origen. Las claves de cobro se identifican por cuenta para evitar reutilizar una venta ajena.

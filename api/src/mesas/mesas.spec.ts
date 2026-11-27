@@ -29,7 +29,12 @@ function baseFalsa() {
       { id: 2, nombre: 'Limonada', precio: 6000, categoria: { nombre: 'Bebidas' } },
     ].filter((p) => where.id.in.includes(p.id)),
   };
-  return { filas, mesaRegistro, producto, $executeRawUnsafe: jest.fn() };
+  const db: any = { filas, mesaRegistro, producto, $executeRawUnsafe: jest.fn() };
+  db.$transaction = jest.fn(async (fn) => {
+    const anterior = structuredClone(filas);
+    try { return await fn(db); } catch (e) { filas.splice(0, filas.length, ...anterior); throw e; }
+  });
+  return db;
 }
 
 const admin = { id: 1, nombre: 'Admin', rol: 'ADMIN_EMPRESA', empresaId: 4, sucursalId: 2 };
@@ -39,7 +44,11 @@ const cajero = { id: 6, nombre: 'Caja', rol: 'CAJERO', empresaId: 4, sucursalId:
 function escenario() {
   const db = baseFalsa();
   let n = 0;
-  const pedidos = { crearPedido: jest.fn(async (datos: any) => ({ id: 100 + ++n, numero: `P-${n}`, total: datos.items.reduce((s: number, i: any) => s + i.cantidad * (i.productoId === 1 ? 25000 : 6000), 0) })) };
+  const pedidos = { crearPedido: jest.fn(async (datos: any, _u: number, _e: number, opciones: any) => db.$transaction(async (tx) => {
+    const pedido = { id: 100 + ++n, numero: `P-${n}`, total: datos.items.reduce((s: number, i: any) => s + i.cantidad * (i.productoId === 1 ? 25000 : 6000), 0) };
+    if (opciones?.confirmar) await opciones.confirmar(tx, pedido);
+    return pedido;
+  })) };
   const s = new MesasService(db as any, pedidos as any);
   return { db, s, pedidos };
 }
@@ -88,7 +97,7 @@ describe('Cuentas de mesa', () => {
     await expect(s.cobrar(mesero, c.id, { claveIdempotencia: 'clave-123456' })).rejects.toThrow('caja');
     const bandeja = c.lineas[0].id;
     const r1: any = await s.cobrar(cajero, c.id, { claveIdempotencia: 'clave-parte-1', lineas: [bandeja], metodoPago: 'EFECTIVO', propina: { monto: 5000, metodoPago: 'EFECTIVO' } });
-    expect(pedidos.crearPedido).toHaveBeenCalledWith(expect.objectContaining({ observacion: 'Mesa 1', items: [{ productoId: 1, cantidad: 2, observacion: 'sin cebolla' }], propina: { monto: 5000, metodoPago: 'EFECTIVO' } }), 6, 4, { entregado: true });
+    expect(pedidos.crearPedido).toHaveBeenCalledWith(expect.objectContaining({ observacion: 'Mesa 1', items: [{ productoId: 1, cantidad: 2, observacion: 'sin cebolla' }], propina: { monto: 5000, metodoPago: 'EFECTIVO' } }), 6, 4, expect.objectContaining({ entregado: true, confirmar: expect.any(Function) }));
     expect(r1.cuenta).toMatchObject({ estado: 'ABIERTA', total: 12000, cobrado: 50000 });
     // Reintento con la misma clave: no crea otra venta.
     await s.cobrar(cajero, c.id, { claveIdempotencia: 'clave-parte-1', lineas: [bandeja] });
@@ -121,5 +130,33 @@ describe('Cuentas de mesa', () => {
     expect((await s.ver(mesero, unida.id)).total).toBe(25000);
     await expect(s.anular(mesero, unida.id, 'cliente se fue')).rejects.toThrow('administrador');
     expect((await s.anular(admin, unida.id, 'cliente se fue')).estado).toBe('ANULADA');
+  });
+});
+
+
+describe('Integridad de cambios entre mesas', () => {
+  it('revierte la unión si cambia la mesa de destino', async () => {
+    const { s, db } = escenario();
+    await s.guardarPlano(admin, { mesas: [{ numero: 1 }, { numero: 2 }] });
+    const a: any = await s.abrir(mesero, 1, 1);
+    const b: any = await s.abrir(mesero, 2, 1);
+    await s.agregar(mesero, a.id, [{ productoId: 1, cantidad: 1 }]);
+    const original = db.mesaRegistro.updateMany;
+    db.mesaRegistro.updateMany = async (args: any) => args.where.id === b.id ? { count: 0 } : original(args);
+    await expect(s.trasladar(mesero, a.id, 2)).rejects.toThrow('cambió');
+    expect(await s.ver(mesero, a.id)).toMatchObject({ estado: 'ABIERTA', total: 25000 });
+    expect(await s.ver(mesero, b.id)).toMatchObject({ estado: 'ABIERTA', total: 0 });
+  });
+  it('revierte el traslado de productos si falla el destino', async () => {
+    const { s, db } = escenario();
+    await s.guardarPlano(admin, { mesas: [{ numero: 1 }, { numero: 2 }] });
+    let a: any = await s.abrir(mesero, 1, 1);
+    const b: any = await s.abrir(mesero, 2, 1);
+    a = await s.agregar(mesero, a.id, [{ productoId: 1, cantidad: 1 }]);
+    const original = db.mesaRegistro.updateMany;
+    db.mesaRegistro.updateMany = async (args: any) => args.where.id === b.id ? { count: 0 } : original(args);
+    await expect(s.moverLineas(mesero, a.id, [a.lineas[0].id], 2)).rejects.toThrow('cambió');
+    expect((await s.ver(mesero, a.id)).total).toBe(25000);
+    expect((await s.ver(mesero, b.id)).total).toBe(0);
   });
 });

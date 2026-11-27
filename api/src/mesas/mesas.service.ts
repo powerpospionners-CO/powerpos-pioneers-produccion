@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { motorBase } from '../prisma/mysql-adapter';
 import { PedidosService } from '../pedidos/pedidos.service';
@@ -78,9 +78,9 @@ export class MesasService {
   }
 
   // Escritura optimista: si otro dispositivo cambió la cuenta, se pide actualizar.
-  private async guardar(r: any, datos: DatosCuenta, extra: Record<string, unknown> = {}) {
+  private async guardar(r: any, datos: DatosCuenta, extra: Record<string, unknown> = {}, db: any = this.db) {
     try {
-      const n = await this.db.mesaRegistro.updateMany({ where: { id: r.id, version: r.version }, data: { datos, version: r.version + 1, ...extra } });
+      const n = await db.mesaRegistro.updateMany({ where: { id: r.id, version: r.version }, data: { datos, version: r.version + 1, ...extra } });
       if (!n.count) throw new ConflictException('La mesa cambió en otro dispositivo. Actualiza e intenta de nuevo.');
     } catch (e) {
       if (e?.code === 'P2002') throw new ConflictException('La mesa de destino ya tiene una cuenta abierta');
@@ -243,8 +243,10 @@ export class MesasService {
     this.nota(destinoDatos, a, 'UNIR', `Se unió la mesa ${d.mesa}`);
     // Primero se cierra el origen; el historial de ambas cuentas registra la unión.
     this.nota(d, a, 'UNIDA', `Unida a la mesa ${mesa}`);
-    await this.guardar(r, d, { estado: 'UNIDA', clave: `cerrada:${r.id}` });
-    return this.guardar(otra, destinoDatos);
+    return this.prisma.$transaction(async (tx) => {
+      await this.guardar(r, d, { estado: 'UNIDA', clave: `cerrada:${r.id}` }, tx);
+      return this.guardar(otra, destinoDatos, {}, tx);
+    });
   }
 
   // Pasa productos sin cobrar a otra mesa (abre su cuenta si está libre).
@@ -269,8 +271,10 @@ export class MesasService {
     d.lineas = d.lineas.filter((l) => !mover.includes(l));
     this.nota(d, a, 'MOVER', `${mover.length} productos a la mesa ${mesa}`);
     this.nota(destinoDatos, a, 'RECIBIR', `${mover.length} productos de la mesa ${d.mesa}`);
-    await this.guardar(r, d);
-    return this.guardar(otra, destinoDatos);
+    return this.prisma.$transaction(async (tx) => {
+      await this.guardar(r, d, {}, tx);
+      return this.guardar(otra, destinoDatos, {}, tx);
+    });
   }
 
   async anular(a: ActorMesa, id: string, motivo: unknown) {
@@ -298,6 +302,7 @@ export class MesasService {
     const pedidas: string[] | null = Array.isArray(body?.lineas) && body.lineas.length ? body.lineas.map(String) : null;
     const elegidas = d.lineas.filter((l) => lineaPendiente(l) && (!pedidas || pedidas.includes(l.id)));
     if (!elegidas.length || (pedidas && elegidas.length !== new Set(pedidas).size)) throw new BadRequestException('Algún producto ya se cobró o no existe');
+    let cuenta: any;
     const pedido: any = await this.pedidos.crearPedido(
       {
         sucursalId: a.sucursalId,
@@ -306,31 +311,22 @@ export class MesasService {
         cambio: body?.cambio,
         propina: body?.propina,
         clienteId: body?.clienteId ?? null,
-        claveIdempotencia: clave,
+        claveIdempotencia: `mesa:${createHash('sha256').update(`${id}:${clave}`).digest('hex')}`,
         observacion: `Mesa ${d.mesa}`,
         items: elegidas.map((l) => ({ productoId: l.productoId, cantidad: l.cantidad, ...(l.observacion ? { observacion: l.observacion } : {}) })),
       },
       a.id,
       a.empresaId,
-      { entregado: true },
+      { entregado: true, confirmar: async (tx, venta) => {
+        const ids = new Set(elegidas.map((l) => l.id));
+        d.lineas.forEach((l) => { if (ids.has(l.id) && l.pagada === null) l.pagada = venta.id; });
+        d.cobros = [...d.cobros, { pedidoId: venta.id, numero: venta.numero, total: Number(venta.total), lineas: [...ids], en: ahora(), clave }];
+        this.nota(d, a, 'COBRAR', `${venta.numero} · $${Number(venta.total)}`);
+        const completa = !d.lineas.some(lineaPendiente);
+        cuenta = await this.guardar(r, d, completa ? { estado: 'COBRADA', clave: `cerrada:${r.id}` } : {}, tx);
+      } },
     );
-    // La venta ya existe; marcar la cuenta se reintenta si otro dispositivo la cambió entre tanto.
-    for (let intento = 0; ; intento++) {
-      const ids = new Set(elegidas.map((l) => l.id));
-      d.lineas.forEach((l) => { if (ids.has(l.id) && l.pagada === null) l.pagada = pedido.id; });
-      if (!d.cobros.some((c) => c.pedidoId === pedido.id))
-        d.cobros = [...d.cobros, { pedidoId: pedido.id, numero: pedido.numero, total: Number(pedido.total), lineas: [...ids], en: ahora(), clave }];
-      this.nota(d, a, 'COBRAR', `${pedido.numero} · $${Number(pedido.total)}`);
-      const completa = !d.lineas.some(lineaPendiente);
-      try {
-        const cuenta = await this.guardar(r, d, completa ? { estado: 'COBRADA', clave: `cerrada:${r.id}` } : {});
-        return { cuenta, pedido };
-      } catch (e) {
-        if (!(e instanceof ConflictException) || intento >= 2) throw e;
-        r = await this.cuenta(a, id);
-        d = this.abierta(r);
-      }
-    }
+    return { cuenta, pedido };
   }
 
   totalPendiente(d: DatosCuenta) {

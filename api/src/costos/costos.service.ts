@@ -83,13 +83,13 @@ export class CostosService {
         take: 100000,
       }),
     ]);
-    const vendidos = new Map<number, { cantidad: number; ventas: number; costo: number; sinCosto: number }>();
+    const vendidos = new Map<number, { cantidad: number; ventas: number; ventasConCosto: number; costo: number; sinCosto: number }>();
     for (const x of detalles) {
-      const v = vendidos.get(x.productoId) || { cantidad: 0, ventas: 0, costo: 0, sinCosto: 0 };
+      const v = vendidos.get(x.productoId) || { cantidad: 0, ventas: 0, ventasConCosto: 0, costo: 0, sinCosto: 0 };
       v.cantidad += x.cantidad;
       v.ventas += Number(x.subtotal);
       if (x.costoVentaHistorico == null) v.sinCosto += x.cantidad;
-      else v.costo += Number(x.costoVentaHistorico);
+      else { v.costo += Number(x.costoVentaHistorico); v.ventasConCosto += Number(x.subtotal); }
       vendidos.set(x.productoId, v);
     }
     const filas = productos.map((p: any) => {
@@ -110,8 +110,8 @@ export class CostosService {
         vendidos: v?.cantidad || 0,
         ventas: Math.round((v?.ventas || 0) * 100) / 100,
         // Solo con ventas que guardaron su costo; las demás se cuentan aparte.
-        margenReal: v && v.cantidad > v.sinCosto ? margen(v.ventas, v.costo) : null,
-        utilidad: v && v.cantidad > v.sinCosto ? Math.round((v.ventas - v.costo) * 100) / 100 : null,
+        margenReal: v && v.cantidad > v.sinCosto ? margen(v.ventasConCosto, v.costo) : null,
+        utilidad: v && v.cantidad > v.sinCosto ? Math.round((v.ventasConCosto - v.costo) * 100) / 100 : null,
         alerta: receta.costo === null || receta.incompleto ? 'SIN_COSTO' : margenActual !== null && margenActual < minimo ? 'MARGEN_BAJO' : null,
       };
     });

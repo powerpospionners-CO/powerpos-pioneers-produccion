@@ -69,6 +69,14 @@ describe('Servicio de costos', () => {
     expect(hamb).toMatchObject({ costo: 9000, margen: 55, margenReal: 55, utilidad: 110000, alerta: null });
     expect(jugo).toMatchObject({ margen: 16.7, alerta: 'MARGEN_BAJO', margenReal: null });
   });
+  it('excluye del margen histórico las ventas del mismo producto sin costo registrado', async () => {
+    prisma.detallePedido.findMany.mockResolvedValueOnce([
+      { productoId: 1, cantidad: 1, subtotal: 20000, costoVentaHistorico: 9000 },
+      { productoId: 1, cantidad: 1, subtotal: 20000, costoVentaHistorico: null },
+    ]);
+    const r = await s.platos(4, 30, 30);
+    expect(r.productos.find((p) => p.id === 1)).toMatchObject({ ventas: 40000, margenReal: 55, utilidad: 11000 });
+  });
   it('sugiere comprar lo que no alcanza para la cobertura pedida', async () => {
     const r: any = await s.sugerencia(4, 28, 7);
     const carne = r.items.find((x: any) => x.tipo === 'INGREDIENTE');

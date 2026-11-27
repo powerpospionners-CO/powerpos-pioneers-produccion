@@ -32,7 +32,7 @@ export class PedidosService {
   ) {}
 
   // opciones.entregado: la venta de una mesa ya pasó por cocina; no vuelve a la pantalla de preparación.
-  async crearPedido(datos: any, usuarioId: number, empresaId: number, opciones: { entregado?: boolean } = {}) {
+  async crearPedido(datos: any, usuarioId: number, empresaId: number, opciones: { entregado?: boolean; confirmar?: (tx: Prisma.TransactionClient, pedido: any) => Promise<void> } = {}) {
     // La propina viaja con la venta para que un reintento sin conexión no la pierda ni la duplique.
     const propina = leerPropina(datos?.propina, Number.MAX_SAFE_INTEGER);
     if (propina) {
@@ -52,6 +52,8 @@ export class PedidosService {
         await this.propinas!.registrar(tx, creado, propina, empresaId, usuarioId);
         creado.propina = propina;
       }
+      // La cuenta de mesa se confirma en la misma transacción que la venta y su inventario.
+      if (opciones.confirmar) await opciones.confirmar(tx, creado);
       return creado;
     }, { timeout: 15000 });
     await this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
