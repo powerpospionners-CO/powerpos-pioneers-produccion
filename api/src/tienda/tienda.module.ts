@@ -12,9 +12,10 @@ import { TiendaRegistros } from './tienda-registros';
 import { TiendaExtrasService } from './tienda-extras.service';
 import { TiendaExperienciaService } from './tienda-experiencia.service';
 import { LimitePublicoGuard } from './limite-publico.guard';
+import { CampanasService } from './campanas.service';
 @Module({
   imports: [PedidosModule],
-  providers: [TiendaService, BoldService, RolesGuard, PedidosPublicosGuard, TiendaRegistros, TiendaExtrasService, TiendaExperienciaService, LimitePublicoGuard],
+  providers: [TiendaService, BoldService, RolesGuard, PedidosPublicosGuard, TiendaRegistros, TiendaExtrasService, TiendaExperienciaService, LimitePublicoGuard, CampanasService],
   controllers: [TiendaAdminController, TiendaPublicaController],
 })
 export class TiendaModule {}
