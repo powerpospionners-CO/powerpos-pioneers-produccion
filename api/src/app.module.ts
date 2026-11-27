@@ -43,6 +43,7 @@ import { MesasModule } from './mesas/mesas.module';
 import { CostosModule } from './costos/costos.module';
 import { DuenoModule } from './dueno/dueno.module';
 import { AjustesModule } from './ajustes/ajustes.service';
+import { ContabilidadModule } from './contabilidad/contabilidad.controller';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { AjustesModule } from './ajustes/ajustes.service';
     CostosModule,
     DuenoModule,
     AjustesModule,
+    ContabilidadModule,
     AccesoBarrasModule,
     AccesoGastosModule,
     EventosModule,

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet, Truck, CalendarDays, ShieldCheck } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet, Truck, CalendarDays, ShieldCheck, HelpCircle } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 import { esPerfilMesero } from '@/lib/mesero';
@@ -29,6 +29,7 @@ const ITEMS = [
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/personal', label: 'Personal y pagos', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
+  { href: '/contabilidad', label: 'Contabilidad', icon: BookOpen },
   { href: '/compras', label: 'Compras', icon: ShoppingCart },
   { href: '/administracion', label: 'Administración', icon: Wallet },
   { href: '/reportes', label: 'Reportes', icon: BarChart3 },
@@ -59,6 +60,7 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/clientes': 'clientes',
   '/personal': 'financiero',
   '/financiero': 'financiero',
+  '/contabilidad': 'financiero',
   '/compras': 'financiero',
   '/administracion': 'financiero',
   '/reportes': 'reportes',
@@ -121,6 +123,7 @@ export default function Navbar() {
     if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
     if (item.href === '/costos' && !esAdminOGerente) return false;
     if (item.href === '/dueno' && !esAdminOGerente) return false;
+    if (item.href === '/contabilidad' && !esAdminOGerente) return false;
     if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
     if (item.href === '/gastos') return usuario?.rol === 'CAJERO' && accesoGastos;
     const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];
@@ -171,6 +174,7 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+          <button type="button" onClick={() => router.push('/ayuda')} title="Centro de ayuda" aria-label="Centro de ayuda" className={`rounded-lg border border-gray-700 p-2 hover:text-orange-500 ${pathname === '/ayuda' ? 'text-orange-500' : 'text-gray-300'}`}><HelpCircle size={17} /></button>
           <button type="button" onClick={() => router.push('/seguridad')} title="Seguridad de mi cuenta" aria-label="Seguridad de mi cuenta" className={`rounded-lg border border-gray-700 p-2 hover:text-orange-500 ${pathname === '/seguridad' ? 'text-orange-500' : 'text-gray-300'}`}><ShieldCheck size={17} /></button>
           <button type="button" onClick={cambiarTema} title={`Cambiar a tema ${tema === 'oscuro' ? 'claro' : 'oscuro'}`} aria-label={`Cambiar a tema ${tema === 'oscuro' ? 'claro' : 'oscuro'}`} className="rounded-lg border border-gray-700 p-2 text-gray-300 hover:text-orange-500">{tema === 'oscuro' ? <Sun size={17} /> : <Moon size={17} />}</button>
           <span className="text-gray-400 text-xs md:text-sm max-w-[120px] md:max-w-[180px] truncate hidden sm:block">

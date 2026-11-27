@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import api from '@/lib/api';
+import { qrTiendaCliente } from '@/lib/pantallaCliente';
 import AnunciosCarrusel, { type Anuncio } from '@/components/AnunciosCarrusel';
 
 interface ItemPantalla {
@@ -34,6 +36,7 @@ const estadoInicial: EstadoPantalla = {
 export default function PantallaClientePage() {
   const [estado, setEstado] = useState<EstadoPantalla>(estadoInicial);
   const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+  const [qrTienda, setQrTienda] = useState<string | null>(null);
 
   useEffect(() => {
     const canal = new BroadcastChannel('powerpos-pantalla-cliente');
@@ -45,6 +48,10 @@ export default function PantallaClientePage() {
     const cargarAnuncios = () => {
       api.get('/empresa').then(({ data }) => {
         if (Array.isArray(data.anunciosPantalla)) setAnuncios(data.anunciosPantalla);
+        // QR a la tienda en línea solo si está publicada: el cliente pide, suma puntos y deja su reseña.
+        const enlace = qrTiendaCliente(data, process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'powerpospioneers.com');
+        if (enlace) QRCode.toDataURL(enlace, { width: 320, margin: 1 }).then(setQrTienda).catch(() => setQrTienda(null));
+        else setQrTienda(null);
       }).catch(() => {});
     };
     cargarAnuncios();
@@ -140,7 +147,15 @@ export default function PantallaClientePage() {
             <p className="uppercase tracking-widest font-bold text-sm opacity-70">Total a pagar</p>
             <p className="text-5xl font-black mt-3">${estado.total.toLocaleString('es-CO')}</p>
           </div>
-          <p className="font-semibold text-lg">Gracias por elegirnos</p>
+          <div className="space-y-3">
+            <p className="font-semibold text-lg">Gracias por elegirnos</p>
+            {qrTienda && (
+              <div className="flex items-center gap-3 rounded-xl bg-white/90 p-3">
+                <img src={qrTienda} alt="Código QR de la tienda en línea" className="h-28 w-28 shrink-0" />
+                <p className="text-sm font-semibold leading-snug">Escanea: pide en línea, suma puntos y cuéntanos cómo te fue.</p>
+              </div>
+            )}
+          </div>
         </aside>
       </section>
     </main>
