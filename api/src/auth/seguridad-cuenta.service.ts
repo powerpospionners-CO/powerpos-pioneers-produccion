@@ -255,6 +255,45 @@ export class SeguridadCuentaService {
     return { ok: true };
   }
 
+  // El superadministrador restablece la 2FA de un usuario de cualquier empresa (p. ej. el único administrador
+  // perdió el celular y los códigos). Exige su contraseña, su propio código y un motivo; queda auditado y se avisa.
+  async restablecerPorSuperadmin(u: Actor, empresaIdRaw: unknown, emailRaw: unknown, password: unknown, codigo: unknown, motivoRaw: unknown) {
+    if (u.rol !== 'SUPERADMIN') throw new ForbiddenException('Solo el superadministrador puede hacerlo');
+    const empresaId = Number(empresaIdRaw);
+    const email = typeof emailRaw === 'string' ? emailRaw.trim().toLowerCase() : '';
+    const motivo = typeof motivoRaw === 'string' ? motivoRaw.trim() : '';
+    if (!Number.isSafeInteger(empresaId) || empresaId < 1 || !email) throw new BadRequestException('Usuario no válido');
+    if (motivo.length < 10 || motivo.length > 200) throw new BadRequestException('Escribe el motivo (10 a 200 caracteres)');
+    const propia = await this.base(u);
+    if (!(await this.dosPasosActivo(propia, u.id))) throw new BadRequestException('Activa primero tu propia verificación en dos pasos');
+    await this.confirmarAdministrador(propia, u, password, codigo);
+    let restablecida = false;
+    let afectado: { id: number; nombre: string; db: any } | null = null;
+    for (const b of await this.basesEmpresa({ ...u, rol: 'ADMIN_EMPRESA', empresaId })) {
+      const copia = await b.usuario.findFirst({ where: { email, empresaId }, select: { id: true, nombre: true, rol: true } });
+      if (!copia || copia.rol === 'SUPERADMIN') continue;
+      afectado ??= { id: copia.id, nombre: copia.nombre, db: b };
+      try {
+        await b.$transaction(async (tx: any) => {
+          const n = await tx.seguridadRegistro.deleteMany({ where: { usuarioId: copia.id, tipo: '2FA' } });
+          if (n?.count) restablecida = true;
+          await tx.seguridadRegistro.updateMany({ where: { usuarioId: copia.id, tipo: 'SESION', estado: 'ACTIVA' }, data: { estado: 'REVOCADA' } });
+        });
+      } catch (e) {
+        if (e?.code !== 'P2021') throw e;
+      }
+    }
+    if (!afectado) throw new NotFoundException('Usuario no encontrado en esa empresa');
+    if (!restablecida) throw new BadRequestException('Ese usuario no tiene activa la verificación en dos pasos');
+    this.olvidarPendientes();
+    await propia.auditoria?.create({ data: { accion: 'RESTABLECER_2FA', entidad: 'USUARIO', entidadId: afectado.id, usuarioId: u.id, detalle: { empresaId, email, motivo, por: 'SUPERADMIN' } } })?.catch(() => undefined);
+    this.logger.log(`Superadmin ${u.id} restableció la verificación en dos pasos de un usuario de la empresa ${empresaId}`);
+    const correoPersonal = await this.correoPersonal(afectado.db, { id: afectado.id, empresaId }).catch(() => '');
+    if (this.notificaciones && correoPersonal)
+      void this.notificaciones.enviarAvisoDosPasos(correoPersonal, afectado.nombre, 'Soporte PowerPOS').catch(() => undefined);
+    return { ok: true };
+  }
+
   // ---------- Sesiones ----------
   async crearSesion(db: any, usuario: { id: number; email: string; nombre: string; empresaId?: number | null }, meta: Meta) {
     await this.preparar(db);

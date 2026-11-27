@@ -11,6 +11,7 @@ import { useNotificar } from '@/components/Notificaciones';
 import PagosSuscripcion from '@/components/PagosSuscripcion';
 import SoporteEmpresa from '@/components/soporte/SoporteEmpresa';
 import ContactoSoporteConfig from '@/components/soporte/ContactoSoporteConfig';
+import RestablecerDosPasosAdmin from '@/components/soporte/RestablecerDosPasosAdmin';
 
 type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number; pendienteActivacion?: boolean };
 type SedeAdministrador = { id: number; nombre: string; activo: boolean; pendienteActivacion: boolean };
@@ -632,7 +633,10 @@ export default function SuperadminPage() {
                               <div className="font-semibold text-sm">{admin.nombre}</div>
                               <div className="text-xs text-slate-500 mt-1">{admin.email} · <span className={admin.pendienteActivacion ? 'text-amber-300' : admin.activo ? 'text-emerald-400' : 'text-red-400'}>{admin.pendienteActivacion ? 'Sede pendiente de activación' : admin.activo ? 'Puede entrar' : 'Bloqueado'}</span></div>
                             </div>
-                            <button type="button" onClick={() => abrirEdicionAdmin(admin)} className="text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 hover:border-orange-500">Editar</button>
+                            <div className="flex flex-col items-end gap-2">
+                              <button type="button" onClick={() => abrirEdicionAdmin(admin)} className="text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 hover:border-orange-500">Editar</button>
+                              {!admin.pendienteActivacion && <RestablecerDosPasosAdmin empresaId={seleccionada.id} email={admin.email} nombre={admin.nombre} />}
+                            </div>
                           </div>
                         )}
                       </div>

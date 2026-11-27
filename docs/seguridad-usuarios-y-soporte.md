@@ -48,3 +48,18 @@ La verificación en dos pasos es obligatoria siempre para el superadministrador 
 - No la pueden desactivar.
 
 Para los gerentes sigue dependiendo de la opción "Exigir la verificación en dos pasos también a los gerentes" en Seguridad del equipo. Los demás roles no tienen la obligación.
+
+## Restablecer la 2FA desde el superadministrador
+
+En el panel del superadministrador, cada administrador de empresa tiene el botón **Restablecer 2FA**. Sirve cuando el administrador perdió el celular y los códigos de recuperación y no hay otro administrador que lo ayude.
+
+**Para restablecer, el superadministrador debe:**
+- escribir el motivo, de 10 a 200 caracteres;
+- confirmar con su contraseña;
+- confirmar con su propio código de verificación.
+
+**Qué pasa al restablecer:**
+- Se quita la 2FA del usuario y se cierran sus sesiones en todas las sedes de la empresa donde exista su correo.
+- Queda registrado en la auditoría de control, con la acción `RESTABLECER_2FA`.
+- Se le avisa al usuario a su correo personal.
+- La próxima vez que el usuario entre, el sistema le pide activar la 2FA otra vez.
