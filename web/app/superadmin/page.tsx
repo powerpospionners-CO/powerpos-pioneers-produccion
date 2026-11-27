@@ -9,6 +9,7 @@ import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 import { useNotificar } from '@/components/Notificaciones';
 import PagosSuscripcion from '@/components/PagosSuscripcion';
+import SoporteEmpresa from '@/components/soporte/SoporteEmpresa';
 
 type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number; pendienteActivacion?: boolean };
 type SedeAdministrador = { id: number; nombre: string; activo: boolean; pendienteActivacion: boolean };
@@ -520,6 +521,7 @@ export default function SuperadminPage() {
             {!seleccionada ? <div className="py-8 text-center text-slate-500"><ShieldCheck size={30} className="mx-auto mb-3 text-slate-600" /><p>Selecciona una empresa para administrar su plan y permisos.</p></div> : <>
               <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-slate-500 uppercase tracking-wider">Configuracion</p><h3 className="text-xl font-black mt-1">{seleccionada.nombre}</h3><p className="text-xs text-slate-500 mt-1">NIT {seleccionada.nit}</p></div><button onClick={() => cambiarEstado(seleccionada)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 hover:border-orange-500">{seleccionada.activo ? 'Desactivar' : 'Activar'}</button></div>
               <div className="flex gap-2 mt-4"><button type="button" onClick={abrirEdicion} className="flex-1 flex items-center justify-center gap-2 text-sm border border-slate-700 rounded-lg px-3 py-2 hover:border-orange-500"><Pencil size={14} /> Editar datos</button><button type="button" onClick={() => setConfirmarEliminar(true)} className="flex items-center justify-center gap-2 text-sm border border-red-900 text-red-300 rounded-lg px-3 py-2 hover:bg-red-950"><Trash2 size={14} /> Eliminar</button></div>
+              <SoporteEmpresa empresaId={seleccionada.id} sedes={sedesAdmin} />
               {seleccionada.aislamientoFisico && <button type="button" disabled={guardandoAdmin} onClick={prepararSedes} className="mt-3 w-full rounded-lg border border-orange-700 p-2 text-sm text-orange-300 disabled:opacity-50">{guardandoAdmin ? 'Preparando...' : 'Preparar sedes pendientes'}</button>}
               {seleccionada.aislamientoFisico && sedesAdmin.some(s => s.pendienteActivacion) && <div className="mt-3 rounded-lg border border-slate-700 p-3">
                 <button type="button" disabled={guardandoAdmin} onClick={() => { setMostrarConexionSede(!mostrarConexionSede); setConexionSede({ sucursalId: String(sedesAdmin.find(s => s.pendienteActivacion)?.id || ''), base: '', usuario: '', password: '' }); }} className="text-sm text-orange-300 disabled:opacity-50">{mostrarConexionSede ? 'Cerrar conexión' : 'Conectar base de la sede'}</button>
@@ -589,7 +591,7 @@ export default function SuperadminPage() {
                   <h3 className="text-sm font-semibold">Nuevo administrador</h3>
                   <label className="block text-xs text-slate-400">Nombre<input required maxLength={150} disabled={guardandoAdmin} value={nuevoAdmin.nombre} onChange={e => setNuevoAdmin({ ...nuevoAdmin, nombre: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
                   <label className="block text-xs text-slate-400">Correo de acceso<input required type="email" maxLength={150} autoComplete="off" disabled={guardandoAdmin} value={nuevoAdmin.email} onChange={e => setNuevoAdmin({ ...nuevoAdmin, email: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
-                  <label className="block text-xs text-slate-400">Contraseña<input required type="password" minLength={6} maxLength={72} autoComplete="new-password" disabled={guardandoAdmin} value={nuevoAdmin.password} onChange={e => setNuevoAdmin({ ...nuevoAdmin, password: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
+                  <label className="block text-xs text-slate-400">Contraseña (mínimo 10, con letras y números)<input required type="password" minLength={10} maxLength={72} autoComplete="new-password" disabled={guardandoAdmin} value={nuevoAdmin.password} onChange={e => setNuevoAdmin({ ...nuevoAdmin, password: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" /></label>
                   <label className="block text-xs text-slate-400">Sede<select required disabled={guardandoAdmin} value={nuevoAdmin.sucursalId} onChange={e => setNuevoAdmin({ ...nuevoAdmin, sucursalId: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
                     <option value="">Seleccionar sede</option>{sedesAdmin.map(s => <option key={s.id} value={s.id}>{s.nombre}{s.pendienteActivacion ? ' · Pendiente de activación' : ''}</option>)}
                   </select></label>
@@ -611,7 +613,7 @@ export default function SuperadminPage() {
                               <input type="email" value={formAdmin.email} onChange={(e) => setFormAdmin({ ...formAdmin, email: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
                             </label>
                             <label className="block text-xs text-slate-400">Nueva contraseña <span className="text-slate-600">(déjala vacía para no cambiarla)</span>
-                              <input type="password" autoComplete="new-password" value={formAdmin.password} onChange={(e) => setFormAdmin({ ...formAdmin, password: e.target.value })} placeholder="Mínimo 6 caracteres" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                              <input type="password" autoComplete="new-password" value={formAdmin.password} onChange={(e) => setFormAdmin({ ...formAdmin, password: e.target.value })} placeholder="Mínimo 10 caracteres, con letras y números" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
                             </label>
                             <label className="flex items-center gap-2 text-sm text-slate-300">
                               <input type="checkbox" checked={formAdmin.activo} onChange={(e) => setFormAdmin({ ...formAdmin, activo: e.target.checked })} /> Puede entrar al sistema

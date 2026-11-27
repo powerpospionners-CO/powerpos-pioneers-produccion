@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
+import { validarClave } from '../usuarios/usuarios.service';
 
 function objeto(valor: unknown, campos: string[]): Record<string, unknown> {
   if (!valor || typeof valor !== 'object' || Array.isArray(valor))
@@ -62,7 +63,7 @@ export class RegistroInputPipe implements PipeTransform {
       'telefono',
     ]);
     const admin = objeto(datos.admin, ['nombre', 'email', 'password']);
-    const password = texto(admin, 'password', 10, 72);
+    const password = validarClave(texto(admin, 'password', 10, 72));
     if (Buffer.byteLength(password, 'utf8') > 72)
       throw new BadRequestException('Contraseña demasiado larga');
     return {

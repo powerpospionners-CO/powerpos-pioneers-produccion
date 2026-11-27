@@ -65,7 +65,7 @@ test("el cliente real de API cierra el procesamiento al responder y al fallar, s
       if (nombre === "./cargas") return c;
       if (nombre === "@/store/authStore")
         return { useAuthStore: { getState: () => ({}) } };
-      if (nombre === "./sesion-inactiva" || nombre === "./escritorio")
+      if (nombre === "./sesion-inactiva" || nombre === "./escritorio" || nombre === "./soporte")
         return {};
       return require(nombre);
     }).default;

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { validarClave } from '../usuarios/usuarios.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -49,6 +50,7 @@ export class SuperadminService {
       if (!administrador?.nombre || !administrador?.email || !administrador?.password) {
         throw new ConflictException('Cada administrador debe tener nombre, email y contraseña');
       }
+      validarClave(administrador.password);
 
       const emailNormalizado = administrador.email.trim().toLowerCase();
       if (emailsUsados.has(emailNormalizado)) {
@@ -359,7 +361,7 @@ export class SuperadminService {
     if (!Number.isSafeInteger(empresaId) || empresaId < 1 || !Number.isSafeInteger(datos.sucursalId) || Number(datos.sucursalId) < 1) throw new BadRequestException('Selecciona la empresa y la sede');
     if (typeof datos.nombre !== 'string' || !datos.nombre.trim() || datos.nombre.trim().length > 150) throw new BadRequestException('El nombre debe tener entre 1 y 150 caracteres');
     if (typeof datos.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email.trim()) || datos.email.trim().length > 150) throw new BadRequestException('El correo no es válido');
-    if (typeof datos.password !== 'string' || datos.password.length < 6 || Buffer.byteLength(datos.password, 'utf8') > 72) throw new BadRequestException('La contraseña debe tener al menos 6 caracteres y máximo 72 bytes');
+    const clave = validarClave(datos.password);
     const root = this.prisma.control || this.prisma;
     const sucursalId = Number(datos.sucursalId), nombre = datos.nombre.trim(), email = datos.email.trim().toLowerCase();
     const sede = await root.sucursal.findFirst({ where: { id: sucursalId, empresaId }, select: { id: true } });
@@ -367,7 +369,7 @@ export class SuperadminService {
     const base = this.prisma.aislamientoActivo ? await root.baseSede.findUnique({ where: { empresaId_sucursalId: { empresaId, sucursalId } } }) : null;
     const pendienteActivacion = this.prisma.aislamientoActivo && base?.estado !== 'ACTIVA';
     const db = this.prisma.aislamientoActivo && !pendienteActivacion ? (await this.prisma.contexto(empresaId, sucursalId, true)).cliente : root;
-    const password = await bcrypt.hash(datos.password, 10);
+    const password = await bcrypt.hash(clave, 10);
     const resultado = await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM empresas WHERE id = ${empresaId} FOR UPDATE`;
       const existente = await tx.usuario.findUnique({ where: { email } });
@@ -417,7 +419,7 @@ export class SuperadminService {
       data.email = email;
     }
     if (datos.password) {
-      if (datos.password.length < 6) throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+      validarClave(datos.password);
       data.password = await bcrypt.hash(datos.password, 10);
     }
     if (datos.activo !== undefined) data.activo = !!datos.activo;

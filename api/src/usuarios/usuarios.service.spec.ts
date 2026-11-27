@@ -54,9 +54,9 @@ describe('Edición de usuarios de empresa', () => {
 
   it('guarda la contraseña nueva como hash sin devolverla', async () => {
     const { db, servicio } = preparar();
-    const resultado = await servicio.actualizar(7, { password: 'clave-prueba-valida' }, 2, 9);
+    const resultado = await servicio.actualizar(7, { password: 'clave-prueba-valida-1' }, 2, 9);
     const hash = db.usuario.update.mock.calls[0][0].data.password;
-    expect(await bcrypt.compare('clave-prueba-valida', hash)).toBe(true);
+    expect(await bcrypt.compare('clave-prueba-valida-1', hash)).toBe(true);
     expect(resultado).not.toHaveProperty('password');
   });
 

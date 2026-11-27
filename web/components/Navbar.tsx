@@ -7,6 +7,8 @@ import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarCh
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
 import { esPerfilMesero } from '@/lib/mesero';
+import BannerSoporte from '@/components/soporte/BannerSoporte';
+import { salirDeSoporte } from '@/lib/soporte';
 
 const ITEMS = [
   { href: '/pos', label: 'POS', icon: ShoppingCart },
@@ -156,9 +158,11 @@ export default function Navbar() {
     itemsVisibles.push({ href: '/consumo-empleados', label: 'Consumo staff', icon: UtensilsCrossed });
   }
 
-  const handleLogout = async () => { try { await api.post('/actividad/salir', {}, { timeout: 1500 }); } catch {} finally { logout(); irALoginGenerico(router); } };
+  const handleLogout = async () => { if ((usuario as any)?.soporte) { salirDeSoporte(); return; } try { await api.post('/actividad/salir', {}, { timeout: 1500 }); } catch {} finally { logout(); irALoginGenerico(router); } };
 
   return (
+    <>
+    <BannerSoporte />
     <header className="bg-gray-900 border-b border-gray-800">
       <div className="flex items-center justify-between gap-3 min-w-0 px-3 md:px-6 py-3">
         <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink">
@@ -222,5 +226,6 @@ export default function Navbar() {
         </div>
       )}
     </header>
+    </>
   );
 }
