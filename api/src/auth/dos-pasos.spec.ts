@@ -205,7 +205,7 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
   });
 
   it('el superadministrador restablece la 2FA de un administrador con motivo, contraseña y código', async () => {
-    const { db, s, activar } = await preparar();
+    const { db, s, activar, recuperacion } = await preparar();
     const superadmin = { id: 50, rol: 'SUPERADMIN', empresaId: null, sucursalId: null, email: 'sa@powerpos.co', nombre: 'Súper' };
     const bcrypt = await import('bcrypt');
     const original = db.usuario.findUnique;
@@ -217,9 +217,10 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
     await expect(s.restablecerPorSuperadmin(superadmin as any, 1, 'admin@empresa.co', 'x', '', 'corto')).rejects.toThrow('motivo');
     await expect(s.restablecerPorSuperadmin(superadmin as any, 1, 'admin@empresa.co', 'Clave super 1', '', 'Perdió el celular y los códigos')).rejects.toThrow('Activa primero');
     const secretoSa = await activar(superadmin);
+    const codigosSa = recuperacion();
     await expect(s.restablecerPorSuperadmin(superadmin as any, 1, 'nadie@empresa.co', 'Clave super 1', codigoTotp(secretoSa, paso() + 1), 'Perdió el celular y los códigos')).rejects.toThrow('no encontrado');
     expect(await s.dosPasosActivo(db, 7)).toBe(true);
-    await s.restablecerPorSuperadmin(superadmin as any, 1, 'ADMIN@empresa.co', 'Clave super 1', codigoTotp(secretoSa, paso() + 2), 'Perdió el celular y los códigos');
+    await s.restablecerPorSuperadmin(superadmin as any, 1, 'ADMIN@empresa.co', 'Clave super 1', codigosSa[0], 'Perdió el celular y los códigos');
     expect(await s.dosPasosActivo(db, 7)).toBe(false);
     expect(db.auditoria.create.mock.calls[0][0].data).toMatchObject({ accion: 'RESTABLECER_2FA', usuarioId: 50, detalle: { motivo: 'Perdió el celular y los códigos' } });
   });
