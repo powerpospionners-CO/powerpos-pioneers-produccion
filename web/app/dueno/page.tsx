@@ -1,36 +1,34 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, Banknote, Boxes, CheckCircle2, DollarSign, Receipt, RotateCcw, Store, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
 import api from '@/lib/api';
 import { moneda } from '@/lib/formato';
 import { exportarCsv } from '@/lib/csv';
+import { Aviso, Indicador, Pagina, Pestanas, Tarjeta, Vacio, ui } from '@/components/ui/Panel';
 
 const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 const haceDias = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date(Date.now() - n * 86400000));
-const input = 'mt-1 block rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-white';
-const tarjeta = 'rounded-xl border border-gray-800 bg-gray-900 p-4';
 const error = (e: any) => e?.response?.data?.message || 'No se pudo consultar';
-const ICONO: Record<string, string> = { DIFERENCIA_CAJA: '💵', ANULACIONES: '↩️', STOCK_BAJO: '📦', SEDE_SIN_DATOS: '⚠️' };
+const ICONO_ALERTA: Record<string, { icono: typeof AlertTriangle; color: string }> = {
+  DIFERENCIA_CAJA: { icono: Banknote, color: 'text-red-400 bg-red-500/10' },
+  ANULACIONES: { icono: RotateCcw, color: 'text-yellow-400 bg-yellow-500/10' },
+  STOCK_BAJO: { icono: Boxes, color: 'text-orange-400 bg-orange-500/10' },
+  SEDE_SIN_DATOS: { icono: AlertTriangle, color: 'text-gray-400 bg-gray-800' },
+};
+const PESTANAS = [['hoy', 'Ventas y alertas'], ['control', 'Control por usuario']] as const;
 
 export default function DuenoPage() {
   const [pestana, setPestana] = useState<'hoy' | 'control'>('hoy');
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gray-950 text-white">
+      <div className="min-h-screen bg-gray-950 flex flex-col text-white">
         <Navbar />
-        <main className="mx-auto max-w-5xl space-y-4 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h1 className="text-2xl font-bold">Mi negocio</h1>
-            <div role="tablist" className="flex gap-2">
-              {([['hoy', 'Ventas y alertas'], ['control', 'Control por usuario']] as const).map(([k, t]) => (
-                <button key={k} role="tab" aria-selected={pestana === k} type="button" onClick={() => setPestana(k)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${pestana === k ? 'bg-orange-500' : 'bg-gray-800 text-gray-300'}`}>{t}</button>
-              ))}
-            </div>
-          </div>
+        <Pagina titulo="Mi negocio" descripcion="Ventas del día, alertas y control del personal en todas tus sedes." acciones={<Pestanas opciones={PESTANAS} valor={pestana} onCambio={setPestana} />}>
           {pestana === 'hoy' ? <Resumen /> : <Control />}
-        </main>
+        </Pagina>
       </div>
     </AuthGuard>
   );
@@ -50,49 +48,67 @@ function Resumen() {
   }, [cargar, fecha]);
   const t = datos?.totales;
   return (
-    <section className="space-y-4">
-      <label className="text-sm text-gray-300">Día<input type="date" max={hoy()} className={input} value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
-      {falla && <p role="alert" className="text-red-400">{falla}</p>}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end gap-3">
+        <div><label className={ui.etiqueta}>Día</label><input type="date" max={hoy()} className={ui.input} value={fecha} onChange={(e) => setFecha(e.target.value)} /></div>
+        {fecha === hoy() && <span className="pb-2 text-xs text-gray-500">Se actualiza cada minuto</span>}
+      </div>
+      {falla && <Aviso tipo="error">{falla}</Aviso>}
       {t && (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className={tarjeta}><p className="text-xs text-gray-400">Ventas</p><p className="text-2xl font-bold">{moneda(t.ventas)}</p>
-              {t.variacion !== null && <p className={`text-sm ${t.variacion >= 0 ? 'text-green-400' : 'text-red-400'}`}>{t.variacion >= 0 ? '▲' : '▼'} {Math.abs(t.variacion)} % vs. hace 8 días</p>}</div>
-            <div className={tarjeta}><p className="text-xs text-gray-400">Ventas registradas</p><p className="text-2xl font-bold">{t.cantidad}</p></div>
-            <div className={tarjeta}><p className="text-xs text-gray-400">Ticket promedio</p><p className="text-2xl font-bold">{moneda(t.ticketPromedio)}</p></div>
-            <div className={tarjeta}><p className="text-xs text-gray-400">Cajas abiertas</p><p className="text-2xl font-bold">{t.cajasAbiertas}</p></div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Indicador icono={DollarSign} etiqueta="Ventas" valor={moneda(t.ventas)} tono="naranja" detalle={t.variacion !== null ? (
+              <span className={`inline-flex items-center gap-1 ${t.variacion >= 0 ? 'text-green-400' : 'text-red-400'}`}>{t.variacion >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}{Math.abs(t.variacion)} % vs. el mismo día de la semana pasada</span>
+            ) : <span className="text-gray-500">Sin ventas la semana pasada</span>} />
+            <Indicador icono={Receipt} etiqueta="Ventas registradas" valor={t.cantidad} />
+            <Indicador icono={TrendingUp} etiqueta="Ticket promedio" valor={moneda(t.ticketPromedio)} />
+            <Indicador icono={Wallet} etiqueta="Cajas abiertas" valor={t.cajasAbiertas} tono={t.cajasAbiertas ? 'verde' : 'gris'} />
           </div>
-          <div className={tarjeta}>
-            <h2 className="mb-2 font-bold">Alertas</h2>
-            {datos.alertas.length === 0 ? <p className="text-green-400">Todo en orden.</p> : (
-              <ul className="space-y-2 text-sm">
-                {datos.alertas.map((a: any, i: number) => <li key={i}>{ICONO[a.tipo] || '•'} <strong>{a.sede}:</strong> {a.texto}</li>)}
+
+          <Tarjeta titulo="Alertas" sinRelleno>
+            {datos.alertas.length === 0 ? (
+              <div className="flex items-center gap-3 p-4 text-sm text-green-400"><CheckCircle2 size={18} /> Todo en orden.</div>
+            ) : (
+              <ul>
+                {datos.alertas.map((a: any, i: number) => {
+                  const { icono: Icono, color } = ICONO_ALERTA[a.tipo] || ICONO_ALERTA.SEDE_SIN_DATOS;
+                  return (
+                    <li key={i} className={`flex items-center gap-3 px-4 py-3 ${i ? 'border-t border-gray-800' : ''}`}>
+                      <span className={`rounded-lg p-2 ${color}`}><Icono size={16} /></span>
+                      <span className="text-sm text-gray-200"><span className="font-semibold text-white">{a.sede}</span><span className="mx-2 text-gray-600">·</span>{a.texto}</span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          </Tarjeta>
+
+          <div className="grid gap-4 lg:grid-cols-2">
             {datos.sedes.map((s: any) => (
-              <article key={s.sucursalId} className={tarjeta}>
-                <header className="flex items-baseline justify-between">
-                  <h3 className="font-bold">{s.nombre}</h3>
-                  {s.ok && <span className="text-lg font-bold">{moneda(s.ventas)}</span>}
-                </header>
-                {!s.ok ? <p className="text-sm text-amber-300">Sin datos de esta sede por ahora.</p> : (
-                  <>
-                    <p className="text-sm text-gray-400">{s.cantidad} ventas · ticket {moneda(s.ticketPromedio)}{s.descuentos > 0 ? ` · descuentos ${moneda(s.descuentos)}` : ''}</p>
+              <Tarjeta key={s.sucursalId} titulo={<h2 className="flex items-center gap-2 font-semibold text-white"><Store size={16} className="text-orange-400" />{s.nombre}</h2>} acciones={s.ok ? <span className="text-lg font-bold text-white">{moneda(s.ventas)}</span> : undefined}>
+                {!s.ok ? <p className="text-sm text-yellow-300">Sin datos de esta sede por ahora.</p> : (
+                  <div className="space-y-4">
+                    <dl className="grid grid-cols-3 gap-3 text-sm">
+                      <div><dt className="text-gray-500">Ventas</dt><dd className="font-semibold text-white">{s.cantidad}</dd></div>
+                      <div><dt className="text-gray-500">Ticket</dt><dd className="font-semibold text-white">{moneda(s.ticketPromedio)}</dd></div>
+                      <div><dt className="text-gray-500">Descuentos</dt><dd className="font-semibold text-white">{moneda(s.descuentos)}</dd></div>
+                    </dl>
                     <Barras valores={s.porHora} />
-                    {s.cajasAbiertas.map((c: any) => <p key={c.id} className="text-xs text-gray-400">Caja abierta por {c.cajero} desde las {new Date(c.desde).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })}</p>)}
-                  </>
+                    {s.cajasAbiertas.length > 0 && (
+                      <ul className="space-y-1 border-t border-gray-800 pt-3 text-xs text-gray-400">
+                        {s.cajasAbiertas.map((c: any) => <li key={c.id} className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-green-500" />Caja abierta por {c.cajero} desde las {new Date(c.desde).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })}</li>)}
+                      </ul>
+                    )}
+                  </div>
                 )}
-              </article>
+              </Tarjeta>
             ))}
           </div>
-          {datos.sedes.length > 1 && (
-            <p className="text-xs text-gray-400">Para ver una sede en detalle, inicia sesión en ella. Las ventas se comparan con el mismo día de la semana anterior.</p>
-          )}
+          {datos.sedes.length > 1 && <p className="text-xs text-gray-500">Para ver una sede en detalle, inicia sesión en ella.</p>}
         </>
       )}
-    </section>
+      {!datos && !falla && <Vacio>Cargando…</Vacio>}
+    </div>
   );
 }
 
@@ -101,11 +117,12 @@ function Barras({ valores }: { valores: number[] }) {
   const horas = valores.slice(6, 24);
   const max = Math.max(1, ...horas);
   return (
-    <div className="mt-3" aria-label="Ventas por hora">
-      <div className="flex h-16 items-end gap-0.5">
-        {horas.map((v, i) => <div key={i} title={`${i + 6}:00 · ${moneda(v)}`} className="flex-1 rounded-t bg-orange-500/70" style={{ height: `${Math.max(2, (v / max) * 100)}%` }} />)}
+    <div aria-label="Ventas por hora">
+      <p className="mb-2 text-xs text-gray-500">Ventas por hora</p>
+      <div className="flex h-20 items-end gap-1 rounded-lg bg-gray-950/50 p-2">
+        {horas.map((v, i) => <div key={i} title={`${i + 6}:00 · ${moneda(v)}`} className={`flex-1 rounded-t ${v > 0 ? 'bg-orange-500/80' : 'bg-gray-800'}`} style={{ height: `${Math.max(4, (v / max) * 100)}%` }} />)}
       </div>
-      <div className="flex justify-between text-[10px] text-gray-500"><span>6 a. m.</span><span>12 m.</span><span>6 p. m.</span><span>11 p. m.</span></div>
+      <div className="mt-1 flex justify-between text-[10px] text-gray-500"><span>6 a. m.</span><span>12 m.</span><span>6 p. m.</span><span>11 p. m.</span></div>
     </div>
   );
 }
@@ -117,39 +134,57 @@ function Control() {
   const consultar = () => api.get('/dueno/control', { params: rango }).then(({ data }) => { setDatos(data); setFalla(''); }).catch((e) => setFalla(error(e)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void consultar(); }, []);
+  const conAlertas = (datos?.personas || []).filter((p: any) => p.alertas.length).length;
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3 text-sm">
-        <label>Desde<input type="date" className={input} value={rango.desde} max={rango.hasta} onChange={(e) => setRango({ ...rango, desde: e.target.value })} /></label>
-        <label>Hasta<input type="date" className={input} value={rango.hasta} min={rango.desde} onChange={(e) => setRango({ ...rango, hasta: e.target.value })} /></label>
-        <button type="button" className="rounded-lg bg-orange-500 px-3 py-2 font-bold" onClick={() => void consultar()}>Consultar</button>
-        {datos?.personas.length > 0 && <button type="button" className="rounded-lg border border-gray-600 px-3 py-2" onClick={() => exportarCsv(`control-usuarios-${rango.desde}-${rango.hasta}.csv`, ['Persona', 'Rol', 'Sedes', 'Ventas', 'Vendido', 'Descuentos', 'Anulaciones', 'Anulado', 'Devoluciones', 'Devuelto', 'Correcciones de pago', 'Aperturas irregulares', 'Cierres con diferencia', 'Diferencia acumulada', 'Alertas'], datos.personas.map((p: any) => [p.nombre, p.rol, p.sedes.join(', '), p.ventas, p.totalVendido, p.descuentos, p.anulaciones, p.montoAnulado, p.devoluciones, p.montoDevuelto, p.correccionesPago, p.aperturasIrregulares, p.diferenciasCaja, p.faltanteCaja, p.alertas.join(' | ')]))}>Exportar CSV</button>}
-      </div>
-      {falla && <p role="alert" className="text-red-400">{falla}</p>}
-      <p className="text-xs text-gray-400">Las alertas son señales para revisar, no prueba de un error o de un fraude. Las anulaciones se atribuyen a quien anuló; las ventas y descuentos, a quien vendió; las diferencias, al cajero que cerró.</p>
-      {datos?.sedesSinDatos?.length > 0 && <p className="text-sm text-amber-300">Sin datos de: {datos.sedesSinDatos.join(', ')}.</p>}
+    <div className="space-y-6">
+      {falla && <Aviso tipo="error">{falla}</Aviso>}
+      {datos?.sedesSinDatos?.length > 0 && <Aviso tipo="alerta">Sin datos de: {datos.sedesSinDatos.join(', ')}.</Aviso>}
       {datos && (
-        <div className="space-y-2">
-          {datos.personas.map((p: any) => (
-            <article key={p.clave} className={`${tarjeta} ${p.alertas.length ? 'border-amber-600/60' : ''}`}>
-              <header className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="font-bold">{p.nombre} <span className="text-xs font-normal text-gray-400">{p.rol} · {p.sedes.join(', ')}</span></h3>
-                <span className="font-bold">{moneda(p.totalVendido)} <span className="text-xs font-normal text-gray-400">en {p.ventas} ventas</span></span>
-              </header>
-              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-300 md:grid-cols-4">
-                <div>Descuentos: <strong>{moneda(p.descuentos)}</strong></div>
-                <div>Anulaciones: <strong>{p.anulaciones}</strong> ({moneda(p.montoAnulado)})</div>
-                <div>Devoluciones: <strong>{p.devoluciones}</strong> ({moneda(p.montoDevuelto)})</div>
-                <div>Correcciones de pago: <strong>{p.correccionesPago}</strong></div>
-                <div>Aperturas irregulares: <strong>{p.aperturasIrregulares}</strong></div>
-                <div>Cierres con diferencia: <strong>{p.diferenciasCaja}</strong> ({moneda(p.faltanteCaja)})</div>
-              </dl>
-              {p.alertas.length > 0 && <ul className="mt-2 text-sm text-amber-300">{p.alertas.map((a: string) => <li key={a}>⚠ {a}</li>)}</ul>}
-            </article>
-          ))}
-          {!datos.personas.length && <p className="text-gray-400">Sin movimientos en el periodo.</p>}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Indicador icono={Users} etiqueta="Personas con movimientos" valor={datos.personas.length} />
+          <Indicador icono={AlertTriangle} etiqueta="Con señales para revisar" valor={conAlertas} tono={conAlertas ? 'amarillo' : 'gris'} />
         </div>
       )}
-    </section>
+      <Tarjeta sinRelleno titulo="Control por usuario" acciones={
+        <>
+          <div><label className={ui.etiqueta}>Desde</label><input type="date" className={ui.input} value={rango.desde} max={rango.hasta} onChange={(e) => setRango({ ...rango, desde: e.target.value })} /></div>
+          <div><label className={ui.etiqueta}>Hasta</label><input type="date" className={ui.input} value={rango.hasta} min={rango.desde} onChange={(e) => setRango({ ...rango, hasta: e.target.value })} /></div>
+          <button type="button" className={ui.primario} onClick={() => void consultar()}>Consultar</button>
+          {datos?.personas.length > 0 && <button type="button" className={ui.secundario} onClick={() => exportarCsv(`control-usuarios-${rango.desde}-${rango.hasta}.csv`, ['Persona', 'Rol', 'Sedes', 'Ventas', 'Vendido', 'Descuentos', 'Anulaciones', 'Anulado', 'Devoluciones', 'Devuelto', 'Correcciones de pago', 'Aperturas irregulares', 'Cierres con diferencia', 'Diferencia acumulada', 'Alertas'], datos.personas.map((p: any) => [p.nombre, p.rol, p.sedes.join(', '), p.ventas, p.totalVendido, p.descuentos, p.anulaciones, p.montoAnulado, p.devoluciones, p.montoDevuelto, p.correccionesPago, p.aperturasIrregulares, p.diferenciasCaja, p.faltanteCaja, p.alertas.join(' | ')]))}>Exportar CSV</button>}
+        </>
+      }>
+        <p className="border-b border-gray-800 px-4 py-3 text-xs text-gray-500">Las alertas son señales para revisar, no prueba de un error. Las anulaciones se atribuyen a quien anuló; ventas y descuentos, a quien vendió; las diferencias, al cajero que cerró.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px]">
+            <thead>
+              <tr>
+                <th className={ui.th}>Persona</th><th className={ui.thNum}>Vendido</th><th className={ui.thNum}>Descuentos</th><th className={ui.thNum}>Anulaciones</th>
+                <th className={ui.thNum}>Devoluciones</th><th className={ui.thNum}>Correcciones</th><th className={ui.thNum}>Aperturas irreg.</th><th className={ui.thNum}>Diferencias de caja</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(datos?.personas || []).map((p: any) => (
+                <tr key={p.clave} className={ui.fila}>
+                  <td className={ui.td}>
+                    <div className="font-medium text-white">{p.nombre}</div>
+                    <div className="text-xs text-gray-500">{p.rol} · {p.sedes.join(', ')}</div>
+                    {p.alertas.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{p.alertas.map((a: string) => <span key={a} className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-400">{a}</span>)}</div>}
+                  </td>
+                  <td className={ui.tdNum}>{moneda(p.totalVendido)}<div className="text-xs text-gray-500">{p.ventas} ventas</div></td>
+                  <td className={ui.tdNum}>{moneda(p.descuentos)}</td>
+                  <td className={ui.tdNum}>{p.anulaciones}<div className="text-xs text-gray-500">{moneda(p.montoAnulado)}</div></td>
+                  <td className={ui.tdNum}>{p.devoluciones}<div className="text-xs text-gray-500">{moneda(p.montoDevuelto)}</div></td>
+                  <td className={ui.tdNum}>{p.correccionesPago}</td>
+                  <td className={ui.tdNum}>{p.aperturasIrregulares}</td>
+                  <td className={`${ui.tdNum} ${p.faltanteCaja < 0 ? 'text-red-400' : ''}`}>{p.diferenciasCaja}<div className="text-xs text-gray-500">{moneda(p.faltanteCaja)}</div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {datos && !datos.personas.length && <Vacio>Sin movimientos en el periodo.</Vacio>}
+          {!datos && !falla && <Vacio>Cargando…</Vacio>}
+        </div>
+      </Tarjeta>
+    </div>
   );
 }
