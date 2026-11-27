@@ -32,7 +32,7 @@
 
 - Ícono **?** en la barra superior. Abre guías paso a paso según el rol del usuario; el perfil mesero solo ve Mesas y Seguridad.
 - Tiene búsqueda que no distingue tildes y un botón por guía para ir a la pantalla.
-- Contacto de soporte opcional con `NEXT_PUBLIC_SOPORTE_WHATSAPP` (solo dígitos, con indicativo) y `NEXT_PUBLIC_SOPORTE_CORREO`. Si no se configuran, la sección no aparece.
+- El contacto de soporte (WhatsApp con indicativo, correo y horario) lo configura el superadministrador en su panel. Se guarda en `ajustes_registros` de la base de control y se muestra en la Ayuda de todas las empresas; si está vacío, la sección no aparece.
 
 ## QR en la pantalla del cliente
 

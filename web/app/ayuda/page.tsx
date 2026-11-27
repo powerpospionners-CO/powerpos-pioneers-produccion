@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import api from '@/lib/api';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import Navbar from '@/components/Navbar';
@@ -8,14 +9,15 @@ import { useAuthStore } from '@/store/authStore';
 import { esPerfilMesero } from '@/lib/mesero';
 import { guiasPara } from '@/lib/ayuda';
 
-// Contacto opcional de soporte, configurado al desplegar.
-const WHATSAPP = (process.env.NEXT_PUBLIC_SOPORTE_WHATSAPP || '').replace(/\D/g, '');
-const CORREO = process.env.NEXT_PUBLIC_SOPORTE_CORREO || '';
 
 export default function AyudaPage() {
   const usuario = useAuthStore((s) => s.usuario);
   const [busqueda, setBusqueda] = useState('');
   const [abierta, setAbierta] = useState<string | null>(null);
+  // Contacto de soporte que configura el superadministrador de PowerPOS.
+  const [contacto, setContacto] = useState({ whatsapp: '', correo: '', horario: '' });
+  useEffect(() => { api.get('/ayuda/contacto').then(({ data }) => setContacto(data)).catch(() => undefined); }, []);
+  const WHATSAPP = contacto.whatsapp, CORREO = contacto.correo;
   const mesero = esPerfilMesero(usuario);
   const guias = useMemo(() => guiasPara(usuario?.rol, busqueda).filter((g) => !mesero || g.tema === 'Mesas' || g.tema === 'Seguridad'), [usuario?.rol, busqueda, mesero]);
   const temas = [...new Set(guias.map((g) => g.tema))];
@@ -49,6 +51,7 @@ export default function AyudaPage() {
           {(WHATSAPP || CORREO) && (
             <section className="rounded-xl border border-gray-800 bg-gray-900 p-4">
               <h2 className="font-semibold">¿Necesitas más ayuda?</h2>
+              {contacto.horario && <p className="mt-1 text-sm text-gray-400">Horario: {contacto.horario}</p>}
               <div className="mt-2 flex flex-wrap gap-2">
                 {WHATSAPP && <a href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent('Hola, necesito ayuda con PowerPOS')}`} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-600 px-3 py-2 font-bold">Escribir por WhatsApp</a>}
                 {CORREO && <a href={`mailto:${CORREO}`} className="rounded-lg border border-gray-600 px-3 py-2">Escribir un correo</a>}
