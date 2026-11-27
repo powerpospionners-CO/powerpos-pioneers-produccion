@@ -8,6 +8,7 @@ import { jwtSecret } from './jwt-secret';
 import { AuthRateGuard } from './auth-rate.guard';
 import { SeguridadCuentaService } from './seguridad-cuenta.service';
 import { SoporteService } from './soporte.service';
+import { BloqueoCuentaService } from './bloqueo-cuenta.service';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { SoporteService } from './soporte.service';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, AuthRateGuard, SeguridadCuentaService, SoporteService],
+  providers: [AuthService, JwtStrategy, AuthRateGuard, SeguridadCuentaService, SoporteService, BloqueoCuentaService],
   controllers: [AuthController, SeguridadCuentaController, SoporteController],
   exports: [AuthService, SeguridadCuentaService, SoporteService],
 })
