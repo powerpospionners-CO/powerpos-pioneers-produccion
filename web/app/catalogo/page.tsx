@@ -166,6 +166,8 @@ export default function CatalogoPage() {
     } catch (e: any) {
       aviso(registroGuardado ? `El producto del catálogo se guardó, pero no se pudo cargar su imagen. Puedes reintentar sobre el mismo registro. ${e?.response?.data?.message || ''}` : e?.response?.data?.message || 'No se pudo guardar el producto del catálogo', 'error');
     } finally {
+      // Cierra la ventana "Guardando cambios" pase lo que pase.
+      terminarCarga(proceso);
       setLoading(false);
     }
   };

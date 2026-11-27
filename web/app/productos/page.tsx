@@ -811,6 +811,8 @@ export default function ProductosPage() {
         ? `El producto se guardó, pero su imagen no se pudo cargar. Puedes reintentar sobre este mismo producto. ${e?.response?.data?.message || ''}`
         : e?.response?.data?.message || 'No se pudo guardar el producto. Revisa los datos e inténtalo de nuevo.', 'error');
     } finally {
+      // Cierra la ventana "Guardando cambios" pase lo que pase.
+      terminarCarga(proceso);
       setLoading(false);
     }
   };
