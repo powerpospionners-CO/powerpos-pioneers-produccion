@@ -41,3 +41,27 @@ Si la tienda en línea está publicada, la pantalla del cliente muestra un QR a 
 ## Corrección: pantallas nuevas en el dominio de la empresa
 
 Mesas, Costos y Mi negocio no estaban en la lista de rutas del panel de `proxy.ts`. Por eso, en el dominio propio de una empresa se reescribían hacia la tienda. Ahora están en la lista junto con Contabilidad y Ayuda, y fuera de los buscadores. Una prueba verifica que toda pantalla nueva del panel quede en esa lista.
+
+## IVA
+
+Todas las empresas son responsables de IVA, salvo el Trailer (empresa 1), que por defecto no lo es. El precio de venta **incluye** el IVA: el cliente paga lo mismo y el sistema separa la base y el impuesto. Por defecto, el costo de compra también lo incluye, y ese IVA es descontable.
+
+- **Configuración** (Contabilidad → Tarifas de IVA, la edita el administrador):
+  - Si la empresa es responsable de IVA.
+  - Si el costo incluye IVA.
+  - La tarifa para productos sin confirmar (19 % por defecto).
+  - La tarifa de cada producto: 19 %, 5 %, exento o excluido, con filtro por categoría y aplicación en lote.
+  - Los productos sin confirmar se marcan y se calculan con la tarifa por defecto.
+  - Se guarda en `ajustes_registros` (sucursal 0, clave `iva`), en la base de la sede.
+- **Desglose de una venta:** el total cobrado (con descuentos y domicilio) se reparte entre las tarifas en proporción a sus líneas. Base + IVA suman exactamente el total.
+- **Libro diario:**
+  - Las ventas acreditan la base a 4135 o 4140 y el IVA a 240805, por tarifa. Las devoluciones lo reversan en proporción.
+  - El costo de ventas usa el costo sin IVA.
+  - Las compras de mercancía con detalle de productos separan el IVA descontable (240810) del inventario.
+- **Reporte de IVA por bimestre:**
+  - Base e IVA de ventas, devoluciones y compras por tarifa, IVA generado, IVA descontable y saldo estimado, con exportación CSV.
+  - Es una estimación: la declaración (formulario 300) la hace el contador.
+- **Recibo:** la tirilla impresa y el recibo del navegador muestran la base y el IVA por tarifa en las empresas responsables.
+- **Límites:**
+  - Las compras de gastos (servicios, arriendo, etc.) no separan IVA descontable, porque no tienen detalle de tarifa.
+  - El IVA del domicilio se reparte con las tarifas de la venta.

@@ -44,6 +44,7 @@ import { CostosModule } from './costos/costos.module';
 import { DuenoModule } from './dueno/dueno.module';
 import { AjustesModule } from './ajustes/ajustes.service';
 import { ContabilidadModule } from './contabilidad/contabilidad.controller';
+import { IvaModule } from './iva/iva.controller';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { ContabilidadModule } from './contabilidad/contabilidad.controller';
     DuenoModule,
     AjustesModule,
     ContabilidadModule,
+    IvaModule,
     AccesoBarrasModule,
     AccesoGastosModule,
     EventosModule,

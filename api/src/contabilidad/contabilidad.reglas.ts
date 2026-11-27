@@ -1,3 +1,6 @@
+import type { Desglose } from '../iva/iva.reglas';
+import { NOMBRE_TARIFA, TARIFAS } from '../iva/iva.reglas';
+
 // Libro diario sugerido para el contador: asientos de partida doble por día, a partir de lo que registró el POS.
 // Los códigos son del PUC colombiano (Decreto 2650 de 1993) y el contador puede reclasificarlos.
 
@@ -16,6 +19,8 @@ export const CUENTAS: Record<string, string> = {
   '613505': 'Costo de ventas · comercio',
   '614005': 'Costo de ventas · restaurantes',
   '238095': 'Acreedores varios · propinas por pagar',
+  '240805': 'IVA por pagar · generado en ventas',
+  '240810': 'IVA por pagar · descontable en compras',
   '220505': 'Proveedores nacionales',
   '233595': 'Costos y gastos por pagar · otros',
   '510506': 'Gastos de personal · sueldos',
@@ -42,18 +47,35 @@ const linea = (cuenta: string, detalle: string, debito: number, credito: number,
 
 export type Datos = {
   restaurante: boolean;
-  ventas: { fecha: string; total: number; costo: number | null; pagos: { metodo: string; monto: number }[] }[];
-  devoluciones: { fecha: string; metodo: string; monto: number }[];
+  // desglose: base e IVA por tarifa (empresas responsables de IVA). costo ya sin IVA descontable.
+  ventas: { fecha: string; total: number; costo: number | null; pagos: { metodo: string; monto: number }[]; desglose?: Desglose }[];
+  devoluciones: { fecha: string; metodo: string; monto: number; desglose?: Desglose }[];
   cobrosCredito: { fecha: string; metodo: string; monto: number }[];
   propinas: { fecha: string; metodo: string; monto: number }[];
   // abono: el movimiento paga una cuenta por pagar ya registrada (no es un gasto nuevo).
-  movimientos: { id: number; fecha: string; tipo: 'INGRESO' | 'EGRESO'; categoria: string; descripcion: string; monto: number; cuenta?: string | null; abono?: boolean }[];
+  movimientos: { id: number; fecha: string; tipo: 'INGRESO' | 'EGRESO'; categoria: string; descripcion: string; monto: number; cuenta?: string | null; abono?: boolean; ivaDescontable?: number }[];
   // Compras y gastos que quedaron por pagar (cuentas por pagar creadas en el periodo).
-  obligaciones: { id: number; fecha: string; categoria: string; descripcion: string; monto: number; cuenta?: string | null }[];
+  obligaciones: { id: number; fecha: string; categoria: string; descripcion: string; monto: number; cuenta?: string | null; ivaDescontable?: number }[];
   nombres?: Record<string, string>;
 };
 
 // Agrupa importes por cuenta, en el orden de llegada.
+// Crédito de ventas: base a ingresos y el IVA a la cuenta por pagar, por tarifa.
+function lineasIngreso(cuentaVenta: string, total: number, desgloses: (Desglose | undefined)[], detalle: string, nombres: Record<string, string>, credito: boolean) {
+  const con = desgloses.filter((d): d is Desglose => !!d);
+  if (con.length !== desgloses.length || !con.length) return [linea(cuentaVenta, detalle, credito ? 0 : total, credito ? total : 0, nombres)];
+  const base = TARIFAS.reduce((s, t) => s + con.reduce((x, d) => x + d[t].base, 0), 0);
+  const ivas = TARIFAS.map((t) => [t, con.reduce((x, d) => x + d[t].iva, 0)] as const).filter(([, v]) => Math.abs(v) >= 0.005);
+  const lado = (v: number) => (credito ? [0, v] : [v, 0]) as [number, number];
+  return [linea(cuentaVenta, `${detalle} · base`, ...lado(base), nombres), ...ivas.map(([t, v]) => linea('240805', `${NOMBRE_TARIFA[t]} ${credito ? 'generado' : 'devuelto'}`, ...lado(v), nombres))];
+}
+
+// Débito de una compra: el IVA descontable va aparte del inventario o del gasto.
+function lineasGasto(cuenta: string, detalle: string, monto: number, iva: number | undefined, nombres: Record<string, string>) {
+  if (!iva || iva <= 0) return [linea(cuenta, detalle, monto, 0, nombres)];
+  return [linea(cuenta, detalle, monto - iva, 0, nombres), linea('240810', `IVA descontable · ${detalle}`, iva, 0, nombres)];
+}
+
 function agrupar(items: { cuenta: string; monto: number }[]) {
   const m = new Map<string, number>();
   for (const i of items) m.set(i.cuenta, (m.get(i.cuenta) || 0) + i.monto);
@@ -79,7 +101,7 @@ export function libroDiario(d: Datos): Comprobante[] {
       }));
       salida.push({
         numero: num('VT'), fecha, tipo: 'Ventas del día', descripcion: `${ventas.length} ventas`,
-        lineas: [...cobros.map(([c, v]) => linea(c, 'Recaudo de ventas', v, 0, nombres)), linea(cuentaVenta, 'Ventas del día', 0, total, nombres)],
+        lineas: [...cobros.map(([c, v]) => linea(c, 'Recaudo de ventas', v, 0, nombres)), ...lineasIngreso(cuentaVenta, total, ventas.map((v) => v.desglose), 'Ventas del día', nombres, true)],
       });
       const conCosto = ventas.filter((v) => v.costo !== null);
       const costo = conCosto.reduce((s, v) => s + (v.costo || 0), 0);
@@ -95,7 +117,7 @@ export function libroDiario(d: Datos): Comprobante[] {
       const total = devs.reduce((s, x) => s + x.monto, 0);
       salida.push({
         numero: num('DV'), fecha, tipo: 'Devoluciones', descripcion: `${devs.length} devoluciones`,
-        lineas: [linea('417505', 'Devoluciones en ventas', total, 0, nombres), ...agrupar(devs.map((x) => ({ cuenta: cuentaMedio(x.metodo), monto: x.monto }))).map(([c, v]) => linea(c, 'Reembolso al cliente', 0, v, nombres))],
+        lineas: [...lineasIngreso('417505', total, devs.map((x) => x.desglose), 'Devoluciones en ventas', nombres, false), ...agrupar(devs.map((x) => ({ cuenta: cuentaMedio(x.metodo), monto: x.monto }))).map(([c, v]) => linea(c, 'Reembolso al cliente', 0, v, nombres))],
       });
     }
     const cobros = d.cobrosCredito.filter((x) => x.fecha === fecha);
@@ -118,7 +140,7 @@ export function libroDiario(d: Datos): Comprobante[] {
       const cuenta = o.cuenta || CUENTA_GASTO[o.categoria] || '519595';
       salida.push({
         numero: num('CP'), fecha, tipo: 'Compra o gasto por pagar', descripcion: o.descripcion,
-        lineas: [linea(cuenta, o.descripcion, o.monto, 0, nombres), linea(cuentaPorPagar(o.categoria), o.descripcion, 0, o.monto, nombres)],
+        lineas: [...lineasGasto(cuenta, o.descripcion, o.monto, o.ivaDescontable, nombres), linea(cuentaPorPagar(o.categoria), o.descripcion, 0, o.monto, nombres)],
         ...(!o.cuenta ? { verificar: 'cuenta asignada por categoría' } : {}),
       });
     }
@@ -137,7 +159,7 @@ export function libroDiario(d: Datos): Comprobante[] {
         numero: num(ingreso ? 'IN' : 'EG'), fecha, tipo: ingreso ? 'Otro ingreso' : 'Gasto o compra', descripcion: m.descripcion,
         lineas: ingreso
           ? [linea('110505', m.descripcion, m.monto, 0, nombres), linea(cuenta, m.descripcion, 0, m.monto, nombres)]
-          : [linea(cuenta, m.descripcion, m.monto, 0, nombres), linea('110505', m.descripcion, 0, m.monto, nombres)],
+          : [...lineasGasto(cuenta, m.descripcion, m.monto, m.ivaDescontable, nombres), linea('110505', m.descripcion, 0, m.monto, nombres)],
         verificar: [!m.cuenta ? 'cuenta asignada por categoría' : '', 'confirmar si se pagó en efectivo, por banco o quedó por pagar'].filter(Boolean).join('; '),
       });
     }

@@ -9,6 +9,8 @@ import {
   Optional,
 } from '@nestjs/common';
 import { PropinasService } from '../propinas/propinas.service';
+import { IvaService } from '../iva/iva.service';
+import { desglosarVenta, NOMBRE_TARIFA, TARIFAS } from '../iva/iva.reglas';
 import { leerPropina } from '../propinas/propinas.reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
@@ -29,7 +31,21 @@ export class PedidosService {
     private readonly eventos: PedidosEventosService,
     private readonly notificaciones: NotificacionesService,
     @Optional() private readonly propinas?: PropinasService,
+    @Optional() private readonly iva?: IvaService,
   ) {}
+
+  // Base e IVA por tarifa para imprimir el recibo desde el navegador. Una falla no afecta la venta.
+  private async desgloseIva(pedido: any, empresaId: number) {
+    if (!this.iva || !Array.isArray(pedido?.detalles)) return undefined;
+    try {
+      const config = await this.iva.config(empresaId);
+      if (!config.responsable) return undefined;
+      const d = desglosarVenta(pedido.detalles.map((x: any) => ({ productoId: x.productoId, subtotal: Number(x.subtotal) })), Number(pedido.total), config);
+      return TARIFAS.filter((t) => d[t].base > 0).map((t) => ({ tarifa: t, nombre: NOMBRE_TARIFA[t], base: d[t].base, iva: d[t].iva }));
+    } catch {
+      return undefined;
+    }
+  }
 
   // opciones.entregado: la venta de una mesa ya pasó por cocina; no vuelve a la pantalla de preparación.
   async crearPedido(datos: any, usuarioId: number, empresaId: number, opciones: { entregado?: boolean; confirmar?: (tx: Prisma.TransactionClient, pedido: any) => Promise<void> } = {}) {
@@ -59,6 +75,8 @@ export class PedidosService {
     await this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
     // La venta ya fue confirmada: una falla de un canal externo no debe inducir a repetirla.
     void this.notificaciones.enviarAlerta({ tipo: 'VENTA REGISTRADA', mensaje: `Venta ${pedido.numero}. Total: $${Number(pedido.total).toLocaleString('es-CO')}`, empresa: 'PowerPOS', sucursal: String(pedido.sucursalId), empresaId }).catch(() => undefined);
+    const desgloseIva = await this.desgloseIva(pedido, empresaId);
+    if (desgloseIva) pedido.desgloseIva = desgloseIva;
     return pedido;
   }
 

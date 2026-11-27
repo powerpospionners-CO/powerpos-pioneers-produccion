@@ -581,6 +581,9 @@ function RestaurantePOS() {
             <span>TOTAL</span>
             <span>$${Number(pedido.total).toLocaleString()}</span>
           </div>
+          ${Array.isArray(pedido.desgloseIva) ? pedido.desgloseIva.map((t: any) => `
+          <div class="total-fila"><span>Base ${t.nombre}</span><span>$${Number(t.base).toLocaleString()}</span></div>
+          ${Number(t.iva) > 0 ? `<div class="total-fila"><span>${t.nombre}</span><span>$${Number(t.iva).toLocaleString()}</span></div>` : ''}`).join('') : ''}
           ${Number(pedido.propina?.monto) > 0 ? `
           <div class="total-fila">
             <span>Propina voluntaria (${pedido.propina.metodoPago})</span>
