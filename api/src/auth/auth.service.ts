@@ -13,6 +13,7 @@ import { sumarMeses, suscripcionSuspendida } from '../suscripciones/fechas';
 import { SedesProvisionService } from '../prisma/sedes-provision.service';
 import { SeguridadCuentaService } from './seguridad-cuenta.service';
 import { firmarDesafio, leerDesafio } from './dos-pasos';
+import { BloqueoCuentaService } from './bloqueo-cuenta.service';
 
 export type MetaAcceso = { ip: string; agente: string };
 
@@ -23,9 +24,23 @@ export class AuthService {
     private jwtService: JwtService,
     @Optional() private readonly sedes?: SedesProvisionService,
     @Optional() private readonly seguridad?: SeguridadCuentaService,
+    @Optional() private readonly bloqueo?: BloqueoCuentaService,
   ) {}
 
+  // Tras varios intentos fallidos con el mismo correo, la cuenta se bloquea un tiempo (además del límite por IP).
   async login(email: string, password: string, sucursalId?: number, meta: MetaAcceso = { ip: '', agente: '' }) {
+    if (this.bloqueo && typeof email === 'string') await this.bloqueo.verificar(email);
+    try {
+      const resultado = await this.iniciarSesion(email, password, sucursalId, meta);
+      if (this.bloqueo && typeof email === 'string') await this.bloqueo.limpiar(email).catch(() => undefined);
+      return resultado;
+    } catch (e) {
+      if (this.bloqueo && typeof email === 'string' && e instanceof UnauthorizedException) await this.bloqueo.registrarFallo(email).catch(() => undefined);
+      throw e;
+    }
+  }
+
+  private async iniciarSesion(email: string, password: string, sucursalId?: number, meta: MetaAcceso = { ip: '', agente: '' }) {
     if (typeof email !== 'string' || typeof password !== 'string' || email.length > 250 || password.length > 500) throw new UnauthorizedException('Credenciales inválidas');
     if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId < 1)) throw new UnauthorizedException('Sede inválida');
     if (this.prisma.control) await this.prisma.estadoAislamiento();
