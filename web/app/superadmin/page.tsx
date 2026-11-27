@@ -10,6 +10,7 @@ import { irALoginGenerico } from '@/lib/navegacion';
 import { useNotificar } from '@/components/Notificaciones';
 import PagosSuscripcion from '@/components/PagosSuscripcion';
 import SoporteEmpresa from '@/components/soporte/SoporteEmpresa';
+import ContactoSoporteConfig from '@/components/soporte/ContactoSoporteConfig';
 
 type AdministradorEmpresa = { id: number; nombre: string; email: string; activo: boolean; empresaId?: number; sucursalId?: number; pendienteActivacion?: boolean };
 type SedeAdministrador = { id: number; nombre: string; activo: boolean; pendienteActivacion: boolean };
@@ -486,6 +487,8 @@ export default function SuperadminPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5"><CheckCircle2 size={19} className="text-emerald-400" /><p className="text-slate-400 text-xs mt-4">Empresas activas</p><p className="text-2xl font-black mt-1">{resumen?.empresasActivas || 0}</p></div>
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5"><Users size={19} className="text-blue-400" /><p className="text-slate-400 text-xs mt-4">Usuarios activos</p><p className="text-2xl font-black mt-1">{resumen?.usuariosActivos || 0}</p></div>
         </div>
+
+        <ContactoSoporteConfig />
 
         <form onSubmit={guardarPreciosPlanes} className="bg-slate-900 border border-orange-500/30 rounded-xl p-5 space-y-4">
           <div><p className="text-xs font-bold uppercase tracking-wider text-orange-400">Configuracion global SaaS</p><h3 className="mt-1 text-xl font-bold">Planes: precios mensuales y anuales</h3><p className="text-slate-400 text-sm mt-1">Estos precios se muestran en la pantalla de suscripcion de cada empresa. El plan anual cubre 12 meses.</p></div>
