@@ -18,6 +18,7 @@ import {
   correoCumpleanos,
   correoCodigoCuenta,
   correoNuevoAcceso,
+  correoCampana,
   correoSoporte,
   correoDosPasosRestablecida,
   correoAvisoCliente,
@@ -155,6 +156,22 @@ export class NotificacionesService {
       this.logger.warn(`No se pudo enviar el aviso de soporte: ${e}`);
       return false;
     }
+  }
+
+  // Un correo de campaña por destinatario; devuelve si salió, sin registrar el correo (dato personal).
+  async enviarCampana(correo: string, datos: Parameters<typeof correoCampana>[0]) {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return false;
+    try {
+      await this.enviarEmail(datos.asunto, correoCampana(datos), [correo]);
+      return true;
+    } catch (e) {
+      this.logger.warn(`No se pudo enviar un correo de campaña: ${e}`);
+      return false;
+    }
+  }
+
+  correoDisponible() {
+    return !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
   }
 
   async enviarCodigoCuenta(correo: string, empresa: string, codigo: string) {

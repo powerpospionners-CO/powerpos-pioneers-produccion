@@ -46,6 +46,9 @@ function plantilla(datos: {
   mensaje: string;
   contexto: Array<[string, string]>;
   accion?: boolean;
+  // Botón con enlace propio (p. ej. a la tienda) y enlace para darse de baja de un boletín.
+  enlace?: { url: string; texto: string };
+  baja?: string;
   pie?: string;
 }): CorreoPowerpos {
   const estilo = estilos[datos.estilo];
@@ -63,14 +66,17 @@ function plantilla(datos: {
         `<div style="margin:0 0 9px;overflow-wrap:anywhere;word-break:break-word;">${e(linea) || '&nbsp;'}</div>`,
     )
     .join('');
-  const accion = datos.accion
+  const urlSegura = (u: string) => (/^https:\/\//.test(u) ? e(u) : '#');
+  const accion = datos.enlace
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 0;"><tr><td bgcolor="#ed6b19" style="border-radius:10px;text-align:center;"><a href="${urlSegura(datos.enlace.url)}" style="display:inline-block;padding:15px 24px;border:1px solid #ed6b19;border-radius:10px;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;">${e(datos.enlace.texto)} &nbsp; &#8594;</a></td></tr></table>`
+    : datos.accion
     ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 0;"><tr><td bgcolor="#ed6b19" style="border-radius:10px;text-align:center;"><a href="https://app.powerpospioneers.com/" style="display:inline-block;padding:15px 24px;border:1px solid #ed6b19;border-radius:10px;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;">Revisar en PowerPOS &nbsp; &#8594;</a></td></tr></table><p style="margin:12px 0 0;color:#7a8793;font-size:12px;line-height:18px;">Ingresa con tu cuenta para consultar los detalles de tu empresa.</p>`
     : '';
   const pie =
     datos.pie ||
     'Este es un aviso automático. Para ajustar tus alertas, entra a Configuración → Usuarios en PowerPOS.';
   return {
-    text: `PowerPOS\n${datos.titulo}\n\n${datos.introduccion}\n\n${datos.mensaje}\n\n${datos.contexto.map(([n, v]) => `${n}: ${v}`).join('\n')}${datos.accion ? '\n\nRevisar en PowerPOS: https://app.powerpospioneers.com/' : ''}\n\n${pie}`,
+    text: `PowerPOS\n${datos.titulo}\n\n${datos.introduccion}\n\n${datos.mensaje}\n\n${datos.contexto.map(([n, v]) => `${n}: ${v}`).join('\n')}${datos.enlace ? `\n\n${datos.enlace.texto}: ${datos.enlace.url}` : datos.accion ? '\n\nRevisar en PowerPOS: https://app.powerpospioneers.com/' : ''}\n\n${pie}${datos.baja ? `\nDarme de baja: ${datos.baja}` : ''}`,
     html: `<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>${e(datos.titulo)} · PowerPOS</title><style>@media only screen and (max-width:600px){.exterior{padding:16px 8px!important}.contenido{padding:26px 22px!important}.marca{padding:26px 22px!important}.titulo{font-size:27px!important;line-height:34px!important}.tarjeta{border-radius:16px!important}}</style></head>
 <body style="margin:0;padding:0;background:#edf2f5;color:#172b38;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;">
 <div style="display:none;font-size:1px;line-height:1px;color:#edf2f5;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${e(datos.titulo)}. ${e(datos.introduccion)}</div>
@@ -88,7 +94,7 @@ function plantilla(datos: {
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:22px 0 0;border-collapse:collapse;">${filas}</table>
 ${accion}
 </td></tr>
-<tr><td class="contenido" bgcolor="#f6f8f9" style="padding:22px 36px;border-top:1px solid #e8edf0;"><p style="margin:0;color:#6e7e89;font-size:12px;line-height:19px;">${e(pie)}</p></td></tr>
+<tr><td class="contenido" bgcolor="#f6f8f9" style="padding:22px 36px;border-top:1px solid #e8edf0;"><p style="margin:0;color:#6e7e89;font-size:12px;line-height:19px;">${e(pie)}</p>${datos.baja ? `<p style="margin:8px 0 0;font-size:12px;line-height:19px;"><a href="${urlSegura(datos.baja)}" style="color:#526973;">Darme de baja de este boletín</a></p>` : ''}</td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
 <p style="margin:20px 0 0;font-size:11px;line-height:18px;color:#7f8e98;"><strong style="color:#526973;">PowerPOS Pioneers</strong><br>Información clara para cuidar tu negocio.</p>
@@ -205,6 +211,19 @@ export function correoCodigoCuenta(empresa: string, codigo: string): CorreoPower
     mensaje: `Tu código es ${codigo}. Vence en 15 minutos.\nSi no lo solicitaste, ignora este mensaje: tu contraseña no cambiará.`,
     contexto: [['Tienda', empresa], ['Código', codigo]],
     pie: `Nunca compartas este código. ${empresa} no te lo pedirá por teléfono ni por chat.`,
+  });
+}
+
+export function correoCampana(datos: { empresa: string; asunto: string; mensaje: string; cupon?: { codigo: string; descripcion: string } | null; enlaceTienda: string; enlaceBaja: string }): CorreoPowerpos {
+  return plantilla({
+    estilo: 'positivo',
+    titulo: datos.asunto,
+    introduccion: `Te escribimos de ${datos.empresa}.`,
+    mensaje: datos.mensaje,
+    contexto: datos.cupon ? [['Cupón', datos.cupon.codigo], ...(datos.cupon.descripcion ? [['Beneficio', datos.cupon.descripcion] as [string, string]] : [])] : [['Tienda', datos.empresa]],
+    enlace: { url: datos.enlaceTienda, texto: 'Ir a la tienda' },
+    baja: datos.enlaceBaja,
+    pie: `Recibes este correo porque te suscribiste a las novedades de ${datos.empresa}.`,
   });
 }
 

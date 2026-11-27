@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { solicitarTienda } from "../../lib/tiendaPublica";
 import CampoTrampa from "./CampoTrampa";
 
@@ -19,6 +19,14 @@ export default function BoletinTienda({
     [mensaje, setMensaje] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  // Enlace "Darme de baja" de un correo de campaña: ?baja=correo abre el formulario en modo baja con el correo escrito.
+  useEffect(() => {
+    const correo = new URLSearchParams(window.location.search).get("baja");
+    if (correo && correo.includes("@") && correo.length <= 150) {
+      setBaja(true);
+      setContacto(correo);
+    }
+  }, []);
   async function enviar(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
@@ -42,7 +50,7 @@ export default function BoletinTienda({
     }
   }
   return (
-    <form className="store-newsletter" onSubmit={enviar}>
+    <form id="boletin" className="store-newsletter" onSubmit={enviar}>
       <strong>{baja ? "Dejar de recibir novedades" : "Recibe nuestras novedades"}</strong>
       <label>
         <span className="sr-only">Correo o WhatsApp</span>
