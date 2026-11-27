@@ -20,6 +20,7 @@ test('un administrador nuevo inicia sesión en el portal actual aunque su tienda
       if (nombre === '@/lib/api') return { default: { post: async () => ({ data: { access_token: 'token', usuario } }) } };
       if (nombre === '@/components/ThemeProvider') return { useTema: () => ({ tema: 'claro' }) };
       if (nombre === '@/components/TouchKeyboard') return { default: () => null };
+      if (nombre === '@/lib/mesero') return { esPerfilMesero: u => u?.rol === 'CAJERO' && u?.permisosUsuario?.perfil === 'MESERO' };
       return require(nombre);
     },
   });

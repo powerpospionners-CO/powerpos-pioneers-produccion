@@ -14,6 +14,7 @@ import { NotificacionesService } from '../notificaciones/notificaciones.service'
 import { ImpresionService } from '../impresion/impresion.service';
 import { bloquearCajaSucursal } from './caja-lock';
 import { PropinasService, ResumenPropinas } from '../propinas/propinas.service';
+import { AjustesService } from '../ajustes/ajustes.service';
 import { desgloseCobros } from '../pedidos/operaciones-venta.reglas';
 import { impresionEnEscritorio } from '../impresion/transporte-escritorio';
 import { disponibleRecaudo, idsGastosRecaudo, SNAPSHOT_RECAUDO } from './gastos-recaudo';
@@ -26,7 +27,20 @@ export class CajaService {
     private notificaciones: NotificacionesService,
     private impresion: ImpresionService,
     @Optional() private readonly propinas?: PropinasService,
+    @Optional() private readonly ajustes?: AjustesService,
   ) {}
+
+  // Arqueo ciego: el cajero cuenta sin ver lo esperado. No aplica con recaudo semanal, que necesita las ventas en efectivo.
+  async arqueoCiego(empresaId: number, sucursalId: number) {
+    if (!this.ajustes) return { activo: false };
+    return this.ajustes.leer(empresaId, sucursalId, 'arqueo-ciego', { activo: false });
+  }
+
+  async configurarArqueoCiego(empresaId: number, sucursalId: number, activo: unknown, usuarioId: number) {
+    if (typeof activo !== 'boolean') throw new BadRequestException('Indica si se usa el arqueo ciego');
+    if (!this.ajustes) throw new BadRequestException('No disponible');
+    return this.ajustes.guardar(empresaId, sucursalId, 'arqueo-ciego', { activo }, usuarioId);
+  }
 
   private sinPropinas(): ResumenPropinas {
     return { total: 0, efectivo: 0, cantidad: 0, porMetodo: [], reparto: null };
@@ -482,7 +496,7 @@ export class CajaService {
     };
   }
 
-  async obtenerCajaAbierta(sucursalId: number, empresaId: number) {
+  async obtenerCajaAbierta(sucursalId: number, empresaId: number, rol?: string) {
     if (!sucursalId || !empresaId)
       throw new BadRequestException('Sucursal no válida');
     const caja = await this.prisma.caja.findFirst({
@@ -517,6 +531,11 @@ export class CajaService {
     const propinas = await this.propinasCaja(empresaId, caja.id, pedidosValidos);
     const totalEsperado = Number(caja.montoInicial) + totalEfectivo + propinas.efectivo;
 
+    const recaudoActivo = caja.sucursal.empresa.recaudoEfectivoHabilitado && caja.sucursal.baseEfectivoCaja !== null;
+    if (rol === 'CAJERO' && !recaudoActivo && (await this.arqueoCiego(empresaId, sucursalId)).activo) {
+      const { pedidos: _pedidos, ...sinVentas } = caja;
+      return { ...sinVentas, arqueoCiego: true, recaudoEfectivoHabilitado: false, baseEfectivoCaja: null, propinas: { oculto: true, hayPropinas: propinas.total > 0, sugeridos: [...new Set([caja.usuarioId, ...pedidosValidos.map((p) => p.usuarioId)])] } };
+    }
     return {
       ...caja,
       totalVentas,

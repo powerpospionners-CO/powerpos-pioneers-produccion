@@ -31,7 +31,8 @@ export class PedidosService {
     @Optional() private readonly propinas?: PropinasService,
   ) {}
 
-  async crearPedido(datos: any, usuarioId: number, empresaId: number) {
+  // opciones.entregado: la venta de una mesa ya pasó por cocina; no vuelve a la pantalla de preparación.
+  async crearPedido(datos: any, usuarioId: number, empresaId: number, opciones: { entregado?: boolean; confirmar?: (tx: Prisma.TransactionClient, pedido: any) => Promise<void> } = {}) {
     // La propina viaja con la venta para que un reintento sin conexión no la pierda ni la duplique.
     const propina = leerPropina(datos?.propina, Number.MAX_SAFE_INTEGER);
     if (propina) {
@@ -42,7 +43,7 @@ export class PedidosService {
     const pedido: any = await this.prisma.$transaction(async tx => {
       const clave = datos?.claveIdempotencia ? String(datos.claveIdempotencia).slice(0, 100) : null;
       const previo = clave ? await tx.pedido.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } }) : null;
-      const creado: any = await this.crearEnTransaccion(datos, usuarioId, empresaId, tx);
+      const creado: any = await this.crearEnTransaccion(datos, usuarioId, empresaId, tx, 0, undefined, opciones);
       if (previo) {
         // El reintento devuelve el importe original; nunca agrega o cambia una propina posterior.
         const original = this.propinas ? await this.propinas.dePedido(empresaId, creado.id) : null;
@@ -51,6 +52,8 @@ export class PedidosService {
         await this.propinas!.registrar(tx, creado, propina, empresaId, usuarioId);
         creado.propina = propina;
       }
+      // La cuenta de mesa se confirma en la misma transacción que la venta y su inventario.
+      if (opciones.confirmar) await opciones.confirmar(tx, creado);
       return creado;
     }, { timeout: 15000 });
     await this.eventos.emitir(empresaId, { tipo: 'CREADO', pedidoId: pedido.id, estado: pedido.estado });
@@ -59,7 +62,7 @@ export class PedidosService {
     return pedido;
   }
 
-  async crearEnTransaccion(datos: any, usuarioId: number, empresaId: number, db: Prisma.TransactionClient, costoDomicilio = 0, contextoDistribuidor?: { precios: Record<string, number>; factores: Record<string, number> }) {
+  async crearEnTransaccion(datos: any, usuarioId: number, empresaId: number, db: Prisma.TransactionClient, costoDomicilio = 0, contextoDistribuidor?: { precios: Record<string, number>; factores: Record<string, number> }, opciones: { entregado?: boolean } = {}) {
     const { items, clienteId, observacion, sucursalId, cajaId } =
       datos;
 
@@ -387,7 +390,7 @@ export class PedidosService {
         descuento,
         total,
         observacion: observacion || null,
-        estado: esRestaurante ? 'PENDIENTE' : 'ENTREGADO',
+        estado: esRestaurante && !opciones.entregado ? 'PENDIENTE' : 'ENTREGADO',
         claveIdempotencia,
         consumoInventario,
         costoVentaHistorico: costoHistorico,

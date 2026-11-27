@@ -4,6 +4,7 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard } from 'lucide-react';
+import RondasMesas from '@/components/RondasMesas';
 
 interface Pedido {
   cliente?: { nombre: string } | null;
@@ -131,6 +132,8 @@ export default function CocinaPage() {
           <span className="text-gray-400 text-sm">{pedidos.length} pedidos activos</span>
         </div>
       </header>
+
+      <RondasMesas />
 
       {/* Grid de pedidos */}
       <div className="p-6">

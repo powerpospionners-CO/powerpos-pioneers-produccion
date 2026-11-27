@@ -6,14 +6,17 @@ import { useAuthStore } from '@/store/authStore';
 import { ShoppingCart, LayoutDashboard, Package, Boxes, Users, DollarSign, BarChart3, Settings, LogOut, UtensilsCrossed, Moon, Sun, BookOpen, Wallet, Truck, CalendarDays, ShieldCheck } from 'lucide-react';
 import { useTema } from '@/components/ThemeProvider';
 import { irALoginGenerico } from '@/lib/navegacion';
+import { esPerfilMesero } from '@/lib/mesero';
 
 const ITEMS = [
   { href: '/pos', label: 'POS', icon: ShoppingCart },
+  { href: '/mesas', label: 'Mesas', icon: UtensilsCrossed },
   { href: '/domicilios', label: 'Domicilios', icon: ShoppingCart },
   { href: '/reservas', label: 'Reservas', icon: CalendarDays },
   { href: '/mi-tienda', label: 'Mi tienda', icon: Settings },
   { href: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { href: '/fidelizacion', label: 'Puntos', icon: Users },
+  { href: '/dueno', label: 'Mi negocio', icon: BarChart3 },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/caja', label: 'Cajas', icon: Wallet },
   { href: '/caja/recaudo', label: 'Recaudo semanal', icon: Wallet },
@@ -22,6 +25,7 @@ const ITEMS = [
   { href: '/gastos', label: 'Registrar gasto', icon: DollarSign },
   { href: '/auditoria', label: 'Auditoría', icon: BookOpen },
   { href: '/inventario', label: 'Inventario', icon: Boxes },
+  { href: '/costos', label: 'Costos', icon: BarChart3 },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/personal', label: 'Personal y pagos', icon: Users },
   { href: '/financiero', label: 'Financiero', icon: DollarSign },
@@ -48,8 +52,10 @@ const MODULO_POR_RUTA: Record<string, string> = {
   '/caja': 'pos',
   '/caja/recaudo': 'pos',
   '/dashboard': 'dashboard',
+  '/dueno': 'dashboard',
   '/productos': 'productos',
   '/inventario': 'inventario',
+  '/costos': 'inventario',
   '/clientes': 'clientes',
   '/personal': 'financiero',
   '/financiero': 'financiero',
@@ -97,7 +103,7 @@ export default function Navbar() {
     }).catch(() => undefined);
   }, [usuario?.empresaId, usuario?.tipoNegocio, setTipoNegocio]);
   useEffect(() => {
-    if (!['CAJERO','ADMIN_EMPRESA','GERENTE'].includes(usuario?.rol || '')) return;
+    if (!['CAJERO','ADMIN_EMPRESA','GERENTE'].includes(usuario?.rol || '') || esPerfilMesero(usuario)) return;
     let activo = true;
     const cargar = () => api.get('/tienda-admin/resumen').then(r=>{if(activo){setPendientesWeb(r.data.pendientes);setReservasWeb({habilitadas:!!r.data.reservasHabilitadas,pendientes:Number(r.data.reservas)||0});}}).catch(()=>{});
     void cargar(); const timer = setInterval(cargar,5000);
@@ -105,10 +111,16 @@ export default function Navbar() {
   },[usuario?.rol,usuario?.empresaId]);
   const esAdminOGerente = usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE';
   const esRestaurante = !usuario?.tipoNegocio || usuario.tipoNegocio === 'RESTAURANTE';
+  // Perfil mesero: un cajero que solo toma pedidos en las mesas.
+  const esMesero = esPerfilMesero(usuario);
   const itemsVisibles = usuario?.rol === 'SUPERADMIN'
     ? [{ href: '/superadmin', label: 'Panel superadmin', icon: LayoutDashboard }]
     : ITEMS.filter((item) => {
+    if (esMesero) return item.href === '/mesas';
+    if (item.href === '/mesas') return esRestaurante && ['ADMIN_EMPRESA','GERENTE','CAJERO'].includes(usuario?.rol || '');
     if (item.href === '/auditoria') return usuario?.rol === 'ADMIN_EMPRESA';
+    if (item.href === '/costos' && !esAdminOGerente) return false;
+    if (item.href === '/dueno' && !esAdminOGerente) return false;
     if (item.href === '/codigos-barras') return usuario?.rol === 'CAJERO' && accesoBarras;
     if (item.href === '/gastos') return usuario?.rol === 'CAJERO' && accesoGastos;
     const individual = usuario?.permisosUsuario?.[MODULO_POR_RUTA[item.href] || item.href.slice(1)];

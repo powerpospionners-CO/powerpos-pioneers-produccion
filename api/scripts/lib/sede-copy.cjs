@@ -6,7 +6,7 @@ const q = name => { if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw Error('Ide
 const campos = model => model.fields.filter(f=>f.kind!=='object');
 const relaciones = model => model.fields.filter(f=>f.kind==='object'&&f.relationFromFields?.length);
 async function leerModelo(db,model,where={}) {
-  const opcional={PersonalRegistro:'personal_registros',BoldRegistro:'bold_registros',TiendaRegistro:'tienda_registros',SeguridadRegistro:'seguridad_registros',PropinaRegistro:'propina_registros'}[model.name];
+  const opcional={PersonalRegistro:'personal_registros',BoldRegistro:'bold_registros',TiendaRegistro:'tienda_registros',SeguridadRegistro:'seguridad_registros',PropinaRegistro:'propina_registros',MesaRegistro:'mesa_registros',AjusteRegistro:'ajustes_registros'}[model.name];
   if(opcional){
     const existe=await db.$queryRawUnsafe("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1",opcional);
     if(!existe.length)return [];

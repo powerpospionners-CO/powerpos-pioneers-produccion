@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import AlertasAdministradores from '@/components/AlertasAdministradores';
 import AccesoBarrasUsuario from '@/components/AccesoBarrasUsuario';
 import PropinasConfig from '@/components/PropinasConfig';
+import ArqueoCiegoConfig from '@/components/ArqueoCiegoConfig';
 
 const MODULOS = [
   { key: 'pos', label: 'POS' },
@@ -457,6 +458,7 @@ export default function ConfiguracionPage() {
               </div>
 
               {(usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE') && (empresa?.tipoNegocio || 'RESTAURANTE') === 'RESTAURANTE' && <PropinasConfig />}
+              {(usuario?.rol === 'ADMIN_EMPRESA' || usuario?.rol === 'GERENTE') && <ArqueoCiegoConfig />}
 
               {usuario?.rol === 'ADMIN_EMPRESA' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mt-4">
@@ -671,6 +673,7 @@ export default function ConfiguracionPage() {
                       <div className="text-white text-sm font-medium flex items-center gap-2">
                         {u.nombre}
                         {!u.activo && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-400">Inactivo</span>}
+                        {u.rol === 'CAJERO' && u.permisos?.perfil === 'MESERO' && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-300">Mesero</span>}
                       </div>
                       <div className="text-gray-500 text-xs mt-0.5">
                         {u.email} · {u.rol} {u.sucursal?.nombre ? `· ${u.sucursal.nombre}` : ''}
@@ -820,6 +823,13 @@ export default function ConfiguracionPage() {
                 </button>
               </div>
               <p className="text-gray-500 text-sm mb-4">{modalPermisos.email} · {modalPermisos.rol}</p>
+              {modalPermisos.rol === 'CAJERO' && (empresa?.tipoNegocio || 'RESTAURANTE') === 'RESTAURANTE' && (
+                <label className="mb-4 flex gap-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-sm text-gray-200">
+                  <input type="checkbox" className="mt-1" checked={permisosTemp.perfil === 'MESERO'}
+                    onChange={(e) => setPermisosTemp((prev: any) => { const { perfil: _perfil, ...resto } = prev; return e.target.checked ? { ...resto, perfil: 'MESERO', pos: { ver: true, editar: true } } : resto; })} />
+                  <span>Perfil mesero<span className="block text-xs text-gray-400">Solo toma pedidos en las mesas y los envía a cocina. No abre ni cierra caja y no cobra. Aplica cuando vuelva a iniciar sesión.</span></span>
+                </label>
+              )}
 
               <div className="space-y-2">
                 <div className="grid grid-cols-[1fr,auto,auto] gap-2 text-xs text-gray-500 font-medium px-2">
