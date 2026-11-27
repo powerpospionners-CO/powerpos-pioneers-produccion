@@ -64,6 +64,9 @@ export class SeguridadCuentaController {
   @Get('equipo')
   equipo(@Request() req: any) { return this.seguridad.equipo(req.user); }
 
+  @Post('superadmin/restablecer-2fa')
+  restablecerPorSuperadmin(@Request() req: any, @Body() body: any) { return this.seguridad.restablecerPorSuperadmin(req.user, body?.empresaId, body?.email, body?.password, body?.codigo, body?.motivo); }
+
   @Post('equipo/:id/restablecer-2fa')
   restablecer(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.seguridad.restablecer(req.user, id, body?.password, body?.codigo); }
 }
