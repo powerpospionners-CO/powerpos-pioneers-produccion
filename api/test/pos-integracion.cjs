@@ -15,6 +15,7 @@ const { EventosService } = require('../dist/src/eventos/eventos.service');
 const { NotificacionesService } = require('../dist/src/notificaciones/notificaciones.service');
 const { ImpresionService } = require('../dist/src/impresion/impresion.service');
 const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eventos.service');
+const { activarDosPasos } = require('./dos-pasos-prueba.cjs');
 
 (async () => {
   let app, otra;
@@ -39,6 +40,8 @@ const { ImpresionEventosService } = require('../dist/src/impresion/impresion-eve
     const cliente = await db.cliente.create({ data: { empresaId: empresa.id, nombre: 'Cliente prueba', documento: sufijo } });
     const login = await http.post('/auth/login').send({ email: usuario.email, password }).expect(201);
     const token = 'Bearer ' + login.body.access_token;
+    // Los administradores de empresa deben tener 2FA para operar.
+    await activarDosPasos(http, token);
     // El acceso de códigos nunca concede edición general del catálogo.
     const paula = await db.usuario.create({ data: { empresaId: empresa.id, sucursalId: sede.id, nombre: 'Cajera códigos prueba', email: `barras-${sufijo}@example.com`, password: await bcrypt.hash(password, 4), rol: 'CAJERO', permisos: { productos: false, pos: true } } });
     const ingresoPaula = (await http.post('/auth/login').send({ email: paula.email, password }).expect(201)).body;

@@ -21,6 +21,7 @@ Object.assign(process.env, {
   ESC_POS_ENABLED: 'false',
   PERSONAL_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
 });
+const { activarDosPasos } = require('./dos-pasos-prueba.cjs');
 require('reflect-metadata');
 const { Test } = require('@nestjs/testing'),
   request = require('supertest'),
@@ -81,7 +82,10 @@ const { AppModule } = require('../dist/src/app.module'),
         .post('/auth/login')
         .send({ email: u.email, password })
         .expect(201);
-      return { e, s, u, token: 'Bearer ' + login.body.access_token };
+      const token = 'Bearer ' + login.body.access_token;
+      // Los administradores de empresa deben tener 2FA para operar.
+      await activarDosPasos(http, token);
+      return { e, s, u, token };
     }
     const a = await empresa('Personal pruebas ' + suffix),
       b = await empresa('Otra empresa ' + suffix);

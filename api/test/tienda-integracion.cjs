@@ -21,6 +21,7 @@ const { PrismaModule } = require('../dist/src/prisma/prisma.module');
 const { PrismaService } = require('../dist/src/prisma/prisma.service');
 const { TiendaModule } = require('../dist/src/tienda/tienda.module');
 const { AuthModule } = require('../dist/src/auth/auth.module');
+const { activarDosPasos } = require('./dos-pasos-prueba.cjs');
 const { EmpresaModule } = require('../dist/src/empresa/empresa.module');
 const { ClientesModule } = require('../dist/src/clientes/clientes.module');
 const { PedidosModule } = require('../dist/src/pedidos/pedidos.module');
@@ -95,6 +96,9 @@ const ok = (name) => {
         sucursalId: u.sucursalId,
         rol: u.rol,
       });
+    // Los administradores de empresa deben tener 2FA para operar.
+    await activarDosPasos(http, token(admin));
+    await activarDosPasos(http, token(adminB));
     const cat = await db.categoria.create({
         data: { empresaId: a.id, nombre: 'Comida' },
       }),
