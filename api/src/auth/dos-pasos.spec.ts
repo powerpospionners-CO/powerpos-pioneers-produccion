@@ -174,7 +174,14 @@ describe('2FA exigida por la empresa y restablecimiento', () => {
     expect((await s.resumen(admin)).politicaEmpresa).toBe(true);
     await activar(gerente);
     expect(await s.dosPasosPendiente(db, gerente)).toBe(false);
-    await expect(s.desactivar(admin, 'Clave segura 1', '123456')).rejects.toThrow('exige');
+    await expect(s.desactivar(admin, 'Clave segura 1', '123456')).rejects.toThrow('obligatoria para los administradores');
+  });
+
+  it('el administrador siempre necesita 2FA, aunque la empresa no la exija; el gerente no', async () => {
+    const { db, s } = await preparar();
+    expect(await s.dosPasosPendiente(db, admin)).toBe(true);
+    expect(await s.dosPasosPendiente(db, gerente)).toBe(false);
+    expect((await s.resumen(admin)).dosPasosObligatorio).toBe(true);
   });
 
   it('el administrador restablece la 2FA de otro usuario de su empresa y le cierra las sesiones', async () => {
@@ -230,7 +237,7 @@ describe('Protección obligatoria del superadmin', () => {
     const { recuperacion } = await s.activar(u, codigoTotp(secreto, Math.floor(Date.now() / 30000)));
     expect(await s.dosPasosPendiente(db, u)).toBe(false);
     expect((await s.resumen(u)).dosPasosObligatorio).toBe(true);
-    await expect(s.desactivar(u, 'clave', recuperacion[0])).rejects.toThrow('obligatoria para el superadmin');
+    await expect(s.desactivar(u, 'clave', recuperacion[0])).rejects.toThrow('obligatoria');
     expect(await s.verificar(db, u.id, recuperacion[0])).toBe(true);
     expect(await s.verificar(db, u.id, recuperacion[0])).toBe(false);
   });

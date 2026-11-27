@@ -31,6 +31,8 @@ type DosPasos = { secreto: any; ultimoPaso: number; recuperacion: string[]; fall
 const OCHO_HORAS = 8 * 3600000;
 // Roles a los que la empresa puede exigir la verificación en dos pasos.
 export const ROLES_DOS_PASOS = ['ADMIN_EMPRESA', 'GERENTE'];
+// Siempre obligatoria, sin depender de la política de la empresa: quienes administran todo el negocio.
+export const ROLES_DOS_PASOS_SIEMPRE = ['SUPERADMIN', 'ADMIN_EMPRESA'];
 const politicaEmpresa = (empresaId: number) => ({ usuarioId: 0, tipo: 'POLITICA', clave: `exigir2fa:${empresaId}` });
 
 @Injectable()
@@ -123,8 +125,8 @@ export class SeguridadCuentaService {
 
   // true si la empresa exige 2FA a este rol y el usuario todavía no la activó.
   async dosPasosPendiente(db: any, usuario: { id: number; rol: string; empresaId?: number | null }) {
-    // El superadmin protege todas las empresas: no depende de una política empresarial.
-    if (usuario.rol === 'SUPERADMIN') return !(await this.dosPasosActivo(db, usuario.id));
+    // El superadmin y los administradores de empresa siempre la necesitan; el gerente, según la política de su empresa.
+    if (ROLES_DOS_PASOS_SIEMPRE.includes(usuario.rol)) return !(await this.dosPasosActivo(db, usuario.id));
     if (!ROLES_DOS_PASOS.includes(usuario.rol)) return false;
     let porBase = this.pendientes.get(db);
     if (!porBase) this.pendientes.set(db, (porBase = new Map()));
@@ -301,7 +303,7 @@ export class SeguridadCuentaService {
       dosPasos: await this.dosPasosActivo(db, u.id),
       correoPersonal: await this.correoPersonal(db, u),
       dosPasosRecomendado: ['SUPERADMIN', 'ADMIN_EMPRESA', 'GERENTE'].includes(u.rol),
-      dosPasosObligatorio: u.rol === 'SUPERADMIN' || (politica && ROLES_DOS_PASOS.includes(u.rol)),
+      dosPasosObligatorio: ROLES_DOS_PASOS_SIEMPRE.includes(u.rol) || (politica && ROLES_DOS_PASOS.includes(u.rol)),
       ...(u.rol === 'ADMIN_EMPRESA' ? { politicaEmpresa: politica } : {}),
       sesiones: sesiones.map((s) => ({
         id: s.clave,
@@ -383,8 +385,8 @@ export class SeguridadCuentaService {
   }
 
   async desactivar(u: Actor, password: unknown, codigo: unknown) {
-    if (u.rol === 'SUPERADMIN')
-      throw new ForbiddenException('La verificación en dos pasos es obligatoria para el superadmin; no se puede desactivar');
+    if (ROLES_DOS_PASOS_SIEMPRE.includes(u.rol))
+      throw new ForbiddenException('La verificación en dos pasos es obligatoria para los administradores; no se puede desactivar');
     const db = await this.base(u);
     if (ROLES_DOS_PASOS.includes(u.rol) && (await this.politicaActiva(db, u.empresaId)))
       throw new ForbiddenException('Tu empresa exige la verificación en dos pasos; no se puede desactivar');

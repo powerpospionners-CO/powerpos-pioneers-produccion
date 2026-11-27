@@ -40,3 +40,11 @@ Sirve para revisar el panel de una empresa sin conocer la contraseña ni el 2FA 
 - **Validez.** La ficha deja de valer si el superadministrador se desactiva o la empresa queda inactiva. No sirve si la base de la sede no está activa.
 - **Acceso.** Requiere una sesión de superadministrador, que ya exige verificación en dos pasos.
 - **Aviso visible.** Una franja azul muestra que se está en modo soporte, la empresa, la sede, el tiempo restante y el botón para salir.
+
+## 2FA obligatoria para administradores
+
+La verificación en dos pasos es obligatoria siempre para el superadministrador y para **todo administrador de empresa**, sin importar la política de la empresa:
+- Si no la tienen activa, al iniciar sesión se les lleva a Seguridad para activarla. Mientras tanto, el API solo les permite usar `/auth/seguridad/*`.
+- No la pueden desactivar.
+
+Para los gerentes sigue dependiendo de la opción "Exigir la verificación en dos pasos también a los gerentes" en Seguridad del equipo. Los demás roles no tienen la obligación.
