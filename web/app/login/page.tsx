@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { esPerfilMesero } from '@/lib/mesero';
+import { portalSuperadmin } from '@/lib/portal';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
@@ -36,6 +37,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // El superadministrador trabaja en el portal general, no en el dominio de una empresa.
+  const [irAlPortal, setIrAlPortal] = useState('');
   const [loading, setLoading] = useState(false);
   const [sedes, setSedes] = useState<{id:number;nombre:string;empresa:string}[]>([]);
   const [sucursalElegida, setSucursalElegida] = useState('');
@@ -49,6 +52,13 @@ export default function LoginPage() {
 
   const entrar = (data: any) => {
     const usuario = data.usuario;
+    const portal = usuario?.rol === 'SUPERADMIN' ? portalSuperadmin(window.location.host) : null;
+    if (portal) {
+      // El panel de superadministrador no se abre en el dominio de una empresa y la sesión no viaja entre dominios.
+      setDesafio(''); setCodigo('');
+      setIrAlPortal(portal);
+      return;
+    }
     // La sesión funciona en el portal actual. El slug de la tienda no
     // acredita que exista un dominio, DNS ni certificado para esa empresa.
     setAuth(data.access_token, usuario);
@@ -170,6 +180,13 @@ export default function LoginPage() {
             </div>
             <p className={`text-sm mb-6 ${claro ? 'text-gray-500' : 'text-gray-400'}`}>Ingresa tus datos para continuar</p>
 
+            {irAlPortal && (
+              <div role="alert" className={`rounded-lg p-4 mb-4 text-sm border ${claro ? 'bg-orange-50 border-orange-200 text-gray-800' : 'bg-orange-500/10 border-orange-500/30 text-gray-200'}`}>
+                <p className="font-semibold">La cuenta de superadministrador se usa en el portal general de PowerPOS.</p>
+                <p className="mt-1">Este enlace es el de una empresa. Abre el portal e inicia sesión allí con tu usuario y un código nuevo de tu app.</p>
+                <a href={irAlPortal} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600">Ir a {new URL(irAlPortal).host} <ArrowRight size={16} /></a>
+              </div>
+            )}
             {error && (
               <div className={`rounded-lg p-3 mb-4 text-sm border ${claro ? 'bg-red-50 border-red-200 text-red-600' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
                 {error}
